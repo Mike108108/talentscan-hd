@@ -1,39 +1,45 @@
 import { FormEvent, useState } from "react";
 import "./App.css";
 
-type Role = "Генератор" | "Проектор" | "Манифестор" | "Рефлектор";
+export const testRaveChart = {
+  type: "Проектор",
+  profile: "1/3",
+  authority: "Селезёночный",
+  personalitySun: "18.1",
+  personalityEarth: "17.1",
+  designSun: "52.3",
+  designEarth: "58.3",
+} as const;
 
-const ROLES: Role[] = ["Генератор", "Проектор", "Манифестор", "Рефлектор"];
+async function generateTalentReport(
+  chart: typeof testRaveChart,
+): Promise<string> {
+  try {
+    const response = await fetch("/.netlify/functions/talent-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(chart),
+    });
 
-const TALENTS_BY_ROLE: Record<Role, string[]> = {
-  Генератор: [
-    "Устойчивая энергия для долгих проектов",
-    "Мастерство через практику и отклик",
-    "Создание материального результата в команде",
-  ],
-  Проектор: [
-    "Видение систем и людей",
-    "Наставничество и управление энергией других",
-    "Стратегическое направление без выгорания",
-  ],
-  Манифестор: [
-    "Инициатива и запуск новых направлений",
-    "Влияние через информирование",
-    "Лидерство в кризисных точках изменений",
-  ],
-  Рефлектор: [
-    "Объективная оценка среды и команды",
-    "Чувствительность к циклам и трендам",
-    "Уникальный взгляд на культуру организации",
-  ],
-};
+    const data: unknown = await response.json().catch(() => null);
 
-function pickRole(seed: string): Role {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = (hash + seed.charCodeAt(i) * (i + 1)) % 1000;
+    if (!response.ok) {
+      return "Не удалось получить отчёт. Попробуйте ещё раз чуть позже.";
+    }
+
+    if (
+      !data ||
+      typeof data !== "object" ||
+      !("report" in data) ||
+      typeof (data as { report: unknown }).report !== "string"
+    ) {
+      return "Сервер вернул неожиданный ответ. Попробуйте позже.";
+    }
+
+    return (data as { report: string }).report;
+  } catch {
+    return "Ошибка сети. Проверьте подключение и попробуйте снова.";
   }
-  return ROLES[hash % ROLES.length];
 }
 
 export default function App() {
@@ -42,14 +48,22 @@ export default function App() {
   const [birthTime, setBirthTime] = useState("");
   const [birthCity, setBirthCity] = useState("");
   const [showResult, setShowResult] = useState(false);
-  const [resultRole, setResultRole] = useState<Role>("Генератор");
+  const [talentReport, setTalentReport] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const seed = `${who}|${birthDate}|${birthTime}|${birthCity}`;
-    setResultRole(pickRole(seed));
-    setShowResult(true);
-    document.getElementById("result")?.scrollIntoView({ behavior: "smooth" });
+    setIsLoading(true);
+    setShowResult(false);
+
+    try {
+      const report = await generateTalentReport(testRaveChart);
+      setTalentReport(report);
+      setShowResult(true);
+      document.getElementById("result")?.scrollIntoView({ behavior: "smooth" });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -127,8 +141,8 @@ export default function App() {
             />
           </div>
 
-          <button type="submit" className="submit-btn">
-            Рассчитать рейв‑карту
+          <button type="submit" className="submit-btn" disabled={isLoading}>
+            {isLoading ? "Формируем отчёт…" : "Рассчитать рейв‑карту"}
           </button>
         </form>
 
@@ -141,39 +155,7 @@ export default function App() {
                 : "Демонстрационный результат"}
             </p>
 
-            <h3>Тип и роль в работе</h3>
-            <p>
-              В Human Design ваш карьерный профиль ближе к типу{" "}
-              <strong>{resultRole}</strong>. Это определяет, как вы лучше всего
-              взаимодействуете с энергией задач, командой и принятием решений.
-            </p>
-
-            <h3>Ключевые таланты</h3>
-            <ul>
-              {TALENTS_BY_ROLE[resultRole].map((talent) => (
-                <li key={talent}>{talent}</li>
-              ))}
-            </ul>
-
-            <h3>Рекомендуемые роли</h3>
-            <p>
-              {resultRole === "Генератор" &&
-                "Операционные роли, продакшн, craft-специализации, где важен стабильный ритм и видимый результат."}
-              {resultRole === "Проектор" &&
-                "Консалтинг, HR, agile-коучинг, архитектура процессов — там, где вы направляете, а не «тащите» сами."}
-              {resultRole === "Манифестор" &&
-                "Запуск продуктов, кризис-менеджмент, роли с высокой автономией и правом инициировать изменения."}
-              {resultRole === "Рефлектор" &&
-                "Аналитика культуры, UX-исследования, advisory — роли, где ценится взгляд со стороны и пауза перед решением."}
-            </p>
-
-            <p>
-              <em>
-                Это демо-версия с примерным текстом. Для точного расчёта
-                рейв-карты нужна профессиональная эфемерида и время рождения с
-                точностью до минуты.
-              </em>
-            </p>
+            <pre className="result-report">{talentReport}</pre>
           </section>
         )}
       </main>

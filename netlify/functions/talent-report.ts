@@ -6,12 +6,18 @@ type BirthRequest = {
   birthCity: string;
 };
 
-type HdChartRequest = {
+type HdChartCoordinatesRequest = {
   birthdate: string;
   birthtime: string;
-  birthplace: string;
-  timezone: string;
+  lat: number;
+  lng: number;
 };
+
+const HD_CHARTS_COORDINATES_URL =
+  "https://api.humandesignapi.nl/v2/charts/coordinates";
+
+/** Fallback: Moscow (no HD-Geocode-Key required for /v2/charts/coordinates). */
+const DEFAULT_COORDINATES = { lat: 55.7558, lng: 37.6173 };
 
 type ChartData = {
   type: string;
@@ -38,22 +44,22 @@ const ALL_CENTERS = [
   "Root",
 ];
 
-const CITY_TIMEZONE: Record<string, string> = {
-  москва: "Europe/Moscow",
-  moscow: "Europe/Moscow",
-  "санкт-петербург": "Europe/Moscow",
-  "saint petersburg": "Europe/Moscow",
-  spb: "Europe/Moscow",
-  киев: "Europe/Kyiv",
-  kyiv: "Europe/Kyiv",
-  минск: "Europe/Minsk",
-  алматы: "Asia/Almaty",
-  астана: "Asia/Almaty",
-  ташкент: "Asia/Tashkent",
-  екатеринбург: "Asia/Yekaterinburg",
-  новосибирск: "Asia/Novosibirsk",
-  красноярск: "Asia/Krasnoyarsk",
-  владивосток: "Asia/Vladivostok",
+const CITY_COORDINATES: Record<string, { lat: number; lng: number }> = {
+  москва: { lat: 55.7558, lng: 37.6173 },
+  moscow: { lat: 55.7558, lng: 37.6173 },
+  "санкт-петербург": { lat: 59.9311, lng: 30.3609 },
+  "saint petersburg": { lat: 59.9311, lng: 30.3609 },
+  spb: { lat: 59.9311, lng: 30.3609 },
+  киев: { lat: 50.4501, lng: 30.5234 },
+  kyiv: { lat: 50.4501, lng: 30.5234 },
+  минск: { lat: 53.9006, lng: 27.559 },
+  алматы: { lat: 43.222, lng: 76.8512 },
+  астана: { lat: 51.1694, lng: 71.4491 },
+  ташкент: { lat: 41.2995, lng: 69.2401 },
+  екатеринбург: { lat: 56.8389, lng: 60.6057 },
+  новосибирск: { lat: 55.0084, lng: 82.9357 },
+  красноярск: { lat: 56.0153, lng: 92.8932 },
+  владивосток: { lat: 43.1155, lng: 131.8855 },
 };
 
 function jsonResponse(statusCode: number, body: unknown) {
@@ -125,17 +131,24 @@ function normalizeBirthTime(time: string): string {
   return `${match[1]}:${match[2]}`;
 }
 
-function resolveTimezone(city: string): string {
+function resolveCoordinates(city: string): { lat: number; lng: number } {
   const normalized = city.trim().toLowerCase();
-  return CITY_TIMEZONE[normalized] ?? "Europe/Moscow";
+  const coords = CITY_COORDINATES[normalized];
+  if (coords) return coords;
+
+  console.log(
+    `HD coordinates: city "${city}" not in map, using Moscow defaults`,
+  );
+  return DEFAULT_COORDINATES;
 }
 
-function buildHdChartRequest(input: BirthRequest): HdChartRequest {
+function buildHdChartRequest(input: BirthRequest): HdChartCoordinatesRequest {
+  const { lat, lng } = resolveCoordinates(input.birthCity);
   return {
     birthdate: input.birthDate,
     birthtime: normalizeBirthTime(input.birthTime),
-    birthplace: input.birthCity.trim(),
-    timezone: resolveTimezone(input.birthCity),
+    lat,
+    lng,
   };
 }
 
@@ -270,9 +283,10 @@ async function fetchHumanDesignChart(
   }
 
   const payload = buildHdChartRequest(input);
+  console.log("HD API endpoint:", HD_CHARTS_COORDINATES_URL);
   console.log("HD API request body:", JSON.stringify(payload, null, 2));
 
-  const response = await fetch("https://api.humandesignapi.nl/v2/charts", {
+  const response = await fetch(HD_CHARTS_COORDINATES_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

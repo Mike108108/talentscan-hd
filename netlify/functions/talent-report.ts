@@ -112,11 +112,17 @@ function parseBirthRequest(body: string | null): BirthRequest {
     throw new Error("Неверный формат даты. Ожидается YYYY-MM-DD.");
   }
 
-  if (!/^\d{2}:\d{2}(:\d{2})?$/.test(birthTime)) {
+  const normalizedTime = normalizeBirthTime(birthTime);
+
+  return { birthDate, birthTime: normalizedTime, birthCity };
+}
+
+function normalizeBirthTime(time: string): string {
+  const match = time.match(/^(\d{2}):(\d{2})/);
+  if (!match) {
     throw new Error("Неверный формат времени. Ожидается HH:MM.");
   }
-
-  return { birthDate, birthTime, birthCity };
+  return `${match[1]}:${match[2]}`;
 }
 
 function resolveTimezone(city: string): string {
@@ -125,12 +131,9 @@ function resolveTimezone(city: string): string {
 }
 
 function buildHdChartRequest(input: BirthRequest): HdChartRequest {
-  const birthtime =
-    input.birthTime.length === 5 ? `${input.birthTime}:00` : input.birthTime;
-
   return {
     birthdate: input.birthDate,
-    birthtime,
+    birthtime: normalizeBirthTime(input.birthTime),
     birthplace: input.birthCity.trim(),
     timezone: resolveTimezone(input.birthCity),
   };

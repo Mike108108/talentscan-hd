@@ -11,34 +11,60 @@ export const testRaveChart = {
   designEarth: "58.3",
 } as const;
 
+type BirthFormData = {
+  birthDate: string;
+  birthTime: string;
+  birthCity: string;
+};
+
+type TalentReportResponse = {
+  report?: string;
+  error?: string;
+  source?: string;
+};
+
 async function generateTalentReport(
-  chart: typeof testRaveChart,
+  formData: BirthFormData,
 ): Promise<string> {
   try {
     const response = await fetch("/.netlify/functions/talent-report", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(chart),
+      body: JSON.stringify(formData),
     });
 
-    const data: unknown = await response.json().catch(() => null);
+    const data = (await response.json().catch(() => null)) as
+      | TalentReportResponse
+      | null;
 
     if (!response.ok) {
-      return "Не удалось получить отчёт. Попробуйте ещё раз чуть позже.";
+      if (data?.error) {
+        if (data.source === "humandesign-api") {
+          return `Ошибка Human Design API: ${data.error}`;
+        }
+        if (data.source === "validation") {
+          return data.error;
+        }
+        if (data.source === "config") {
+          return `Настройка сервера: ${data.error}`;
+        }
+        return data.error;
+      }
+
+      if (response.status === 404) {
+        return "Сервер функций недоступен. Перезапустите проект командой npm run dev.";
+      }
+
+      return `Не удалось получить отчёт (код ${response.status}). Попробуйте позже.`;
     }
 
-    if (
-      !data ||
-      typeof data !== "object" ||
-      !("report" in data) ||
-      typeof (data as { report: unknown }).report !== "string"
-    ) {
+    if (!data?.report) {
       return "Сервер вернул неожиданный ответ. Попробуйте позже.";
     }
 
-    return (data as { report: string }).report;
+    return data.report;
   } catch {
-    return "Ошибка сети. Проверьте подключение и попробуйте снова.";
+    return "Ошибка сети. Проверьте подключение и убедитесь, что dev-сервер запущен (npm run dev).";
   }
 }
 
@@ -57,7 +83,11 @@ export default function App() {
     setShowResult(false);
 
     try {
-      const report = await generateTalentReport(testRaveChart);
+      const report = await generateTalentReport({
+        birthDate,
+        birthTime,
+        birthCity,
+      });
       setTalentReport(report);
       setShowResult(true);
       document.getElementById("result")?.scrollIntoView({ behavior: "smooth" });

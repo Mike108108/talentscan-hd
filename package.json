@@ -6,6 +6,7 @@
   "scripts": {
     "start": "vite",
     "dev": "vite",
+    "env:pull": "netlify link && netlify env:pull --plaintext",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },

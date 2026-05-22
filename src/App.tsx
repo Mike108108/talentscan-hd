@@ -1,4 +1,4 @@
-import { FormEvent, useState, type JSX } from "react";
+import { FormEvent, useEffect, useState, type JSX } from "react";
 import "./App.css";
 
 /** Splits report text into named sections by «Title» guillemet headers. */
@@ -130,6 +130,22 @@ async function generateTalentReport(
 }
 
 export default function App() {
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    const saved = localStorage.getItem("talentscan-theme");
+    const initial: "dark" | "light" = saved === "light" ? "light" : "dark";
+    document.documentElement.dataset.theme = initial;
+    return initial;
+  });
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("talentscan-theme", theme);
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme((t) => (t === "dark" ? "light" : "dark"));
+  }
+
   const [who, setWho] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [birthTime, setBirthTime] = useState("");
@@ -167,6 +183,13 @@ export default function App() {
           <a href="#guide">Инструкция</a>
           <a href="#demo">Демо</a>
         </nav>
+        <button
+          className="theme-toggle"
+          onClick={toggleTheme}
+          aria-label={theme === "dark" ? "Переключить на светлую тему" : "Переключить на тёмную тему"}
+        >
+          {theme === "dark" ? "☀️" : "🌙"}
+        </button>
       </header>
 
       <section className="hero" id="demo">

@@ -1,5 +1,66 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, type JSX } from "react";
 import "./App.css";
+
+/** Splits report text into named sections by «Title» guillemet headers. */
+function parseReportSections(text: string): Array<{ title: string; body: string }> {
+  const parts = text.split(/(?=«[^»]+»)/);
+  const sections: Array<{ title: string; body: string }> = [];
+
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const match = trimmed.match(/^«([^»]+)»\s*([\s\S]*)$/);
+    if (match) {
+      sections.push({ title: match[1].trim(), body: match[2].trim() });
+    } else if (sections.length === 0) {
+      sections.push({ title: "", body: trimmed });
+    }
+  }
+
+  return sections.length > 0 ? sections : [{ title: "", body: text }];
+}
+
+/** Renders section body: bullet lists, ordered lists, and plain paragraphs. */
+function renderSectionBody(body: string): JSX.Element {
+  const lines = body.split("\n").map((l) => l.trim()).filter(Boolean);
+  const nodes: JSX.Element[] = [];
+  let listType: "ul" | "ol" | null = null;
+  let listItems: string[] = [];
+  let key = 0;
+
+  const flushList = () => {
+    if (listItems.length === 0) return;
+    const Tag = listType === "ol" ? "ol" : "ul";
+    nodes.push(
+      <Tag key={key++} className="report-list">
+        {listItems.map((item, i) => <li key={i}>{item}</li>)}
+      </Tag>,
+    );
+    listItems = [];
+    listType = null;
+  };
+
+  for (const line of lines) {
+    const bulletMatch = line.match(/^[-•*]\s+(.+)/);
+    const numberedMatch = line.match(/^\d+[.)]\s+(.+)/);
+
+    if (bulletMatch) {
+      if (listType === "ol") flushList();
+      listType = "ul";
+      listItems.push(bulletMatch[1]);
+    } else if (numberedMatch) {
+      if (listType === "ul") flushList();
+      listType = "ol";
+      listItems.push(numberedMatch[1]);
+    } else {
+      flushList();
+      nodes.push(<p key={key++} className="report-paragraph">{line}</p>);
+    }
+  }
+
+  flushList();
+  return <>{nodes}</>;
+}
 
 export const testRaveChart = {
   type: "Проектор",
@@ -178,14 +239,35 @@ export default function App() {
 
         {showResult && (
           <section className="result" id="result" aria-live="polite">
-            <h2>Ваша рейв-карта для карьеры</h2>
-            <p className="result-meta">
-              {birthDate && birthTime && birthCity
-                ? `Расчёт по данным: ${birthDate}, ${birthTime}, ${birthCity}`
-                : "Демонстрационный результат"}
-            </p>
+            <h2 className="result-heading">Ваша карта талантов</h2>
 
-            <pre className="result-report">{talentReport}</pre>
+            {(birthDate || birthTime || birthCity) && (
+              <div className="report-badges">
+                {birthDate && <span className="report-badge">{birthDate}</span>}
+                {birthTime && <span className="report-badge">{birthTime}</span>}
+                {birthCity && <span className="report-badge">{birthCity}</span>}
+              </div>
+            )}
+
+            {talentReport ? (
+              <div className="report-sections">
+                {parseReportSections(talentReport).map((section, i) => (
+                  <div
+                    key={i}
+                    className={`report-section${section.title ? "" : " report-section--plain"}`}
+                  >
+                    {section.title && (
+                      <div className="report-section-title">{section.title}</div>
+                    )}
+                    <div className="report-section-body">
+                      {renderSectionBody(section.body)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="report-empty">Результат пуст. Попробуйте ещё раз.</p>
+            )}
           </section>
         )}
       </main>

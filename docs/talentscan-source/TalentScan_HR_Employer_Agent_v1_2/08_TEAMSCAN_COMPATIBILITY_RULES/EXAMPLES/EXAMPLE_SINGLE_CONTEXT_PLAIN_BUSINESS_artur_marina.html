@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Рабочая связка — Артур × Марина</title>
+  <style>
+    :root {
+      --bg: #06101f;
+      --bg-2: #0e1b3f;
+      --card: rgba(255,255,255,.075);
+      --card-2: rgba(255,255,255,.105);
+      --line: rgba(255,255,255,.16);
+      --text: #f7f9ff;
+      --muted: #b6c1d9;
+      --soft: #e1e8ff;
+      --lead: #ff746b;
+      --lead-2: #ffa08a;
+      --team: #72e4c7;
+      --team-2: #a9f8df;
+      --gold: #f0b84e;
+      --gold-2: #ffe096;
+      --violet: #8f6bff;
+      --violet-2: #ccbaff;
+      --cyan: #70d7ff;
+      --shadow: 0 24px 80px rgba(0,0,0,.35);
+      --radius-xl: 34px;
+      --radius-lg: 24px;
+      --radius-md: 18px;
+      --max: 1180px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Arial, sans-serif;
+      background:
+        radial-gradient(circle at 13% 7%, rgba(255,116,107,.22), transparent 28%),
+        radial-gradient(circle at 84% 5%, rgba(112,215,255,.26), transparent 34%),
+        radial-gradient(circle at 78% 45%, rgba(114,228,199,.13), transparent 28%),
+        linear-gradient(145deg, #050815 0%, #071425 42%, #12143d 100%);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        radial-gradient(circle, rgba(255,255,255,.15) 0 1px, transparent 1px),
+        radial-gradient(circle, rgba(112,215,255,.1) 0 1px, transparent 1px);
+      background-size: 64px 64px, 110px 110px;
+      background-position: 12px 18px, 50px 80px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,.82), transparent 92%);
+    }
+
+    a { color: inherit; text-decoration: none; }
+    .page { position: relative; z-index: 1; }
+    .container { width: min(var(--max), calc(100% - 40px)); margin: 0 auto; }
+
+    .hero { position: relative; padding: 52px 0 34px; overflow: hidden; }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(310px, .95fr);
+      gap: 34px;
+      align-items: center;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+      padding: 9px 14px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 999px;
+      color: var(--soft);
+      background: rgba(255,255,255,.07);
+      backdrop-filter: blur(18px);
+      font-size: 14px;
+      letter-spacing: .02em;
+    }
+    .eyebrow .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--team); box-shadow: 0 0 18px var(--team); }
+
+    h1 {
+      margin: 22px 0 0;
+      font-size: clamp(44px, 6.8vw, 82px);
+      line-height: .95;
+      letter-spacing: -0.055em;
+    }
+    .names {
+      margin-top: 10px;
+      font-size: clamp(38px, 6.3vw, 78px);
+      line-height: 1;
+      font-weight: 850;
+      letter-spacing: -0.052em;
+    }
+    .names .lead { color: var(--lead); text-shadow: 0 0 36px rgba(255,116,107,.24); }
+    .names .team { color: var(--team); text-shadow: 0 0 36px rgba(112,228,199,.24); }
+    .names .x { color: #fff; opacity: .82; font-weight: 450; padding: 0 .14em; }
+    .subtitle { margin: 18px 0 0; color: var(--muted); font-size: clamp(17px, 2vw, 22px); max-width: 720px; }
+
+    .identity-row { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; margin-top: 24px; }
+    .identity-card {
+      padding: 18px 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: rgba(255,255,255,.075);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .identity-card b { display: block; font-size: 18px; margin-bottom: 6px; }
+    .identity-card span { color: var(--muted); line-height: 1.42; }
+    .identity-card.lead-card { border-color: rgba(255,116,107,.32); }
+    .identity-card.team-card { border-color: rgba(112,228,199,.36); }
+
+    .score-row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-top: 16px; }
+    .score {
+      padding: 15px 16px;
+      border-radius: 18px;
+      background: rgba(0,0,0,.16);
+      border: 1px solid rgba(255,255,255,.13);
+    }
+    .score strong { display: block; font-size: 20px; line-height: 1; margin-bottom: 7px; color: var(--gold-2); }
+    .score span { display: block; color: var(--muted); font-size: 14px; line-height: 1.35; }
+
+    .formula-card {
+      margin-top: 22px;
+      position: relative;
+      padding: 24px 26px;
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(255,255,255,.18);
+      background:
+        linear-gradient(135deg, rgba(255,116,107,.18), rgba(112,215,255,.13) 52%, rgba(112,228,199,.13)),
+        rgba(255,255,255,.07);
+      box-shadow: 0 0 0 1px rgba(255,255,255,.04), 0 24px 70px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.12);
+      overflow: hidden;
+    }
+    .formula-card::after {
+      content: "";
+      position: absolute;
+      width: 220px;
+      height: 220px;
+      right: -80px;
+      bottom: -110px;
+      background: radial-gradient(circle, rgba(112,228,199,.34), transparent 65%);
+    }
+    .formula-card p { position: relative; z-index: 1; margin: 0; font-size: clamp(23px, 2.7vw, 33px); line-height: 1.25; font-weight: 750; letter-spacing: -.025em; }
+    .formula-card em { color: var(--team-2); font-style: normal; }
+    .formula-card strong { color: var(--lead-2); }
+
+    .hero-visual { position: relative; min-height: 520px; display: grid; place-items: center; }
+    .halo {
+      position: absolute;
+      width: min(520px, 90vw);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle, rgba(255,255,255,.12) 0 2px, transparent 3px),
+        radial-gradient(circle at 30% 20%, rgba(255,116,107,.28), transparent 30%),
+        radial-gradient(circle at 70% 70%, rgba(112,228,199,.24), transparent 28%),
+        radial-gradient(circle, rgba(112,215,255,.18), transparent 62%);
+      border: 1px solid rgba(255,255,255,.11);
+      box-shadow: 0 0 100px rgba(112,215,255,.2);
+      animation: pulse 7s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100% { transform: scale(1); opacity: .85; } 50% { transform: scale(1.045); opacity: 1; } }
+    .workflow-visual { position: relative; z-index: 2; width: min(440px, 88vw); filter: drop-shadow(0 30px 60px rgba(0,0,0,.42)); }
+
+    .nav-strip {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      padding: 12px 0;
+      background: linear-gradient(to bottom, rgba(5,8,21,.9), rgba(5,8,21,.67));
+      backdrop-filter: blur(18px);
+      border-top: 1px solid rgba(255,255,255,.08);
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .nav-scroll { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+    .nav-scroll::-webkit-scrollbar { display: none; }
+    .nav-scroll a, .chip {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 14px;
+      border-radius: 999px;
+      color: var(--soft);
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.075);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+    .nav-scroll a:hover { border-color: rgba(112,228,199,.55); color: white; }
+
+    section { padding: 44px 0; scroll-margin-top: 74px; }
+    .section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+    .kicker { color: var(--team); font-size: 14px; text-transform: uppercase; letter-spacing: .12em; font-weight: 700; }
+    h2 { margin: 6px 0 0; font-size: clamp(30px, 4vw, 52px); line-height: 1.04; letter-spacing: -.045em; }
+    .section-note { max-width: 520px; color: var(--muted); line-height: 1.55; }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 18px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
+
+    .card {
+      position: relative;
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      background: rgba(255,255,255,.075);
+      border: 1px solid rgba(255,255,255,.14);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.08);
+      overflow: hidden;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 12% 5%, rgba(255,255,255,.13), transparent 24%);
+      opacity: .65;
+      pointer-events: none;
+    }
+    .card > * { position: relative; z-index: 1; }
+    .card h3 { margin: 0 0 14px; font-size: 23px; line-height: 1.16; letter-spacing: -.025em; }
+    .card p { color: var(--soft); line-height: 1.62; margin: 0 0 12px; }
+    .card p:last-child { margin-bottom: 0; }
+    .muted { color: var(--muted); }
+    .accent-lead { color: var(--lead-2); }
+    .accent-team { color: var(--team-2); }
+    .accent-gold { color: var(--gold-2); }
+    .accent-violet { color: var(--violet-2); }
+
+    ul { margin: 0; padding-left: 18px; color: var(--soft); line-height: 1.62; }
+    li { margin: 7px 0; }
+    li::marker { color: var(--team); }
+    .list-lead li::marker { color: var(--lead); }
+    .list-gold li::marker { color: var(--gold); }
+    .list-violet li::marker { color: var(--violet-2); }
+
+    .icon {
+      display: inline-grid;
+      place-items: center;
+      width: 46px;
+      height: 46px;
+      border-radius: 16px;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, rgba(255,116,107,.26), rgba(112,228,199,.2));
+      border: 1px solid rgba(255,255,255,.18);
+      font-size: 23px;
+    }
+
+    .callout {
+      border-radius: var(--radius-md);
+      padding: 18px 20px;
+      margin-top: 18px;
+      background: linear-gradient(135deg, rgba(112,228,199,.14), rgba(255,116,107,.1));
+      border: 1px solid rgba(112,228,199,.28);
+      color: #eafff8;
+      line-height: 1.55;
+    }
+    .warning {
+      border-color: rgba(240,184,78,.34);
+      background: linear-gradient(135deg, rgba(240,184,78,.15), rgba(255,116,107,.1));
+      color: #fff2cf;
+    }
+    .quote {
+      padding: 20px;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(112,215,255,.32);
+      background: rgba(112,215,255,.1);
+      color: #e4f6ff;
+      line-height: 1.56;
+      font-style: italic;
+    }
+
+    .split-card { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: stretch; }
+    .mini {
+      padding: 18px;
+      border-radius: var(--radius-md);
+      background: rgba(0,0,0,.16);
+      border: 1px solid rgba(255,255,255,.12);
+    }
+    .mini h4 { margin: 0 0 10px; font-size: 18px; }
+    .mini p { font-size: 15px; line-height: 1.55; color: var(--soft); }
+
+    .feature-card { min-height: 330px; display: flex; flex-direction: column; justify-content: space-between; }
+    .feature-card.lead { border-color: rgba(255,116,107,.34); background: linear-gradient(135deg, rgba(255,116,107,.16), rgba(255,255,255,.06)); }
+    .feature-card.team { border-color: rgba(112,228,199,.35); background: linear-gradient(135deg, rgba(112,228,199,.16), rgba(255,255,255,.06)); }
+    .feature-card.blue { border-color: rgba(112,215,255,.35); background: linear-gradient(135deg, rgba(112,215,255,.15), rgba(255,255,255,.06)); }
+    .feature-card.gold { border-color: rgba(240,184,78,.36); background: linear-gradient(135deg, rgba(240,184,78,.15), rgba(255,255,255,.06)); }
+
+    .number { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 12px; color: var(--gold-2); font-weight: 750; }
+    .number span {
+      width: 34px;
+      height: 34px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 12px;
+      background: rgba(240,184,78,.16);
+      border: 1px solid rgba(240,184,78,.28);
+    }
+
+    .context-card { min-height: 410px; }
+    .context-card h3 { display: flex; align-items: center; gap: 10px; }
+
+    .protocol {
+      counter-reset: step;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0,1fr));
+      gap: 12px;
+    }
+    .step {
+      padding: 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,.13);
+      background: rgba(0,0,0,.16);
+      color: var(--soft);
+      line-height: 1.45;
+    }
+    .step::before {
+      counter-increment: step;
+      content: counter(step);
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 11px;
+      background: rgba(112,228,199,.16);
+      border: 1px solid rgba(112,228,199,.3);
+      color: var(--team-2);
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+
+    .final {
+      padding: 38px;
+      border-radius: var(--radius-xl);
+      background:
+        radial-gradient(circle at 88% 18%, rgba(255,116,107,.2), transparent 28%),
+        radial-gradient(circle at 18% 78%, rgba(112,228,199,.18), transparent 26%),
+        linear-gradient(135deg, rgba(255,255,255,.11), rgba(255,255,255,.055));
+      border: 1px solid rgba(255,255,255,.18);
+      box-shadow: var(--shadow);
+    }
+    .final h2 { margin-bottom: 18px; }
+    .final-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 24px; align-items: center; }
+    .final-line {
+      margin-top: 22px;
+      padding: 20px 22px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, rgba(112,228,199,.18), rgba(255,116,107,.14));
+      border: 1px solid rgba(112,228,199,.32);
+      color: #eafff8;
+      font-weight: 750;
+      line-height: 1.55;
+    }
+    .rings {
+      height: 220px;
+      border-radius: var(--radius-lg);
+      background:
+        radial-gradient(ellipse at 40% 48%, transparent 0 23%, rgba(255,116,107,.9) 24% 27%, transparent 28%),
+        radial-gradient(ellipse at 60% 52%, transparent 0 23%, rgba(112,228,199,.9) 24% 27%, transparent 28%),
+        radial-gradient(circle at 50% 50%, rgba(112,215,255,.2), transparent 60%);
+      filter: drop-shadow(0 0 22px rgba(112,228,199,.38));
+      border: 1px solid rgba(255,255,255,.12);
+    }
+
+    .footer { padding: 26px 0 56px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+    .chip.lead { border-color: rgba(255,116,107,.34); color: #ffd6d1; }
+    .chip.team { border-color: rgba(112,228,199,.34); color: #d9fff3; }
+    .chip.gold { border-color: rgba(240,184,78,.34); color: #ffe3a2; }
+    .chip.violet { border-color: rgba(143,107,255,.36); color: #e5dbff; }
+
+    @media (max-width: 1080px) {
+      .protocol { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media (max-width: 960px) {
+      .hero-grid, .final-grid { grid-template-columns: 1fr; }
+      .hero-visual { min-height: 360px; }
+      .grid-3, .grid-4 { grid-template-columns: 1fr; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .identity-row, .score-row { grid-template-columns: 1fr; }
+      .section-head { display: block; }
+      .section-note { margin-top: 12px; }
+      .split-card { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      .container { width: min(100% - 24px, var(--max)); }
+      .hero { padding-top: 34px; }
+      .card { padding: 20px; }
+      .formula-card { padding: 20px; }
+      .final { padding: 24px; }
+      section { padding: 34px 0; }
+      .hero-visual { min-height: 300px; }
+      .workflow-visual { width: min(310px, 88vw); }
+      .protocol { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero" id="top">
+      <div class="container hero-grid">
+        <div>
+          <div class="eyebrow"><span class="dot"></span> Рабочий контекст · руководитель и сотрудник</div>
+          <h1>Рабочая связка</h1>
+          <div class="names"><span class="lead">Артур</span><span class="x">×</span><span class="team">Марина</span></div>
+          <p class="subtitle">Карточка для руководителя: как лучше выстроить работу с сотрудником, где связка может дать результат, а где заранее нужны правила и контрольные точки.</p>
+
+          <div class="identity-row">
+            <div class="identity-card lead-card">
+              <b>Артур</b>
+              <span>Руководитель. Сильная сторона — видеть систему, качество, узкие места, риски и точки роста. Его роль — задавать рамку, направление и критерии результата.</span>
+            </div>
+            <div class="identity-card team-card">
+              <b>Марина</b>
+              <span>Сотрудник с сильной стороной в контакте, объяснении ценности, живой коммуникации и работе с клиентами. Ей важно понимать задачу, но иметь свободу в способе выполнения.</span>
+            </div>
+          </div>
+
+          <div class="score-row">
+            <div class="score"><strong>Высокий</strong><span>потенциал рабочей связки</span></div>
+            <div class="score"><strong>Главный риск</strong><span>давление, микроконтроль и обиды на обратную связь</span></div>
+            <div class="score"><strong>Ключ</strong><span>ясные правила + свобода в живом контакте</span></div>
+          </div>
+
+          <div class="formula-card">
+            <p>Артур <strong>видит систему и узкие места</strong>. Марина <em>создаёт контакт и двигает клиента</em>. Вместе это может стать сильной рабочей связкой, если управление не превращается в постоянную критику.</p>
+          </div>
+        </div>
+
+        <div class="hero-visual" aria-hidden="true">
+          <div class="halo"></div>
+          <svg class="workflow-visual" viewBox="0 0 460 420" role="img" aria-label="Схема рабочей связки руководителя и сотрудника">
+            <defs>
+              <linearGradient id="p1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff746b"/><stop offset="1" stop-color="#72e4c7"/></linearGradient>
+              <linearGradient id="p2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#70d7ff"/><stop offset="1" stop-color="#f0b84e"/></linearGradient>
+              <filter id="glow"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            </defs>
+            <rect x="50" y="42" width="360" height="314" rx="36" fill="rgba(255,255,255,.055)" stroke="rgba(255,255,255,.22)" stroke-width="2"/>
+            <circle cx="145" cy="132" r="54" fill="rgba(255,116,107,.2)" stroke="#ff746b" stroke-width="3" filter="url(#glow)"/>
+            <circle cx="315" cy="132" r="54" fill="rgba(112,228,199,.18)" stroke="#72e4c7" stroke-width="3" filter="url(#glow)"/>
+            <path d="M190 132 C220 92 244 92 270 132" fill="none" stroke="#70d7ff" stroke-width="7" stroke-linecap="round" filter="url(#glow)"/>
+            <path d="M270 152 C238 198 208 198 190 152" fill="none" stroke="#f0b84e" stroke-width="7" stroke-linecap="round" filter="url(#glow)"/>
+            <rect x="93" y="224" width="274" height="48" rx="18" fill="rgba(255,255,255,.11)" stroke="rgba(255,255,255,.18)"/>
+            <rect x="93" y="292" width="132" height="42" rx="16" fill="rgba(255,116,107,.18)" stroke="rgba(255,116,107,.35)"/>
+            <rect x="235" y="292" width="132" height="42" rx="16" fill="rgba(112,228,199,.18)" stroke="rgba(112,228,199,.35)"/>
+            <text x="145" y="139" text-anchor="middle" fill="#fff" font-size="18" font-weight="700">Рамка</text>
+            <text x="315" y="139" text-anchor="middle" fill="#fff" font-size="18" font-weight="700">Контакт</text>
+            <text x="230" y="255" text-anchor="middle" fill="#e1e8ff" font-size="17" font-weight="650">задача → действие → обратная связь</text>
+            <text x="159" y="319" text-anchor="middle" fill="#ffd6d1" font-size="15" font-weight="700">качество</text>
+            <text x="301" y="319" text-anchor="middle" fill="#d9fff3" font-size="15" font-weight="700">результат</text>
+          </svg>
+        </div>
+      </div>
+    </header>
+
+    <nav class="nav-strip">
+      <div class="container nav-scroll">
+        <a href="#quick">Быстрый вывод</a>
+        <a href="#roles">Роли</a>
+        <a href="#management">Управление</a>
+        <a href="#communication">Коммуникация</a>
+        <a href="#strengths">Сильные стороны</a>
+        <a href="#risks">Риски</a>
+        <a href="#agreements">Договорённости</a>
+        <a href="#scenarios">Рабочие сценарии</a>
+        <a href="#plan">30/60/90</a>
+        <a href="#summary">Вывод</a>
+      </div>
+    </nav>
+
+    <main>
+      <section id="quick">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <div class="kicker">01 · Быстрый ответ</div>
+              <h2>Что важно понять сразу</h2>
+            </div>
+            <p class="section-note">Это рабочая связка с хорошим потенциалом: руководитель видит систему, сотрудник умеет создавать контакт и двигать клиента.</p>
+          </div>
+
+          <div class="grid-3">
+            <article class="card">
+              <div class="icon">✓</div>
+              <h3>Где сила</h3>
+              <p>Артур может видеть, где процесс проседает, а Марина — проверять это в живом контакте с клиентами. Вместе они могут быстро находить, что реально работает, а что только красиво звучит в теории.</p>
+            </article>
+            <article class="card">
+              <div class="icon">!</div>
+              <h3>Где риск</h3>
+              <p>Если Артур начинает давить или разбирать всё слишком резко, Марина может закрываться, спорить или терять естественность. Если Марина действует слишком свободно без правил, Артур будет усиливать контроль.</p>
+            </article>
+            <article class="card">
+              <div class="icon">→</div>
+              <h3>Что делать</h3>
+              <p>Давать не абстрактные претензии, а одну конкретную точку настройки: что тестируем, на каких клиентах, какой результат смотрим и когда возвращаемся к разбору.</p>
+            </article>
+          </div>
+
+          <div class="callout"><strong>Главная формула:</strong> Артур отвечает за направление, стандарты и границы. Марина — за живой контакт, подачу и движение клиента к следующему шагу.</div>
+        </div>
+      </section>
+
+      <section id="roles">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <div class="kicker">02 · Роли</div>
+              <h2>Кто за что отвечает</h2>
+            </div>
+            <p class="section-note">Чем яснее разделены зоны ответственности, тем меньше личных обид и борьбы за “как правильно”.</p>
+          </div>
+
+          <div class="grid-2">
+            <article class="card">
+              <div class="icon">◇</div>
+              <h3>Артур — рамка, качество, стратегия</h3>
+              <p>Его задача — не контролировать каждый шаг, а держать общую систему: цель, критерии качества, правила скидок, формат отчётности, приоритеты и точки проверки.</p>
+              <p>Лучший вклад Артура — увидеть слабое место и перевести его в понятную рабочую гипотезу.</p>
+            </article>
+            <article class="card">
+              <div class="icon">⚡</div>
+              <h3>Марина — контакт, подача, движение</h3>
+              <p>Её сильная сторона — говорить с людьми, объяснять ценность, чувствовать реакцию клиента, удерживать контакт и доводить разговор до следующего действия.</p>
+              <p>Лучше всего она раскрывается, когда понимает смысл задачи, но не зажата в мёртвый скрипт.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="management">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <div class="kicker">03 · Управление</div>
+              <h2>Как ставить задачи</h2>
+            </div>
+            <p class="section-note">Марине лучше давать конкретный рабочий фокус, а не общее “продавай лучше”.</p>
+          </div>
+
+          <div class="grid-3">
+            <article class="card">
+              <div class="number"><span>1</span> Конкретика</div>
+              <h3>Один фокус за раз</h3>
+              <p>Не “исправь продажи целиком”, а “на этой неделе усиливаем первый контакт”, “тестируем новый заход на 10 клиентах”, “смотрим, где падает следующий шаг”.</p>
+            </article>
+            <article class="card">
+              <div class="number"><span>2</span> Эксперимент</div>
+              <h3>Не приказ, а тест</h3>
+              <p>Лучше работает формат: “давай проверим гипотезу”. Так правка не ощущается как нападение, а становится общей задачей на результат.</p>
+            </article>
+            <article class="card">
+              <div class="number"><span>3</span> Факты</div>
+              <h3>Разбор по данным</h3>
+              <p>Смотреть не “мне кажется”, а факты: количество касаний, конверсия, причины отказов, качество CRM, следующий шаг по клиентам.</p>
+            </article>
+          </div>
+
+          <div class="callout"><strong>Лучший цикл работы:</strong> короткая постановка задачи → действие → сбор фактов → разбор → новая настройка.</div>
+        </div>
+      </section>
+
+      <section id="communication">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <div class="kicker">04 · Коммуникация</div>
+              <h2>Как давать обратную связь</h2>
+            </div>
+            <p class="section-note">В этой связке обратная связь может быстро становиться личной. Поэтому важно разделять человека и рабочий процесс.</p>
+          </div>
+          <div class="grid-3">
+            <article class="card">
+              <div class="icon">+</div>
+              <h3>Сначала признать сильное</h3>
+              <p>Начинать не с ошибки, а с того, что уже работает: контакт, доверие, голос, аргументация, удержание клиента, живость подачи.</p>
+            </article>
+            <article class="card">
+              <div class="icon">↘</div>
+              <h3>Потом одна точка правки</h3>
+              <p>Не выдавать список из десяти замечаний. Лучше выбрать одну точку: начало разговора, фиксация следующего шага, обработка возражения, скидки или CRM.</p>
+            </article>
+            <article class="card">
+              <div class="icon">↗</div>
+              <h3>Завершить конкретным действием</h3>
+              <p>Каждый разбор должен заканчиваться не настроением, а действием: что меняем, когда проверяем, какой показатель считаем успехом.</p>
+            </article>
+          </div>
+          <div class="callout warning"><strong>Неудачный формат:</strong> “ты неправильно продаёшь”. <strong>Рабочий формат:</strong> “вот здесь клиент потерял интерес; давай проверим другой вопрос на следующих 5 разговорах”.</div>
+        </div>
+      </section>
+
+      <section id="strengths">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <div class="kicker">05 · Потенциал</div>
+              <h2>Сильные стороны связки</h2>
+            </div>
+            <p class="section-note">Эти зоны лучше сразу использовать как рабочие преимущества, а не пытаться переделывать людей друг под друга.</p>
+          </div>
+          <div class="grid-2">
+            <article class="card feature-card lead">
+              <div>
+                <div class="icon">✓</div>
+                <h3><span class="accent-lead">Качество</span> и улучшение процесса</h3>
+                <p>Артур хорошо видит, где можно докрутить процесс: скрипт, аргументацию, клиентский путь, CRM, контрольные вопросы, критерии качества.</p>
+                <ul class="list-lead">
+                  <li>быстрее находить слабые места;</li>
+                  <li>собирать систему продаж;</li>
+                  <li>улучшать повторяемость результата;</li>
+                  <li>не зависеть только от настроения менеджера.</li>
+                </ul>
+              </div>
+              <div class="callout warning">Важно: улучшать процесс, а не “ломать” личный стиль сотрудника.</div>
+            </article>
+            <article class="card feature-card team">
+              <div>
+                <div class="icon">◉</div>
+                <h3><span class="accent-team">Контакт</span> и доверие клиента</h3>
+                <p>Марина может быть сильна там, где клиенту нужно объяснить, снять напряжение, показать ценность и довести разговор до понятного следующего шага.</p>
+                <ul>
+                  <li>тёплые касания;</li>
+                  <li>объяснение сложного простыми словами;</li>
+                  <li>работа с сомнениями;</li>
+                  <li>живая подача без ощущения “робота по скрипту”.</li>
+                </ul>
+              </div>
+              <div class="callout">Важно: дать рамку по смыслу, но оставить свободу в человеческой подаче.</div>
+            </article>
+            <article class="card feature-card blue">
+              <div>
+                <div class="icon">↔</div>
+                <h3><span class="accent-violet">Деловая чуйка</span> и рынок</h3>
+                <p>В связке может быть хорошее ощущение клиентов: кто готов, кто сомневается, где не хватает доверия, где оффер звучит слабо.</p>
+                <ul class="list-violet">
+                  <li>замечать повторяющиеся возражения;</li>
+                  <li>быстро видеть, что “не заходит”;</li>
+                  <li>подстраивать подачу под аудиторию;</li>
+                  <li>делать продажи более живыми.</li>
+                </ul>
+              </div>
+              <div class="callout">Важно: проверять ощущения цифрами и фактами, а не спорить “кто лучше чувствует”.</div>
+            </article>
+            <article class="card feature-card gold">
+              <div>
+                <div class="icon">↗</div>
+                <h3><span class="accent-gold">Тестирование</span> новых подходов</h3>
+                <p>Марина может пробовать новые заходы в реальных разговорах, а Артур — превращать опыт в систему: что оставляем, что убираем, что масштабируем.</p>
+                <ul class="list-gold">
+                  <li>новые скрипты;</li>
+                  <li>новые офферы;</li>
+                  <li>новые форматы касаний;</li>
+                  <li>обучение через практику.</li>
+                </ul>
+              </div>
+              <div class="callout">Важно: каждый тест должен иметь срок, критерий результата и границу ответственности.</div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="risks">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <div class="kicker">06 · Риски</div>
+              <h2>Где связка может буксовать</h2>
+            </div>
+            <p class="section-note">Риски не означают “плохо”. Это места, где заранее нужны правила, чтобы не тратить силы на лишние конфликты.</p>
+          </div>
+          <div class="grid-4">
+            <article class="card">
+              <div class="number"><span>1</span> Микроконтроль</div>
+              <h3>Слишком много правок</h3>
+              <p>Если Артур будет исправлять каждую мелочь, Марина может потерять естественность и начать защищаться вместо того, чтобы продавать.</p>
+            </article>
+            <article class="card">
+              <div class="number"><span>2</span> Обещания</div>
+              <h3>Слишком быстрые “да”</h3>
+              <p>Марина может включиться в разговоре и пообещать клиенту больше, чем согласовано. Нужны чёткие границы по скидкам, условиям и срокам.</p>
+            </article>
+            <article class="card">
+              <div class="number"><span>3</span> Эмоции</div>
+              <h3>Личное вместо рабочего</h3>
+              <p>Тёплая коммуникация помогает продажам, но внутри команды важно не превращать рабочую обратную связь в личные обиды и долгие разборы отношений.</p>
+            </article>
+            <article class="card">
+              <div class="number"><span>4</span> Размытая зона свободы</div>
+              <h3>Неясно, кто решает</h3>
+              <p>Если не прописать, что Марина может решать сама, а что согласует с руководителем, будут споры за право принимать решения.</p>
+            </article>
+          </div>
+          <div class="callout warning"><strong>Главная профилактика:</strong> до старта договориться о скидках, обещаниях клиенту, CRM, отчётности, зоне самостоятельности и формате обратной связи.</div>
+        </div>
+      </section>
+
+      <section id="agreements">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <div class="kicker">07 · Договорённости</div>
+              <h2>Что нужно прописать заранее</h2>
+            </div>
+            <p class="section-note">Эта связка сильнее раскрывается не в свободном хаосе, а в понятной рамке, где сотрудник знает границы своей самостоятельности.</p>
+          </div>
+          <div class="grid-3">
+            <article class="card">
+              <div class="icon">₽</div>
+              <h3>Деньги и скидки</h3>
+              <p>Какие скидки можно давать самостоятельно, какие согласуются, какие условия нельзя обещать без подтверждения.</p>
+            </article>
+            <article class="card">
+              <div class="icon">📌</div>
+              <h3>CRM и фиксация</h3>
+              <p>Что обязательно фиксируется: причина отказа, следующий шаг, договорённость, дата контакта, комментарий по клиенту.</p>
+            </article>
+            <article class="card">
+              <div class="icon">⚙</div>
+              <h3>Критерии качества</h3>
+              <p>Что считается хорошей работой: не только “продала / не продала”, но и качество контакта, следующий шаг, чистота данных и выполнение договорённостей.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="scenarios">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <div class="kicker">08 · Рабочие сценарии</div>
+              <h2>Как лучше работать вместе</h2>
+            </div>
+            <p class="section-note">Здесь карточка превращается в управленческую инструкцию: что делать в реальной работе, а не просто “какие вы разные”.</p>
+          </div>
+
+          <div class="grid-3">
+            <article class="card context-card">
+              <h3>🎯 Постановка задач</h3>
+              <p>Марине лучше давать не общий план “сделай больше продаж”, а конкретный фокус на короткий период.</p>
+              <ul>
+                <li>какой этап воронки усиливаем;</li>
+                <li>какой новый заход тестируем;</li>
+                <li>на каком количестве клиентов проверяем;</li>
+                <li>какой показатель считаем результатом;</li>
+                <li>когда делаем разбор.</li>
+              </ul>
+              <div class="quote">Лучший формат: “тестируем гипотезу”, а не “делай как я сказал”.</div>
+            </article>
+            <article class="card context-card">
+              <h3>☎️ Продажи и клиенты</h3>
+              <p>Марина может быть сильна в разговоре, где клиенту нужно объяснить ценность, снять сомнения и почувствовать человеческое отношение.</p>
+              <ul class="list-gold">
+                <li>тёплые касания;</li>
+                <li>создание доверия;</li>
+                <li>объяснение ценности;</li>
+                <li>работа с возражениями;</li>
+                <li>доведение до следующего шага.</li>
+              </ul>
+            </article>
+            <article class="card context-card">
+              <h3>📊 KPI и контроль</h3>
+              <p>Контроль нужен, но он должен быть понятным и деловым. Не постоянное давление, а прозрачные показатели и регулярные короткие разборы.</p>
+              <ul class="list-lead">
+                <li>количество касаний;</li>
+                <li>конверсия по этапам;</li>
+                <li>качество CRM;</li>
+                <li>причины отказов;</li>
+                <li>следующее действие по каждому клиенту.</li>
+              </ul>
+              <div class="quote">Контроль должен защищать результат, а не ломать живой стиль продаж.</div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="plan">
+        <div class="container">
+          <div class="section-head">
+            <div>
+              <div class="kicker">09 · Внедрение</div>
+              <h2>План на 30 / 60 / 90 дней</h2>
+            </div>
+            <p class="section-note">Эта часть особенно полезна руководителю: не просто понять связку, а сразу перевести её в управление.</p>
+          </div>
+          <div class="grid-3">
+            <article class="card">
+              <div class="number"><span>30</span> дней</div>
+              <h3>Настроить рамку</h3>
+              <p>Согласовать правила: скидки, обещания клиентам, CRM, ежедневные/еженедельные отчёты, формат обратной связи и первые рабочие показатели.</p>
+            </article>
+            <article class="card">
+              <div class="number"><span>60</span> дней</div>
+              <h3>Проверить стиль продаж</h3>
+              <p>Посмотреть, где Марина сильнее: первый контакт, прогрев, закрытие, повторные касания, объяснение продукта или работа с сомнениями.</p>
+            </article>
+            <article class="card">
+              <div class="number"><span>90</span> дней</div>
+              <h3>Закрепить рабочую модель</h3>
+              <p>Оставить то, что даёт результат, убрать лишний контроль, прописать устойчивую зону самостоятельности и понятные показатели качества.</p>
+            </article>
+          </div>
+
+          <div class="card" style="margin-top:18px;">
+            <h3>Протокол управления Артур → Марина</h3>
+            <div class="protocol">
+              <div class="step">Начинать с признания сильного места: контакт, доверие, аргументация, живой стиль.</div>
+              <div class="step">Давать одну точку настройки за раз, а не весь список ошибок.</div>
+              <div class="step">Переводить правки в эксперимент: срок, количество клиентов, критерий.</div>
+              <div class="step">Не требовать мгновенного согласия на всё, что предложено в разборе.</div>
+              <div class="step">Фиксировать договорённости письменно: скидки, обещания, CRM, зона свободы.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="summary">
+        <div class="container">
+          <div class="final">
+            <div class="final-grid">
+              <div>
+                <div class="kicker">10 · Резюме</div>
+                <h2>Главный вывод</h2>
+                <ul>
+                  <li>Связка Артур × Марина перспективна в рабочем контексте: руководитель видит систему и качество, сотрудник может хорошо держать контакт с клиентами.</li>
+                  <li>Артуру важно не превращать видение в давление. Его лучший инструмент — ясная рамка, один фокус и разбор фактов.</li>
+                  <li>Марине важно не воспринимать каждую правку как личную критику и не обещать клиентам то, что не согласовано.</li>
+                  <li>Самые важные договорённости: скидки, условия, зона свободы, CRM, критерии качества и формат обратной связи.</li>
+                </ul>
+                <div class="final-line">Формула успеха: Артур держит стратегию, качество и границы. Марина держит контакт, подачу и движение клиента. Вместе — меньше хаотичного давления, больше точных тестов, ясных правил и живой работы.</div>
+              </div>
+              <div class="rings" aria-hidden="true"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container chips">
+        <span class="chip lead">Артур · руководитель</span>
+        <span class="chip team">Марина · сотрудник</span>
+        <span class="chip gold">Рабочая связка</span>
+        <span class="chip violet">Продажи</span>
+        <span class="chip team">Управление</span>
+        <span class="chip lead">KPI и границы</span>
+        <a class="chip" href="#top">↑ Наверх</a>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

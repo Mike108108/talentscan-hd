@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TalentScan — Дарья — текущая роль · котокафе</title>
+<style>
+:root{
+  --bg:#070b1f;
+  --text:#f7f9ff;
+  --soft:#e1e8ff;
+  --muted:#b6c1d9;
+  --line:rgba(255,255,255,.16);
+  --card:rgba(255,255,255,.078);
+  --coral:#ff746b;
+  --coral2:#ffa08a;
+  --gold:#f0b84e;
+  --gold2:#ffe096;
+  --violet:#8f6bff;
+  --violet2:#ccbaff;
+  --cyan:#70d7ff;
+  --green:#72e4c7;
+  --green2:#a9f8df;
+  --red:#ff6469;
+  --shadow:0 24px 80px rgba(0,0,0,.35);
+  --radius-xl:34px;
+  --radius-lg:24px;
+  --radius-md:18px;
+  --max:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:92px}
+body{
+  margin:0;
+  min-height:100vh;
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+  background:
+    radial-gradient(circle at 13% 7%, rgba(255,116,107,.23), transparent 28%),
+    radial-gradient(circle at 84% 5%, rgba(112,215,255,.28), transparent 34%),
+    radial-gradient(circle at 78% 45%, rgba(114,228,199,.13), transparent 28%),
+    linear-gradient(145deg,#050815 0%,#071425 42%,#12143d 100%);
+  overflow-x:hidden;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background-image:
+    radial-gradient(circle, rgba(255,255,255,.16) 0 1px, transparent 1px),
+    radial-gradient(circle, rgba(112,215,255,.12) 0 1px, transparent 1px);
+  background-size:64px 64px,110px 110px;
+  background-position:12px 18px,50px 80px;
+  mask-image:linear-gradient(to bottom,rgba(0,0,0,.82),transparent 92%);
+}
+a{color:inherit;text-decoration:none}
+.page{position:relative;z-index:1}
+.container{width:min(var(--max),calc(100% - 40px));margin:0 auto}
+.hero{position:relative;padding:52px 0 34px;overflow:hidden}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(300px,.92fr);gap:34px;align-items:center}
+.eyebrow{display:inline-flex;gap:10px;align-items:center;padding:9px 14px;border:1px solid rgba(255,255,255,.18);border-radius:999px;color:var(--soft);background:rgba(255,255,255,.07);backdrop-filter:blur(18px);font-size:14px;letter-spacing:.02em}
+.eyebrow .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 18px var(--green)}
+h1{margin:22px 0 0;font-size:clamp(40px,6.6vw,78px);line-height:.95;letter-spacing:-.055em}
+.names{margin-top:10px;font-size:clamp(34px,5.7vw,66px);line-height:1;font-weight:850;letter-spacing:-.052em;color:var(--green);text-shadow:0 0 36px rgba(112,228,199,.22)}
+.subtitle{margin:18px 0 0;color:var(--muted);font-size:clamp(17px,2vw,21px);max-width:830px;line-height:1.5}
+.identity-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:24px}
+.identity-card{padding:17px 18px;border:1px solid var(--line);border-radius:var(--radius-md);background:rgba(255,255,255,.075);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.identity-card b{display:block;font-size:20px;margin-bottom:6px;color:var(--gold2)}
+.identity-card span{color:var(--muted);line-height:1.42;font-size:14px}
+.verdict-card{margin-top:22px;position:relative;padding:24px 26px;border-radius:var(--radius-lg);border:1px solid rgba(255,255,255,.18);background:linear-gradient(135deg,rgba(255,116,107,.18),rgba(112,215,255,.13) 52%,rgba(112,228,199,.13)),rgba(255,255,255,.07);box-shadow:0 0 0 1px rgba(255,255,255,.04),0 24px 70px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.12);overflow:hidden}
+.verdict-card::after{content:"";position:absolute;width:230px;height:230px;right:-70px;bottom:-120px;background:radial-gradient(circle,rgba(112,228,199,.34),transparent 65%);pointer-events:none}
+.verdict-card p{position:relative;z-index:1;margin:0;font-size:clamp(23px,2.55vw,32px);line-height:1.26;font-weight:760;letter-spacing:-.025em}
+.verdict-card strong{color:var(--green2)}.verdict-card em{color:var(--coral2);font-style:normal}
+.hero-visual{position:relative;min-height:500px;display:grid;place-items:center}
+.halo{position:absolute;width:min(510px,90vw);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.12) 0 2px,transparent 3px),radial-gradient(circle at 30% 20%,rgba(255,116,107,.28),transparent 30%),radial-gradient(circle at 70% 70%,rgba(112,228,199,.24),transparent 28%),radial-gradient(circle,rgba(112,215,255,.18),transparent 62%);border:1px solid rgba(255,255,255,.11);box-shadow:0 0 100px rgba(112,215,255,.2);animation:pulse 7s ease-in-out infinite;pointer-events:none}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.045);opacity:1}}
+.visual-card{position:relative;z-index:2;width:min(430px,88vw);border-radius:34px;border:1px solid rgba(255,255,255,.17);background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(255,255,255,.055));box-shadow:var(--shadow);padding:28px;overflow:hidden}
+.visual-card:before{content:"";position:absolute;inset:-1px;background:radial-gradient(circle at 80% 12%,rgba(255,116,107,.24),transparent 34%),radial-gradient(circle at 12% 84%,rgba(112,228,199,.22),transparent 30%);pointer-events:none}
+.visual-card>*{position:relative;z-index:1}
+.visual-card h3{margin:0 0 12px;font-size:26px;letter-spacing:-.035em}
+.visual-card .score-big{font-size:72px;line-height:.9;font-weight:900;color:var(--green2);letter-spacing:-.06em;margin:20px 0 8px;text-shadow:0 0 36px rgba(112,228,199,.22)}
+.visual-card p{margin:0;color:var(--soft);line-height:1.55}
+.dial{height:16px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden;margin:22px 0 18px;border:1px solid rgba(255,255,255,.12)}
+.dial i{display:block;height:100%;width:68%;border-radius:999px;background:linear-gradient(90deg,var(--coral),var(--gold),var(--green));box-shadow:0 0 24px rgba(112,228,199,.26)}
+.visual-list{display:grid;gap:10px;margin-top:18px}.visual-item{display:flex;justify-content:space-between;gap:14px;align-items:center;padding:12px 13px;border-radius:18px;background:rgba(0,0,0,.16);border:1px solid rgba(255,255,255,.1);font-size:14px}.visual-item b{color:var(--gold2)}
+.nav-strip{position:sticky;top:0;z-index:1200;padding:12px 0;background:linear-gradient(to bottom,rgba(5,8,21,.94),rgba(5,8,21,.74));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08);box-shadow:0 14px 34px rgba(0,0,0,.18);transform:translate3d(0,0,0)}
+.nav-scroll{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}.nav-scroll::-webkit-scrollbar{display:none}.nav-scroll a,.chip{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:11px 14px;border-radius:999px;color:var(--soft);border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.075);font-size:14px;white-space:nowrap;touch-action:manipulation;-webkit-tap-highlight-color:transparent}.nav-scroll a:hover{border-color:rgba(112,228,199,.55);color:white}
+section{padding:44px 0;scroll-margin-top:86px}.section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:20px}.kicker{color:var(--green);font-size:14px;text-transform:uppercase;letter-spacing:.12em;font-weight:700}h2{margin:6px 0 0;font-size:clamp(30px,4vw,52px);line-height:1.04;letter-spacing:-.045em}.section-note{max-width:590px;color:var(--muted);line-height:1.55}.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.grid-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.card{position:relative;border-radius:var(--radius-lg);padding:24px;background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.14);box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.08);overflow:hidden}.card::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 12% 5%,rgba(255,255,255,.13),transparent 24%);opacity:.65;pointer-events:none}.card>*{position:relative;z-index:1}.card h3{margin:0 0 14px;font-size:23px;line-height:1.16;letter-spacing:-.025em}.card p{color:var(--soft);line-height:1.62;margin:0 0 12px}.card p:last-child{margin-bottom:0}.muted{color:var(--muted)}ul,ol{margin:0;padding-left:18px;color:var(--soft);line-height:1.62}li{margin:7px 0}li::marker{color:var(--green)}.list-coral li::marker{color:var(--coral)}.list-gold li::marker{color:var(--gold)}.list-violet li::marker{color:var(--violet2)}.list-red li::marker{color:var(--red)}.icon{display:inline-grid;place-items:center;width:46px;height:46px;border-radius:16px;margin-bottom:16px;background:linear-gradient(135deg,rgba(255,116,107,.26),rgba(112,228,199,.2));border:1px solid rgba(255,255,255,.18);font-size:23px}.icon.gold{background:linear-gradient(135deg,rgba(240,184,78,.22),rgba(112,228,199,.18))}.icon.violet{background:linear-gradient(135deg,rgba(143,107,255,.22),rgba(112,215,255,.14))}.icon.red{background:linear-gradient(135deg,rgba(255,100,105,.25),rgba(240,184,78,.12))}.callout{border-radius:var(--radius-md);padding:18px 20px;margin-top:18px;background:linear-gradient(135deg,rgba(112,228,199,.14),rgba(255,116,107,.1));border:1px solid rgba(112,228,199,.28);color:#eafff8;line-height:1.55}.callout.gold{background:linear-gradient(135deg,rgba(240,184,78,.15),rgba(255,116,107,.1));border-color:rgba(240,184,78,.28);color:#fff2cf}.callout.red{border-color:rgba(255,100,105,.34);background:linear-gradient(135deg,rgba(255,100,105,.15),rgba(255,116,107,.08));color:#ffd7da}.metric-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:18px}.metric{padding:16px;border-radius:18px;background:rgba(0,0,0,.17);border:1px solid rgba(255,255,255,.12)}.metric b{display:block;font-size:24px;color:var(--green2);margin-bottom:4px}.metric span{color:var(--muted);font-size:13px;line-height:1.35}.progress{height:8px;border-radius:999px;background:rgba(255,255,255,.09);overflow:hidden;margin-top:10px}.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--green));border-radius:999px}.table-wrap{overflow:auto;border:1px solid rgba(255,255,255,.14);border-radius:20px;background:rgba(255,255,255,.06);box-shadow:var(--shadow)}table{border-collapse:collapse;width:100%;min-width:820px}th,td{border-right:1px solid rgba(255,255,255,.12);border-bottom:1px solid rgba(255,255,255,.12);padding:13px;text-align:left;vertical-align:top;color:var(--soft);font-size:14px;line-height:1.45}th{background:rgba(112,228,199,.18);color:#fff;text-transform:uppercase;font-size:12px;letter-spacing:.05em}td strong{color:var(--gold2)}td:last-child,th:last-child{border-right:0}tr:last-child td{border-bottom:0}.tag{display:inline-flex;align-items:center;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.075);border-radius:999px;padding:6px 10px;font-size:12px;font-weight:850;color:var(--soft);margin:0 6px 7px 0}.tag.good{border-color:rgba(112,228,199,.35);color:#d9fff3}.tag.warn{border-color:rgba(240,184,78,.35);color:#ffe3a2}.tag.bad{border-color:rgba(255,100,105,.35);color:#ffd9dc}.decision-box{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}.decision{padding:18px;border-radius:20px;background:rgba(0,0,0,.16);border:1px solid rgba(255,255,255,.12)}.decision h4{margin:0 0 8px;font-size:18px}.decision p{font-size:14px;color:var(--soft);line-height:1.52;margin:0}.final{padding:38px;border-radius:var(--radius-xl);background:radial-gradient(circle at 88% 18%,rgba(255,116,107,.2),transparent 28%),radial-gradient(circle at 18% 78%,rgba(112,228,199,.18),transparent 26%),linear-gradient(135deg,rgba(255,255,255,.11),rgba(255,255,255,.055));border:1px solid rgba(255,255,255,.18);box-shadow:var(--shadow)}.final h2{margin-bottom:18px}.final-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr);gap:24px;align-items:center}.final-line{margin-top:22px;padding:20px 22px;border-radius:var(--radius-md);background:linear-gradient(135deg,rgba(112,228,199,.18),rgba(255,116,107,.14));border:1px solid rgba(112,228,199,.32);color:#eafff8;font-weight:750;line-height:1.55}.rings{height:220px;border-radius:var(--radius-lg);background:radial-gradient(ellipse at 40% 48%,transparent 0 23%,rgba(255,116,107,.9) 24% 27%,transparent 28%),radial-gradient(ellipse at 60% 52%,transparent 0 23%,rgba(112,228,199,.9) 24% 27%,transparent 28%),radial-gradient(circle at 50% 50%,rgba(112,215,255,.2),transparent 60%);filter:drop-shadow(0 0 22px rgba(112,228,199,.38));border:1px solid rgba(255,255,255,.12)}.footer{padding:26px 0 56px}.chips{display:flex;flex-wrap:wrap;gap:10px}.chip.gold{border-color:rgba(240,184,78,.34);color:#ffe3a2}.chip.green{border-color:rgba(112,228,199,.34);color:#d9fff3}.chip.coral{border-color:rgba(255,116,107,.34);color:#ffd6d1}.chip.violet{border-color:rgba(143,107,255,.36);color:#e5dbff}.back-top-section{padding:10px 0 6px}.back-top-button{display:flex;align-items:center;justify-content:center;width:100%;min-height:58px;border-radius:999px;border:1px solid rgba(112,228,199,.35);background:linear-gradient(135deg,rgba(112,228,199,.18),rgba(255,116,107,.14));box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.1);color:#eafff8;font-weight:850;letter-spacing:-.01em;touch-action:manipulation;-webkit-tap-highlight-color:transparent}.back-top-button:hover{border-color:rgba(112,228,199,.58);color:#fff}@media(max-width:960px){.hero-grid,.final-grid{grid-template-columns:1fr}.hero-visual{min-height:340px}.grid-3,.grid-4,.grid-2,.identity-row,.metric-row,.decision-box{grid-template-columns:1fr}.section-head{display:block}.section-note{margin-top:12px}table{min-width:760px}}@media(max-width:560px){.container{width:min(100% - 24px,var(--max))}.hero{padding-top:34px}.card{padding:20px}.verdict-card{padding:20px}.final{padding:24px}section{padding:34px 0}.hero-visual{min-height:300px}.visual-card{padding:22px}.visual-card .score-big{font-size:60px}.nav-strip{position:sticky;top:0}.nav-scroll a,.chip{font-size:13px;padding:10px 13px;min-height:42px}}
+@media print{body{background:#050815}.nav-strip,.footer{display:none}.card,.final{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="hero" id="top">
+    <div class="container hero-grid">
+      <div>
+        <div class="eyebrow"><span class="dot"></span> TalentScan · текущая роль</div>
+        <h1>Соответствие текущей должности</h1>
+        <div class="names">Дарья · котокафе</div>
+        <p class="subtitle">Разбор для соискателя: продолжать ли текущую работу, какие условия изменить, где роль раскрывает Дарью, а где начинает забирать ресурс.</p>
+        <div class="identity-row">
+          <div class="identity-card"><b>Текущая роль</b><span>Котокафе · администратор: гости, коты, звонки, консультации, продажи, соцсети и ответственность за смену.</span></div>
+          <div class="identity-card"><b>Сильное совпадение</b><span>Живой контакт, помощь людям, атмосфера места, истории котов, мягкое объяснение и улучшение сервиса.</span></div>
+          <div class="identity-card"><b>Главный риск</b><span>12–14-часовые смены, связь вне работы и ответственность без достаточных границ и полномочий.</span></div>
+        </div>
+        <div class="verdict-card"><p><strong>Вердикт:</strong> роль по смыслу подходит, но текущий формат нужно менять. Это не “уходить срочно”, а <em>оставаться только при переразметке нагрузки, связи и зоны влияния</em>.</p></div>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="halo"></div>
+        <div class="visual-card">
+          <h3>Быстрый ответ</h3>
+          <div class="score-big">68%</div>
+          <p><strong>Текущий формат:</strong> частично подходит. Потенциал высокий, но организация роли сейчас перегружает.</p>
+          <div class="dial"><i></i></div>
+          <div class="visual-list">
+            <div class="visual-item"><span>Смысл роли</span><b>86%</b></div>
+            <div class="visual-item"><span>Текущий график</span><b>38%</b></div>
+            <div class="visual-item"><span>При изменении условий</span><b>86%</b></div>
+            <div class="visual-item"><span>Рекомендация</span><b>менять рамки</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <nav class="nav-strip" aria-label="Навигация по карточке">
+    <div class="container nav-scroll">
+      <a href="#verdict">Вердикт</a>
+      <a href="#metrics">Проценты</a>
+      <a href="#fit">Матрица задач</a>
+      <a href="#strengths">Что подходит</a>
+      <a href="#risks">Что перегружает</a>
+      <a href="#upgrade">Как изменить роль</a>
+      <a href="#questions">Что спросить</a>
+      <a href="#decision">Решение</a>
+      <a href="#plan">План</a>
+      <a href="#final">Итог</a>
+    </div>
+  </nav>
+
+  <main>
+    <section id="verdict">
+      <div class="container">
+        <div class="section-head">
+          <div><div class="kicker">01 · сильное начало</div><h2>Быстрый ответ по текущей роли</h2></div>
+          <p class="section-note">Это карточка не для работодателя, а для Дарьи: насколько текущая работа раскрывает её и что нужно изменить, чтобы роль не превращалась в выгорание.</p>
+        </div>
+        <div class="grid-2">
+          <article class="card">
+            <div class="icon">✓</div>
+            <h3>Вердикт: оставаться, но менять условия</h3>
+            <p>Работа в котокафе для Дарьи не выглядит случайной: здесь есть люди, животные, атмосфера, помощь, истории, объяснение, мягкие продажи, соцсети и возможность улучшать сервис. Это хорошо попадает в её сильную сторону — видеть живую среду и делать её понятнее, теплее и человечнее.</p>
+            <p>Но текущий формат роли перегружает: длинные смены, связь в нерабочее время, одиночная ответственность и много повторяющихся задач. Поэтому главный ответ: <strong>не “эта работа плохая”, а “эту роль нужно перепаковать”.</strong></p>
+            <div class="callout"><strong>Решение:</strong> продолжать можно, если роль переходит из “администратор на потоке” в “администратор гостевого опыта” с понятными границами и правом улучшать процесс.</div>
+          </article>
+          <article class="card">
+            <div class="icon gold">→</div>
+            <h3>Главный риск</h3>
+            <p>Если оставить всё как есть, Дарья может начать терять ресурс не из-за котокафе как темы, а из-за организации труда: слишком длинные смены, мало пауз, слишком много ответственности и ожидание быть доступной даже вне работы.</p>
+            <ul class="list-coral">
+              <li>роль расширяется, а полномочия не растут;</li>
+              <li>идеи по улучшению принимаются медленно;</li>
+              <li>посты, сообщения и созвоны вне смены не считаются отдельной работой;</li>
+              <li>всё держится на личной ответственности Дарьи;</li>
+              <li>рутина съедает смысл, ради которого она туда пришла.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="metrics">
+      <div class="container">
+        <div class="section-head">
+          <div><div class="kicker">02 · проценты</div><h2>Показатели соответствия</h2></div>
+          <p class="section-note">Проценты показывают не “хорошая/плохая работа”, а где есть совпадение, где нужен торг по условиям и что влияет на решение.</p>
+        </div>
+        <div class="metric-row">
+          <div class="metric"><b>64–72%</b><span>текущий формат роли</span><div class="progress"><i style="width:68%"></i></div></div>
+          <div class="metric"><b>82–88%</b><span>при изменении условий</span><div class="progress"><i style="width:86%"></i></div></div>
+          <div class="metric"><b>86%</b><span>смысловая сфера</span><div class="progress"><i style="width:86%"></i></div></div>
+          <div class="metric"><b>38%</b><span>график и нагрузка</span><div class="progress"><i style="width:38%"></i></div></div>
+        </div>
+        <div class="grid-4" style="margin-top:14px">
+          <div class="card"><h3>Люди и гости</h3><p class="bigish"><span class="tag good">85%</span></p><p>Живое общение, объяснение, поддержка и атмосфера подходят.</p></div>
+          <div class="card"><h3>Коты и помощь</h3><p><span class="tag good">88%</span></p><p>Сильное эмоциональное и смысловое совпадение.</p></div>
+          <div class="card"><h3>Соцсети и истории</h3><p><span class="tag good">80%</span></p><p>Подходит, если это отдельная признанная зона, а не “между делом”.</p></div>
+          <div class="card"><h3>Связь вне смены</h3><p><span class="tag bad">25–35%</span></p><p>Один из главных факторов выгорания.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="fit">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">03 · задачи</div><h2>Матрица соответствия задач</h2></div><p class="section-note">Здесь видно, что сама тема роли сильная, а слабые места связаны с форматом нагрузки и границами.</p></div>
+        <div class="table-wrap"><table>
+          <tr><th>Зона работы</th><th>Соответствие</th><th>Почему так</th><th>Что сделать</th></tr>
+          <tr><td>Общение с гостями</td><td><strong>85%</strong></td><td>Подходит живой контакт, объяснение, забота о впечатлении и мягкая коммуникация.</td><td>Дать готовые сценарии для частых вопросов, но оставить право говорить живым языком.</td></tr>
+          <tr><td>Помощь с забором кота в семью</td><td><strong>84%</strong></td><td>Сильная зона смысла: не просто продажа, а помощь человеку принять решение.</td><td>Описать понятный маршрут: интерес → вопросы → знакомство → решение → сопровождение.</td></tr>
+          <tr><td>Улучшение сервиса</td><td><strong>82%</strong></td><td>Дарья видит, где гостям непонятно, неудобно или не хватает тепла.</td><td>Раз в месяц тестировать одно маленькое улучшение и смотреть результат.</td></tr>
+          <tr><td>Соцсети, истории, посты</td><td><strong>80%</strong></td><td>Подходит креатив, атмосфера, истории котов, человеческая подача места.</td><td>Признать это как отдельную задачу с временем и критерием результата.</td></tr>
+          <tr><td>Мягкие продажи</td><td><strong>68–74%</strong></td><td>Подходит через доверие, объяснение и заботу, но не через давление.</td><td>Не ставить агрессивные продажи как главный KPI.</td></tr>
+          <tr><td>Повторение одинаковых объяснений</td><td><strong>42%</strong></td><td>Много повторов без новизны и смысла быстро снижает ресурс.</td><td>Сделать FAQ, таблички, шаблоны ответов, быстрые подсказки для гостей.</td></tr>
+          <tr><td>Смена 12–14 часов</td><td><strong>35–40%</strong></td><td>Слишком длинный контактный день для устойчивого качества.</td><td>Искать укорочение смен, паузы, помощника в пики или перераспределение задач.</td></tr>
+          <tr><td>Связь в нерабочее время</td><td><strong>25–35%</strong></td><td>Размывает границы и делает роль постоянно включенной.</td><td>Зафиксировать часы связи и что считается срочным.</td></tr>
+          <tr><td>Одиночная ответственность за всё</td><td><strong>38–45%</strong></td><td>Много ответственности без поддержки усиливает напряжение.</td><td>Назначить резервного ответственного и правила передачи смены.</td></tr>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="strengths">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">04 · что подходит</div><h2>Почему эта роль может раскрывать Дарью</h2></div><p class="section-note">Если правильно настроить формат, котокафе может быть для неё не просто работой, а живой средой для коммуникации, заботы и смысловой подачи.</p></div>
+        <div class="grid-3">
+          <article class="card"><div class="icon">🐾</div><h3>Тёплая среда</h3><p>Коты, гости, истории и атмосфера дают Дарье живой смысл. Ей легче включаться, когда работа не абстрактная, а человеческая и эмоционально понятная.</p></article>
+          <article class="card"><div class="icon gold">💬</div><h3>Объяснение и контакт</h3><p>Дарья может спокойно объяснить правила, стоимость, особенности котов, процесс знакомства и помочь гостю не растеряться.</p></article>
+          <article class="card"><div class="icon violet">✦</div><h3>Истории и соцсети</h3><p>Ей подходит оживлять место через тексты, истории, подборки, фотографии, маленькие поводы и человеческую подачу.</p></article>
+          <article class="card"><div class="icon">🧭</div><h3>Навигация гостей</h3><p>Она может видеть, где человеку нужен следующий шаг: спросить, подсказать, предложить, показать, поддержать решение.</p></article>
+          <article class="card"><div class="icon gold">🛠️</div><h3>Улучшение процессов</h3><p>Дарья может замечать неудобные места: что часто спрашивают, где люди путаются, где сервис можно сделать проще.</p></article>
+          <article class="card"><div class="icon violet">🤝</div><h3>Мягкие продажи</h3><p>Если продажа идёт через доверие и заботу, а не через давление, это может быть рабочей зоной.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="risks">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">05 · что перегружает</div><h2>Почему роль может начать выжигать</h2></div><p class="section-note">Основная проблема — не тема котокафе, а организация роли: много контакта, много ответственности, мало границ.</p></div>
+        <div class="grid-2">
+          <article class="card"><h3>Красные зоны текущего формата</h3><ul class="list-red"><li>смены 12–14 часов;</li><li>частая связь вне рабочего времени;</li><li>посты и соцсети “между делом”;</li><li>одиночная ответственность за гостей, помещение и животных;</li><li>слишком много повторяющихся объяснений;</li><li>медленное внедрение улучшений;</li><li>нет ясного статуса: администратор, контентщик, сервис-менеджер или всё сразу.</li></ul></article>
+          <article class="card"><h3>Как это будет проявляться</h3><ul class="list-coral"><li>после смены нет сил даже на свои дела;</li><li>раздражение от сообщений в выходные;</li><li>ощущение, что “на мне всё держится”;</li><li>идеи есть, но их сложно протолкнуть;</li><li>любовь к котам и людям остаётся, а сама работа начинает казаться тяжёлой;</li><li>Дарья может начать сомневаться в себе, хотя проблема в рамке роли.</li></ul></article>
+        </div>
+        <div class="callout red"><strong>Критический вывод:</strong> если не отделить рабочее время, зону ответственности и право улучшать процесс, роль из подходящей по смыслу станет выматывающей по формату.</div>
+      </div>
+    </section>
+
+    <section id="upgrade">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">06 · переразметка</div><h2>Как превратить роль в подходящую</h2></div><p class="section-note">Лучший ход — не просто “остаться или уйти”, а предложить новую сборку роли.</p></div>
+        <div class="grid-2">
+          <article class="card"><div class="icon gold">1</div><h3>Переименовать смысл роли</h3><p><strong>Было:</strong> администратор на смене, который закрывает всё подряд.</p><p><strong>Стало:</strong> администратор гостевого опыта — отвечает за встречу, понятность, атмосферу, обратную связь, маленькие улучшения и часть коммуникаций.</p></article>
+          <article class="card"><div class="icon">2</div><h3>Разделить обязанности</h3><ul><li>обязательные задачи смены;</li><li>соцсети и контент;</li><li>улучшение сервиса;</li><li>связь с руководством;</li><li>экстренные вопросы;</li><li>то, что не входит в роль.</li></ul></article>
+          <article class="card"><div class="icon violet">3</div><h3>Ввести границы связи</h3><p>Определить, какие вопросы действительно срочные, в какие часы Дарья отвечает, что переносится на смену, а что решает другой ответственный.</p></article>
+          <article class="card"><div class="icon gold">4</div><h3>Дать право на маленькие улучшения</h3><p>Раз в месяц Дарья предлагает одно улучшение: FAQ, табличку, пост, сценарий для гостей, новый формат подачи котов или сбор обратной связи.</p></article>
+        </div>
+        <div class="callout"><strong>Идеальный апгрейд:</strong> Дарья остаётся в котокафе, но её роль становится более смысловой: гостевой опыт + коммуникации + сервисные улучшения, а не просто длинная смена и постоянная доступность.</div>
+      </div>
+    </section>
+
+    <section id="questions">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">07 · переговоры</div><h2>Что Дарье уточнить у руководства</h2></div><p class="section-note">Эти вопросы помогают не спорить эмоционально, а перевести перегруз в конкретные договорённости.</p></div>
+        <div class="grid-3">
+          <article class="card"><h3>Про рабочее время</h3><ul><li>В какие часы я обязана быть на связи?</li><li>Что считается срочным вне смены?</li><li>Как учитываются посты, ответы и задачи вне рабочего времени?</li></ul></article>
+          <article class="card"><h3>Про ответственность</h3><ul><li>За что я отвечаю лично?</li><li>Где есть резервный ответственный?</li><li>Какие решения я могу принимать сама?</li></ul></article>
+          <article class="card"><h3>Про соцсети</h3><ul><li>Это часть должности или дополнительная задача?</li><li>Сколько времени на это выделяется?</li><li>Какой результат считается хорошим?</li></ul></article>
+          <article class="card"><h3>Про улучшения</h3><ul><li>Какие идеи можно тестировать без долгого согласования?</li><li>Можно ли запускать одно маленькое улучшение в месяц?</li><li>Как измерять реакцию гостей?</li></ul></article>
+          <article class="card"><h3>Про график</h3><ul><li>Возможны ли короткие смены?</li><li>Есть ли помощник в пиковые дни?</li><li>Можно ли закрепить обязательные паузы?</li></ul></article>
+          <article class="card"><h3>Про развитие</h3><ul><li>Могу ли я расти в сторону гостевого опыта, коммуникаций или контента?</li><li>Что нужно показать за 30 дней, чтобы роль расширили?</li></ul></article>
+        </div>
+        <div class="callout gold"><strong>Фраза для разговора:</strong> “Мне нравится сама среда и работа с гостями, но сейчас роль размыта. Я хочу договориться, где моя зона ответственности, какие задачи считаются рабочими и что я могу улучшать официально”.</div>
+      </div>
+    </section>
+
+    <section id="decision">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">08 · развилка</div><h2>Как принять решение по текущей работе</h2></div><p class="section-note">Дарье важно выбирать не между “терпеть” и “уходить”, а между тремя сценариями.</p></div>
+        <div class="decision-box">
+          <article class="decision"><h4><span class="tag good">Сценарий 1</span> Остаться и усилиться</h4><p>Если руководство готово признать роль, зафиксировать границы, учесть задачи вне смены и дать право на улучшения.</p></article>
+          <article class="decision"><h4><span class="tag warn">Сценарий 2</span> Остаться как переходный этап</h4><p>Если изменения пока частичные, но работа всё ещё даёт смысл, людей, опыт и возможность собрать портфолио.</p></article>
+          <article class="decision"><h4><span class="tag bad">Сценарий 3</span> Готовить выход</h4><p>Если границы не принимают, связь вне работы остаётся нормой, а идеи и наблюдения Дарьи системно обесцениваются.</p></article>
+        </div>
+        <div class="table-wrap" style="margin-top:18px"><table>
+          <tr><th>Признак</th><th>Продолжать</th><th>Осторожно</th><th>Готовить смену</th></tr>
+          <tr><td>Границы связи</td><td>Есть понятные часы</td><td>Иногда нарушаются</td><td>Ожидание 24/7</td></tr>
+          <tr><td>Право влиять</td><td>Идеи тестируют</td><td>Слушают, но медленно</td><td>“Не придумывай, просто делай”</td></tr>
+          <tr><td>Соцсети</td><td>Это признанная задача</td><td>Делается между делом</td><td>Не оплачивается и не считается</td></tr>
+          <tr><td>Нагрузка</td><td>Есть паузы и помощь</td><td>Периодически перегруз</td><td>Всё на одном человеке</td></tr>
+          <tr><td>Смысл</td><td>Есть люди, коты, атмосфера</td><td>Смысл есть, но рутина давит</td><td>Осталась только усталость</td></tr>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="plan">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">09 · действие</div><h2>План на 7 / 30 / 90 дней</h2></div><p class="section-note">Чтобы решение было не эмоциональным, а проверенным через факты.</p></div>
+        <div class="grid-3">
+          <article class="card"><div class="icon">7</div><h3>7 дней</h3><ul><li>Зафиксировать фактическую нагрузку за несколько смен.</li><li>Выписать задачи вне рабочего времени.</li><li>Собрать 5 частых вопросов гостей.</li><li>Подготовить разговор о границах.</li></ul></article>
+          <article class="card"><div class="icon gold">30</div><h3>30 дней</h3><ul><li>Согласовать одну маленькую сервисную доработку.</li><li>Сделать FAQ / шаблон ответов.</li><li>Отделить соцсети как задачу.</li><li>Проверить, изменилось ли ощущение перегруза.</li></ul></article>
+          <article class="card"><div class="icon violet">90</div><h3>90 дней</h3><ul><li>Оценить, стала ли роль ближе к “гостевому опыту”.</li><li>Собрать портфолио: посты, улучшения, отзывы гостей.</li><li>Принять решение: развиваться внутри или искать новую среду.</li></ul></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="final">
+      <div class="container">
+        <div class="final">
+          <div class="final-grid">
+            <div>
+              <div class="kicker">10 · итог</div>
+              <h2>Итоговая рекомендация</h2>
+              <ul>
+                <li>Котокафе как сфера Дарье подходит: люди, коты, атмосфера, помощь, истории и мягкая коммуникация — сильное совпадение.</li>
+                <li>Текущий формат должности подходит только частично: перегружают длинные смены, постоянная связь и размытая ответственность.</li>
+                <li>Лучший путь — не бросать всё сразу, а попробовать официально переразметить роль: гостевой опыт, коммуникации, соцсети и улучшение сервиса.</li>
+                <li>Если руководство готово к границам и маленьким изменениям, роль может вырасти до 82–88% соответствия.</li>
+                <li>Если границы не принимают и всё остаётся “ты просто должна всё вывезти”, работу лучше рассматривать как переходный этап и готовить смену направления.</li>
+              </ul>
+              <div class="final-line">Формула решения: “Я остаюсь не потому, что терплю, а потому что роль можно превратить в подходящую. Если условия не меняются — я использую этот опыт как мост к работе, где ценятся люди, коммуникация, атмосфера, смысл и право улучшать процесс”.</div>
+            </div>
+            <div class="rings" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <section class="back-top-section" aria-label="Вернуться в начало">
+    <div class="container"><a class="back-top-button" href="#top" aria-label="Вернуться в начало карточки">↑ Вернуться в начало</a></div>
+  </section>
+
+  <footer class="footer">
+    <div class="container chips">
+      <span class="chip green">Дарья · текущая роль</span>
+      <span class="chip gold">Котокафе</span>
+      <span class="chip violet">Администратор гостевого опыта</span>
+      <span class="chip coral">Менять условия</span>
+      <a class="chip" href="#top">↑ Наверх</a>
+    </div>
+  </footer>
+</div>
+<script>
+(function(){
+  document.querySelectorAll('a[href^="#"]').forEach((link)=>{
+    link.addEventListener('click',(event)=>{
+      const href=link.getAttribute('href');
+      if(!href || href==='#') return;
+      const target=document.querySelector(href);
+      if(!target) return;
+      event.preventDefault();
+      const nav=document.querySelector('.nav-strip');
+      const offset=(nav?nav.offsetHeight:0)+14;
+      const top=href==='#top'?0:Math.max(target.getBoundingClientRect().top+window.pageYOffset-offset,0);
+      window.scrollTo({top,behavior:'smooth'});
+      if(history.pushState) history.pushState(null,'',href);
+    },{passive:false});
+  });
+})();
+</script>
+</body>
+</html>

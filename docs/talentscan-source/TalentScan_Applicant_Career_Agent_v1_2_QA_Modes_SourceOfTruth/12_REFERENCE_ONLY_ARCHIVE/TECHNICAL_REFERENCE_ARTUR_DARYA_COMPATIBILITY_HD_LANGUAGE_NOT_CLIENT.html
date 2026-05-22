@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TalentScan — Артур × Дарья — совместимость для соискателя</title>
+  <style>
+    :root{
+      --bg:#06101f; --bg2:#0e1b3f; --text:#f7f9ff; --soft:#e1e8ff; --muted:#b6c1d9;
+      --line:rgba(255,255,255,.16); --card:rgba(255,255,255,.075); --card2:rgba(255,255,255,.105);
+      --artur:#ff746b; --artur2:#ffa08a; --darya:#72e4c7; --darya2:#a9f8df;
+      --gold:#f0b84e; --gold2:#ffe096; --violet:#8f6bff; --violet2:#ccbaff; --cyan:#70d7ff;
+      --green:#7ce2b2; --red:#ff6f78; --shadow:0 24px 80px rgba(0,0,0,.35);
+      --radius-xl:34px; --radius-lg:24px; --radius-md:18px; --max:1180px;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;min-height:100vh;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;background:
+      radial-gradient(circle at 13% 7%,rgba(255,116,107,.23),transparent 28%),
+      radial-gradient(circle at 84% 5%,rgba(112,215,255,.28),transparent 34%),
+      radial-gradient(circle at 78% 45%,rgba(124,226,178,.13),transparent 28%),
+      linear-gradient(145deg,#050815 0%,#071425 42%,#12143d 100%);overflow-x:hidden}
+    body:before{content:"";position:fixed;inset:0;pointer-events:none;background-image:
+      radial-gradient(circle,rgba(255,255,255,.16) 0 1px,transparent 1px),
+      radial-gradient(circle,rgba(112,215,255,.12) 0 1px,transparent 1px);background-size:64px 64px,110px 110px;background-position:12px 18px,50px 80px;mask-image:linear-gradient(to bottom,rgba(0,0,0,.82),transparent 92%)}
+    a{color:inherit;text-decoration:none}.page{position:relative;z-index:1}.container{width:min(var(--max),calc(100% - 40px));margin:0 auto}
+    .hero{position:relative;padding:52px 0 32px;overflow:hidden}.hero-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(310px,.95fr);gap:34px;align-items:center}
+    .eyebrow{display:inline-flex;gap:10px;align-items:center;padding:9px 14px;border:1px solid rgba(255,255,255,.18);border-radius:999px;color:var(--soft);background:rgba(255,255,255,.07);backdrop-filter:blur(18px);font-size:14px;letter-spacing:.02em}.eyebrow .dot{width:8px;height:8px;border-radius:50%;background:var(--darya);box-shadow:0 0 18px var(--darya)}
+    h1{margin:22px 0 0;font-size:clamp(42px,6.8vw,82px);line-height:.95;letter-spacing:-.055em}.names{margin-top:10px;font-size:clamp(35px,6.1vw,74px);line-height:1;font-weight:850;letter-spacing:-.052em}.names .artur{color:var(--artur);text-shadow:0 0 36px rgba(255,116,107,.24)}.names .darya{color:var(--darya);text-shadow:0 0 36px rgba(112,228,199,.24)}.names .x{color:#fff;opacity:.82;font-weight:450;padding:0 .14em}.subtitle{margin:18px 0 0;color:var(--muted);font-size:clamp(17px,2vw,22px);max-width:860px}
+    .identity-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:24px}.identity-card{padding:18px;border:1px solid var(--line);border-radius:var(--radius-md);background:rgba(255,255,255,.075);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}.identity-card b{display:block;font-size:18px;margin-bottom:6px}.identity-card span{color:var(--muted);line-height:1.42}.identity-card.artur-card{border-color:rgba(255,116,107,.32)}.identity-card.darya-card{border-color:rgba(112,228,199,.36)}
+    .score-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:16px}.score{padding:15px 16px;border-radius:18px;background:rgba(0,0,0,.16);border:1px solid rgba(255,255,255,.13)}.score strong{display:block;font-size:20px;line-height:1;margin-bottom:7px;color:var(--gold2)}.score span{display:block;color:var(--muted);font-size:14px;line-height:1.35}
+    .formula-card{margin-top:22px;position:relative;padding:24px 26px;border-radius:var(--radius-lg);border:1px solid rgba(255,255,255,.18);background:linear-gradient(135deg,rgba(255,116,107,.18),rgba(112,215,255,.13) 52%,rgba(112,228,199,.13)),rgba(255,255,255,.07);box-shadow:0 0 0 1px rgba(255,255,255,.04),0 24px 70px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.12);overflow:hidden}.formula-card:after{content:"";position:absolute;width:220px;height:220px;right:-80px;bottom:-110px;background:radial-gradient(circle,rgba(112,228,199,.34),transparent 65%)}.formula-card p{position:relative;z-index:1;margin:0;font-size:clamp(22px,2.45vw,31px);line-height:1.28;font-weight:750;letter-spacing:-.025em}.formula-card em{color:var(--darya2);font-style:normal}.formula-card strong{color:var(--artur2)}
+    .hero-visual{position:relative;min-height:520px;display:grid;place-items:center}.halo{position:absolute;width:min(520px,90vw);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.12) 0 2px,transparent 3px),radial-gradient(circle at 30% 20%,rgba(255,116,107,.28),transparent 30%),radial-gradient(circle at 70% 70%,rgba(112,228,199,.24),transparent 28%),radial-gradient(circle,rgba(112,215,255,.18),transparent 62%);border:1px solid rgba(255,255,255,.11);box-shadow:0 0 100px rgba(112,215,255,.2);animation:pulse 7s ease-in-out infinite}@keyframes pulse{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.045);opacity:1}}.bodygraph{position:relative;z-index:2;width:min(430px,88vw);filter:drop-shadow(0 30px 60px rgba(0,0,0,.42))}
+    .nav-strip{position:sticky;top:0;z-index:20;padding:12px 0;background:linear-gradient(to bottom,rgba(5,8,21,.9),rgba(5,8,21,.67));backdrop-filter:blur(18px);border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08)}.nav-scroll{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}.nav-scroll::-webkit-scrollbar{display:none}.nav-scroll a,.chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:8px;padding:11px 14px;border-radius:999px;color:var(--soft);border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.075);font-size:14px;white-space:nowrap}.nav-scroll a:hover{border-color:rgba(112,228,199,.55);color:white}
+    section{padding:44px 0;scroll-margin-top:74px}.section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:20px}.kicker{color:var(--darya);font-size:14px;text-transform:uppercase;letter-spacing:.12em;font-weight:700}h2{margin:6px 0 0;font-size:clamp(30px,4vw,52px);line-height:1.04;letter-spacing:-.045em}.section-note{max-width:560px;color:var(--muted);line-height:1.55}
+    .grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.grid-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+    .card{position:relative;border-radius:var(--radius-lg);padding:24px;background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.14);box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.08);overflow:hidden}.card:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 12% 5%,rgba(255,255,255,.13),transparent 24%);opacity:.65;pointer-events:none}.card>*{position:relative;z-index:1}.card h3{margin:0 0 14px;font-size:23px;line-height:1.16;letter-spacing:-.025em}.card p{color:var(--soft);line-height:1.62;margin:0 0 12px}.card p:last-child{margin-bottom:0}.muted{color:var(--muted)}.accent-artur{color:var(--artur2)}.accent-darya{color:var(--darya2)}.accent-gold{color:var(--gold2)}.accent-violet{color:var(--violet2)}
+    ul,ol{margin:0;padding-left:18px;color:var(--soft);line-height:1.62}li{margin:7px 0}li::marker{color:var(--darya)}.list-artur li::marker{color:var(--artur)}.list-gold li::marker{color:var(--gold)}.list-violet li::marker{color:var(--violet2)}.list-red li::marker{color:var(--red)}
+    .icon{display:inline-grid;place-items:center;width:46px;height:46px;border-radius:16px;margin-bottom:16px;background:linear-gradient(135deg,rgba(255,116,107,.26),rgba(112,228,199,.2));border:1px solid rgba(255,255,255,.18);font-size:23px}.callout{border-radius:var(--radius-md);padding:18px 20px;margin-top:18px;background:linear-gradient(135deg,rgba(112,228,199,.14),rgba(255,116,107,.1));border:1px solid rgba(112,228,199,.28);color:#eafff8;line-height:1.55}.warning{border-color:rgba(240,184,78,.34);background:linear-gradient(135deg,rgba(240,184,78,.15),rgba(255,116,107,.1));color:#fff2cf}.rednote{border-color:rgba(255,111,120,.36);background:linear-gradient(135deg,rgba(255,111,120,.17),rgba(255,116,107,.08));color:#ffd9dc}.quote{padding:18px;border-radius:var(--radius-md);border:1px solid rgba(112,215,255,.32);background:rgba(112,215,255,.1);color:#e4f6ff;line-height:1.56;font-style:italic}
+    .split-card{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:stretch}.mini{padding:18px;border-radius:var(--radius-md);background:rgba(0,0,0,.16);border:1px solid rgba(255,255,255,.12)}.mini h4{margin:0 0 10px;font-size:18px}.mini p{font-size:15px;line-height:1.55;color:var(--soft)}.feature-card{min-height:330px;display:flex;flex-direction:column;justify-content:space-between}.feature-card.artur{border-color:rgba(255,116,107,.34);background:linear-gradient(135deg,rgba(255,116,107,.16),rgba(255,255,255,.06))}.feature-card.darya{border-color:rgba(112,228,199,.35);background:linear-gradient(135deg,rgba(112,228,199,.16),rgba(255,255,255,.06))}.feature-card.blue{border-color:rgba(112,215,255,.35);background:linear-gradient(135deg,rgba(112,215,255,.15),rgba(255,255,255,.06))}.feature-card.gold{border-color:rgba(240,184,78,.36);background:linear-gradient(135deg,rgba(240,184,78,.15),rgba(255,255,255,.06))}
+    .number{display:inline-flex;align-items:center;gap:10px;margin-bottom:12px;color:var(--gold2);font-weight:750}.number span{width:34px;height:34px;display:inline-grid;place-items:center;border-radius:12px;background:rgba(240,184,78,.16);border:1px solid rgba(240,184,78,.28)}.decision-table{width:100%;border-collapse:collapse;min-width:820px}.table-wrap{overflow:auto;border:1px solid rgba(255,255,255,.14);border-radius:20px;background:rgba(255,255,255,.055);box-shadow:var(--shadow)}th,td{border-right:1px solid rgba(255,255,255,.11);border-bottom:1px solid rgba(255,255,255,.11);padding:13px;text-align:left;vertical-align:top;color:var(--soft);font-size:14px;line-height:1.45}th{background:rgba(112,228,199,.17);color:#fff;text-transform:uppercase;font-size:12px;letter-spacing:.05em}td strong{color:var(--gold2)}td:last-child,th:last-child{border-right:0}tr:last-child td{border-bottom:0}.tag{display:inline-flex;align-items:center;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.075);border-radius:999px;padding:5px 9px;font-size:12px;font-weight:800;color:var(--soft);margin:0 4px 5px 0}.tag.good{border-color:rgba(112,228,199,.35);color:#d9fff3}.tag.warn{border-color:rgba(240,184,78,.35);color:#ffe3a2}.tag.bad{border-color:rgba(255,111,120,.35);color:#ffd9dc}
+    .protocol{counter-reset:step;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.step{padding:16px;border-radius:18px;border:1px solid rgba(255,255,255,.13);background:rgba(0,0,0,.16);color:var(--soft);line-height:1.45}.step:before{counter-increment:step;content:counter(step);display:grid;place-items:center;width:30px;height:30px;border-radius:11px;background:rgba(112,228,199,.16);border:1px solid rgba(112,228,199,.3);color:var(--darya2);font-weight:800;margin-bottom:10px}
+    .final{padding:38px;border-radius:var(--radius-xl);background:radial-gradient(circle at 88% 18%,rgba(255,116,107,.2),transparent 28%),radial-gradient(circle at 18% 78%,rgba(112,228,199,.18),transparent 26%),linear-gradient(135deg,rgba(255,255,255,.11),rgba(255,255,255,.055));border:1px solid rgba(255,255,255,.18);box-shadow:var(--shadow)}.final h2{margin-bottom:18px}.final-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr);gap:24px;align-items:center}.final-line{margin-top:22px;padding:20px 22px;border-radius:var(--radius-md);background:linear-gradient(135deg,rgba(112,228,199,.18),rgba(255,116,107,.14));border:1px solid rgba(112,228,199,.32);color:#eafff8;font-weight:750;line-height:1.55}.rings{height:220px;border-radius:var(--radius-lg);background:radial-gradient(ellipse at 40% 48%,transparent 0 23%,rgba(255,116,107,.9) 24% 27%,transparent 28%),radial-gradient(ellipse at 60% 52%,transparent 0 23%,rgba(112,228,199,.9) 24% 27%,transparent 28%),radial-gradient(circle at 50% 50%,rgba(112,215,255,.2),transparent 60%);filter:drop-shadow(0 0 22px rgba(112,228,199,.38));border:1px solid rgba(255,255,255,.12)}.footer{padding:26px 0 56px}.chips{display:flex;flex-wrap:wrap;gap:10px}.chip.artur{border-color:rgba(255,116,107,.34);color:#ffd6d1}.chip.darya{border-color:rgba(112,228,199,.34);color:#d9fff3}.chip.gold{border-color:rgba(240,184,78,.34);color:#ffe3a2}.chip.violet{border-color:rgba(143,107,255,.36);color:#e5dbff}
+    @media(max-width:1080px){.protocol{grid-template-columns:repeat(2,minmax(0,1fr))}.score-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:960px){.hero-grid,.final-grid{grid-template-columns:1fr}.hero-visual{min-height:360px}.grid-3,.grid-4,.grid-2{grid-template-columns:1fr}.identity-row,.score-row{grid-template-columns:1fr}.section-head{display:block}.section-note{margin-top:12px}.split-card{grid-template-columns:1fr}}
+    @media(max-width:560px){.container{width:min(100% - 24px,var(--max))}.hero{padding-top:34px}.card{padding:20px}.formula-card{padding:20px}.final{padding:24px}section{padding:34px 0}.hero-visual{min-height:300px}.bodygraph{width:min(300px,88vw)}.protocol{grid-template-columns:1fr}}
+    @media print{body{background:#050815}.nav-strip{display:none}.card,.final{break-inside:avoid}}
+  </style>
+</head>
+<body>
+<div class="page">
+  <header class="hero" id="top">
+    <div class="container hero-grid">
+      <div>
+        <div class="eyebrow"><span class="dot"></span> Совместимость для соискателя · язык Дизайна Человека</div>
+        <h1>Стоит ли идти работать к этому руководителю?</h1>
+        <div class="names"><span class="artur">Артур</span><span class="x">×</span><span class="darya">Дарья</span></div>
+        <p class="subtitle">Карта взаимодействия для Дарьи как соискателя: как читать связку с руководителем компании, что уточнить до выхода, какие условия проверить и как принимать карьерное решение. Без контекста конкретной компании, должности и задач.</p>
+        <div class="identity-row">
+          <div class="identity-card artur-card"><b>Артур · руководитель компании</b><span>Проектор 6/2, селезёночный авторитет. В связке несёт настройку, вызов, смысл, качество, контроль ресурсов и быстрые интуитивные сигналы по людям и процессам.</span></div>
+          <div class="identity-card darya-card"><b>Дарья · соискатель</b><span>Проектор 6/2, эмоциональный авторитет. Для корректного решения ей важно не соглашаться сразу, а прожить волну, проверить признание, роль, условия и границы.</span></div>
+        </div>
+        <div class="score-row">
+          <div class="score"><strong>Можно смотреть</strong><span>если роль предполагает признанное влияние, людей, смысл и качество</span></div>
+          <div class="score"><strong>Не спешить</strong><span>решение Дарье лучше принимать не на первом эмоциональном импульсе</span></div>
+          <div class="score"><strong>Главный риск</strong><span>две проекторские механики + иллюзия общего двигателя</span></div>
+          <div class="score"><strong>Главный тест</strong><span>дадут ли ей роль, а не просто поток поручений</span></div>
+        </div>
+        <div class="formula-card"><p>Артур может <strong>точно видеть систему, слабые места и направление</strong>. Дарья может <em>чувствовать людей, атмосферу, смысл задачи и корректность роли</em>. Для соискателя эта связка перспективна, если её приглашают не “пахать”, а занять понятное место, где её видение реально нужно.</p></div>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="halo"></div>
+        <svg class="bodygraph" viewBox="0 0 420 520" role="img" aria-label="Стилизованный композит Артур Дарья">
+          <defs><filter id="glow"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+          <path d="M210 22 C330 96 384 216 372 365 C360 474 282 504 210 504 C138 504 60 474 48 365 C36 216 90 96 210 22Z" fill="rgba(255,255,255,.055)" stroke="rgba(255,255,255,.25)" stroke-width="2"/>
+          <g stroke="rgba(255,255,255,.62)" stroke-width="7" stroke-linecap="round" opacity=".9" filter="url(#glow)"><path d="M210 92 L210 165 L210 238 L210 316 L210 410"/><path d="M210 165 L145 252 L114 348"/><path d="M210 165 L275 252 L306 348"/><path d="M145 252 L210 316 L275 252"/><path d="M114 348 L210 410 L306 348"/></g>
+          <g stroke-width="8" stroke-linecap="round" filter="url(#glow)"><path d="M145 252 L114 348" stroke="#ff746b"/><path d="M210 316 L306 348" stroke="#72e4c7"/><path d="M275 252 L210 316" stroke="#f0b84e"/><path d="M210 92 L210 165" stroke="#70d7ff"/><path d="M114 348 L210 410" stroke="#8f6bff"/></g>
+          <g filter="url(#glow)"><polygon points="210,38 235,88 185,88" fill="#fff"/><rect x="174" y="103" width="72" height="72" rx="14" fill="#70d7ff"/><polygon points="210,194 252,238 210,282 168,238" fill="#f0b84e"/><rect x="176" y="298" width="68" height="68" rx="12" fill="#ff746b"/><polygon points="102,305 138,342 102,380 66,342" fill="#7ce2b2"/><polygon points="318,305 354,342 318,380 282,342" fill="#fff"/><rect x="167" y="396" width="86" height="72" rx="15" fill="#f0b84e"/><polygon points="280,178 320,256 240,256" fill="#72e4c7"/></g>
+        </svg>
+      </div>
+    </div>
+  </header>
+
+  <nav class="nav-strip" aria-label="Навигация по совместимости">
+    <div class="container nav-scroll">
+      <a href="#quick">Быстрый ответ</a><a href="#decision">Как решать</a><a href="#questions">Что уточнить</a><a href="#conditions">Условия</a><a href="#mechanics">Механика ДЧ</a><a href="#centers">Центры</a><a href="#electro">Электромагниты</a><a href="#channels">Каналы</a><a href="#redflags">Красные флаги</a><a href="#matrix">Матрица решения</a><a href="#summary">Итог</a>
+    </div>
+  </nav>
+
+  <main>
+    <section id="quick">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">01 · быстрый ответ</div><h2>Что Дарье важно понять сразу</h2></div><p class="section-note">Это не оценка “хороший руководитель / плохой руководитель”. Это карта того, как именно Дарье проверять рабочую связку с Артуром до принятия решения.</p></div>
+        <div class="grid-3">
+          <article class="card"><div class="icon">✓</div><h3>Связка может быть сильной</h3><p>Оба — Проекторы 6/2, поэтому в связке много темы признания, точного видения, зрелости, дистанции и качества. Дарья может чувствовать, что Артур “видит глубже” и способен дать ей точную роль.</p></article>
+          <article class="card"><div class="icon">!</div><h3>Но нельзя идти на одном впечатлении</h3><p>У Дарьи эмоциональный авторитет. Даже если приглашение от Артура кажется сильным, статусным или вдохновляющим, корректнее не говорить “да” сразу, а дать волне пройти и проверить условия.</p></article>
+          <article class="card"><div class="icon">→</div><h3>Главный вопрос</h3><p>Не “нравится ли мне Артур как руководитель”, а “есть ли у меня в этой компании признанная роль, понятные полномочия, здоровый темп и право влиять, а не только исполнять”.</p></article>
+        </div>
+        <div class="callout"><strong>Короткий вывод:</strong> Дарье можно рассматривать работу с Артуром, если он приглашает её в конкретную зону влияния: люди, коммуникация, атмосфера, направление, качество, смысл, обратная связь, улучшение процесса. Если роль будет построена как постоянная скорость, контроль и поток чужих поручений — риск выгорания высокий.</div>
+      </div>
+    </section>
+
+    <section id="decision">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">02 · авторитет</div><h2>Как Дарье принимать карьерное решение</h2></div><p class="section-note">В этой карте важнее не мгновенное впечатление, а корректность решения по телу и эмоциям.</p></div>
+        <div class="grid-2">
+          <article class="card feature-card darya"><div><div class="number"><span>Д</span> Дарья</div><h3>Эмоциональный авторитет: не решать сразу</h3><p>Дарье нельзя принимать решение только на подъёме после сильного разговора или на спаде после тревоги. Ей нужно время, чтобы эмоциональная волна прошла несколько состояний: интересно, сомнительно, хочется, страшно, спокойно.</p><ul><li>не говорить финальное “да” в день предложения;</li><li>переспать с решением минимум 1–3 ночи;</li><li>записать, что нравится и что тревожит;</li><li>вернуться к условиям, когда эмоции ровнее;</li><li>смотреть не на 100% уверенность, а на спокойную ясность.</li></ul></div><div class="quote">Вопрос Дарьи себе: “Когда первая эмоция ушла, я всё ещё хочу идти в эту роль?”</div></article>
+          <article class="card feature-card artur"><div><div class="number"><span>А</span> Артур</div><h3>Селезёночный авторитет руководителя: быстрые сигналы</h3><p>Артур может быстро чувствовать, подходит человек или нет, куда его поставить, где риск, где потенциал. Но Дарье важно не превращать его мгновенную ясность в давление на своё решение.</p><ul class="list-artur"><li>он может быстро увидеть её потенциал;</li><li>он может резко назвать слабое место;</li><li>он может предлагать точную роль быстро;</li><li>но Дарье всё равно нужно своё эмоциональное время.</li></ul></div><div class="quote">Фраза для Дарьи: “Мне интересно. Я хочу взять паузу и вернуться с ответом после того, как спокойно посмотрю условия”.</div></article>
+        </div>
+        <div class="callout warning"><strong>Правило решения:</strong> если Артур приглашает быстро, Дарья не обязана отвечать быстро. Корректное “да” для неё появляется не от давления, а после эмоциональной ясности и проверки условий.</div>
+      </div>
+    </section>
+
+    <section id="questions">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">03 · интервью</div><h2>Что уточнить у Артура / работодателя</h2></div><p class="section-note">Это вопросы не из страха, а из корректной проверки связки “руководитель — соискатель”.</p></div>
+        <div class="grid-3">
+          <article class="card"><div class="icon">📌</div><h3>Про признание роли</h3><ul><li>Какую конкретную зону вы хотите мне доверить?</li><li>Почему вы видите меня именно в этой роли?</li><li>Где будет цениться моё наблюдение и мнение?</li><li>Как вы поймёте, что я хорошо справляюсь?</li></ul></article>
+          <article class="card"><div class="icon">🧭</div><h3>Про полномочия</h3><ul><li>Что я могу решать самостоятельно?</li><li>Что нужно согласовывать с вами?</li><li>Где финальное решение остаётся за руководителем?</li><li>Какие изменения я могу предлагать и тестировать?</li></ul></article>
+          <article class="card"><div class="icon">💬</div><h3>Про обратную связь</h3><ul><li>Как часто вы даёте обратную связь?</li><li>В каком формате проходят разборы?</li><li>Что вы обычно делаете, если сотрудник ошибся?</li><li>Как вы отделяете разбор задачи от оценки личности?</li></ul></article>
+          <article class="card"><div class="icon">⏱</div><h3>Про темп</h3><ul><li>Насколько роль требует постоянной срочности?</li><li>Есть ли периоды для спокойной сборки и анализа?</li><li>Как часто меняются приоритеты?</li><li>Нужно ли быть на связи вне рабочего времени?</li></ul></article>
+          <article class="card"><div class="icon">⚡</div><h3>Про нагрузку Проектора</h3><ul><li>Будет ли ожидание “всегда быть в ресурсе”?</li><li>Есть ли команда/процессы, которые поддерживают исполнение?</li><li>Что считается нормальной рабочей нагрузкой?</li><li>Где можно сказать “это не моя зона”?</li></ul></article>
+          <article class="card"><div class="icon">◇</div><h3>Про эмоциональные решения</h3><ul><li>Можно ли брать паузу на важные решения?</li><li>Как в компании относятся к уточняющим вопросам?</li><li>Можно ли вернуться к договорённостям письменно?</li><li>Что будет, если мне нужно время на обдумывание?</li></ul></article>
+        </div>
+        <div class="callout"><strong>Сильная фраза для собеседования:</strong> “Мне важно понимать зону влияния и критерии результата. Я хорошо включаюсь, когда есть признанная роль, ясные границы и возможность улучшать процесс, а не просто выполнять поток задач”.</div>
+      </div>
+    </section>
+
+    <section id="conditions">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">04 · условия</div><h2>Какие условия проверить до выхода</h2></div><p class="section-note">Для Дарьи совместимость с руководителем становится рабочей только через конкретные условия. Без условий даже хорошая механика может не раскрыться.</p></div>
+        <div class="grid-2">
+          <article class="card"><h3>Зелёные условия</h3><ul><li>Артур ясно приглашает Дарью в конкретную роль, а не просто “посмотрим, чем займёшься”.</li><li>Есть право наблюдать, предлагать, влиять на качество и коммуникацию.</li><li>Обратная связь даётся один на один, через факты и конкретные настройки.</li><li>Есть пространство для самостоятельной сборки, а не постоянные проверки.</li><li>Полномочия и ответственность совпадают: если она отвечает — она может влиять.</li><li>Важные решения можно не принимать мгновенно.</li></ul></article>
+          <article class="card"><h3>Жёлтые условия</h3><ul class="list-gold"><li>Роль интересная, но пока неясно, кто принимает решения.</li><li>Артур видит потенциал, но описывает его слишком общими словами.</li><li>Много новых задач и “развития”, но нет критериев результата.</li><li>Обещают свободу, но неясно, как будет оцениваться работа.</li><li>Сильная личная симпатия к руководителю может мешать трезво смотреть на условия.</li></ul></article>
+          <article class="card"><h3>Красные условия</h3><ul class="list-red"><li>“Нам нужен человек на всё” без ясной роли.</li><li>Микроконтроль, публичная критика, резкие встряхивания.</li><li>Ответственность высокая, полномочий мало.</li><li>Срочность и постоянная доступность считаются нормой.</li><li>Дарью сравнивают с более энергичными исполнителями.</li><li>Её чувствительность к людям называют “лишними эмоциями”.</li></ul></article>
+          <article class="card"><h3>Что зафиксировать письменно</h3><ul><li>роль и зона ответственности;</li><li>критерии результата;</li><li>формат обратной связи;</li><li>частота созвонов/разборов;</li><li>границы самостоятельных решений;</li><li>условия изменения роли через 1–3 месяца;</li><li>правила связи вне рабочего времени.</li></ul></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="mechanics">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">05 · механика ДЧ</div><h2>Проектор + Проектор</h2></div><p class="section-note">На языке Дизайна Человека это не связка “двигатель и исполнитель”. Это две системы точного видения, которым нужно признание и корректное приглашение.</p></div>
+        <div class="grid-3">
+          <article class="card"><div class="number"><span>1</span> Стратегия</div><h3>Приглашение должно быть конкретным</h3><p>Для Дарьи приглашение не равно “у нас есть вакансия”. Корректнее, когда руководитель видит её конкретное качество: “нам нужен твой взгляд на людей / коммуникацию / качество / направление”.</p></article>
+          <article class="card"><div class="number"><span>2</span> Профиль 6/2</div><h3>Нужны дистанция и естественность</h3><p>Оба 6/2. Это даёт похожее чувство зрелости, качества и периодической потребности в уединении. Дарье важно не попасть в среду, где от неё требуют постоянной доступности и демонстрации.</p></article>
+          <article class="card"><div class="number"><span>3</span> Авторитеты</div><h3>Разные скорости решения</h3><p>Артур может видеть быстро, Дарья — созревать эмоционально. Это не конфликт, если Артур не торопит, а Дарья честно обозначает, что ей нужна пауза.</p></article>
+        </div>
+        <div class="callout warning"><strong>Проекторский тест для Дарьи:</strong> “Меня приглашают в мою силу — или просто хотят получить удобного исполнителя?”</div>
+      </div>
+    </section>
+
+    <section id="centers">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">06 · центры</div><h2>Что происходит в поле композита</h2></div><p class="section-note">По видимым данным в композите включается много центров, но верхняя умственная ясность остаётся открытой. Это важно для решения о работе.</p></div>
+        <div class="card">
+          <div class="split-card">
+            <div class="mini"><h4>Определяется много рабочего поля</h4><p>Вместе включаются темы голоса, направления, воли, эмоций, инстинкта, давления к результату и даже совместного сакрального канала через 2–14. Это может ощущаться как сильное притяжение и “здесь много энергии”.</p></div>
+            <div class="mini"><h4>Но оба остаются Проекторами</h4><p>Даже если композит даёт ощущение энергии, Дарье нельзя строить решение на мысли “с Артуром я точно всё вывезу”. Композит может включать ресурс, но не отменяет индивидуальную механику отдыха, признания и точного включения.</p></div>
+          </div>
+          <div class="callout"><strong>Открытая голова и аджна в композите:</strong> решение лучше не принимать через бесконечные умственные обсуждения. Нужны внешние факты: описание роли, KPI, график, задачи, полномочия, испытательный период, письменные договорённости.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="electro">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">07 · электромагниты</div><h2>Что между ними включается</h2></div><p class="section-note">Электромагниты показывают, где между Артуром и Дарьей появляется сильная совместная функция. Для соискателя это не “гарантия работы”, а список зон, которые нужно проверить в реальности.</p></div>
+        <div class="grid-2">
+          <article class="card feature-card gold"><div><div class="icon">2–14</div><h3>Направление и ресурсы</h3><p><strong>Дарья несёт 2-е ворота:</strong> внутреннее направление, куда естественно идти. <strong>Артур несёт 14-е:</strong> ресурс, потенциал, управление энергией и возможностями.</p><p>Вместе может появляться чувство: “здесь есть направление и ресурс для движения”.</p><ul class="list-gold"><li><strong>Дарье уточнить:</strong> какие ресурсы реально есть под роль?</li><li><strong>Проверить:</strong> не будет ли ожидания, что она станет постоянным двигателем.</li></ul></div><div class="callout">Суперспособность связки: выбрать правильное направление для ресурса. Риск: перепутать совместное включение с личной выносливостью.</div></article>
+          <article class="card feature-card blue"><div><div class="icon">16–48</div><h3>Навык и глубина</h3><p><strong>Артур несёт 48-е ворота:</strong> глубину, видение недостающего качества. <strong>Дарья несёт 16-е:</strong> проявление навыка, тренировка, форма, мастерство.</p><p>Вместе может родиться сильная связка наставничества и профессионального роста.</p><ul class="list-violet"><li><strong>Дарье уточнить:</strong> будет ли обучение, разборы и время на рост?</li><li><strong>Проверить:</strong> критика будет развивающей или обесценивающей?</li></ul></div><div class="callout">Суперспособность связки: превращать глубину в навык. Риск: Артур видит недочёт быстрее, чем Дарья готова спокойно его принять.</div></article>
+          <article class="card feature-card artur"><div><div class="icon">21–45</div><h3>Деньги, власть и управление</h3><p><strong>Артур несёт 21-е ворота:</strong> контроль ресурсов и условий. <strong>Дарья несёт 45-е:</strong> голос распределения, управления и “кто за что отвечает”.</p><p>В рабочей иерархии это мощная, но чувствительная тема.</p><ul class="list-artur"><li><strong>Дарье уточнить:</strong> где мои полномочия, а где финальное решение руководителя?</li><li><strong>Проверить:</strong> дают ли ответственность вместе с правом влиять?</li></ul></div><div class="callout warning">Суперспособность связки: договариваться о ресурсах и управлении. Риск: неясная власть, скрытая борьба за контроль.</div></article>
+          <article class="card feature-card darya"><div><div class="icon">26–44</div><h3>Упаковка, память и влияние</h3><p><strong>Артур несёт 44-е ворота:</strong> память паттернов, нюх на повторяющиеся сценарии и риски. <strong>Дарья несёт 26-е:</strong> способность упаковывать, убеждать, продвигать ценность.</p><p>Хорошо для презентаций, переговоров, коммуникации и объяснения продукта.</p><ul><li><strong>Дарье уточнить:</strong> что именно нужно доносить людям?</li><li><strong>Проверить:</strong> этична ли подача и не надо ли “продавать красиво любой ценой”.</li></ul></div><div class="callout">Суперспособность связки: видеть паттерн и красиво донести ценность. Риск: влияние без фактической точности.</div></article>
+          <article class="card feature-card blue"><div><div class="icon">35–36</div><h3>Новый опыт и эмоциональные циклы</h3><p><strong>Артур несёт 36-е ворота:</strong> кризис/неопытность/вход в новый опыт. <strong>Дарья несёт 35-е:</strong> голос перемен и завершения опыта.</p><p>Связка может оживать на новых проектах, экспериментах и переходных этапах.</p><ul class="list-violet"><li><strong>Дарье уточнить:</strong> как в компании запускаются новые задачи?</li><li><strong>Проверить:</strong> это здоровые эксперименты или постоянный эмоциональный хаос?</li></ul></div><div class="callout">Суперспособность связки: проводить опыт от идеи до вывода. Риск: нестабильность, если всё время “новый пожар”.</div></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="channels">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">08 · каналы</div><h2>Доминанты и компромиссы в решении о работе</h2></div><p class="section-note">Здесь видно, что Дарья приносит своё направление и чувствительность к людям, а Артур — смысл, вызов и настройку. Это хорошо, если роли не смешиваются.</p></div>
+        <div class="grid-2">
+          <article class="card"><h3>Доминанты Артура: 28–38 и 25–51</h3><p><strong>28–38</strong> может давать Артуру способность проверять смысл: зачем это, ради чего бороться, стоит ли задача энергии. <strong>25–51</strong> даёт тему вызова, инициации, резкого запуска нового уровня.</p><div class="callout warning">Для Дарьи: если Артур “проверяет на смысл” или даёт вызов, это может быть полезно, но не должно превращаться в постоянный стресс-тест.</div></article>
+          <article class="card"><h3>Доминанты Дарьи: 7–31, 19–49, 41–30</h3><p><strong>7–31</strong> — голос направления. <strong>19–49</strong> — чувствительность к потребностям, принципам, лояльности. <strong>41–30</strong> — желание нового опыта и эмоциональное проживание сценария.</p><div class="callout">Для Дарьи: важно не прятать свой голос направления и потребности, но переводить их в рабочие предложения, а не в молчаливое ожидание.</div></article>
+          <article class="card"><h3>Компромисс 19–49</h3><p>Канал принадлежит Дарье, у Артура есть 19-е ворота. Артур может чувствовать потребности, но Дарья глубже несёт эмоциональную тему принципов, принадлежности и “как правильно относиться к людям”.</p><p><strong>Что проверить:</strong> будет ли Артур слышать её наблюдения о людях — или считать это лишней чувствительностью.</p></article>
+          <article class="card"><h3>Компромисс 25–51</h3><p>Канал принадлежит Артуру, у Дарьи есть 25-е ворота. Дарья может чувствовать чистоту намерения, а Артур несёт полный механизм вызова и инициации.</p><p><strong>Что проверить:</strong> его стиль вызова помогает ей расти или заставляет защищаться.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="redflags">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">09 · самозащита соискателя</div><h2>Красные флаги для Дарьи</h2></div><p class="section-note">Это не повод сразу отказываться. Это пункты, которые требуют уточнения до согласия.</p></div>
+        <div class="grid-4">
+          <article class="card"><span class="tag bad">красный флаг</span><h3>“Ты сама разберёшься”</h3><p>Для Проектора без ясного приглашения и роли это может стать ловушкой: ответственность есть, рамки нет.</p></article>
+          <article class="card"><span class="tag bad">красный флаг</span><h3>Сильное давление авторитетом</h3><p>Если Артур торопит с решением, Дарье важно не предавать эмоциональный авторитет ради быстрого “да”.</p></article>
+          <article class="card"><span class="tag bad">красный флаг</span><h3>Свобода без критериев</h3><p>“Делай как считаешь нужным” звучит приятно, но без критериев может стать хаосом и тревогой за результат.</p></article>
+          <article class="card"><span class="tag bad">красный флаг</span><h3>Много энергии в начале</h3><p>Электромагниты могут дать сильное притяжение. Но Дарье нужно проверить, что будет после первого вдохновения.</p></article>
+        </div>
+        <div class="callout rednote"><strong>Главный анти-сценарий:</strong> Дарья вдохновляется сильным приглашением, берёт роль быстро, старается доказать ценность, получает много ответственности без полномочий, затем закрывается, устает и начинает сомневаться в себе.</div>
+      </div>
+    </section>
+
+    <section id="matrix">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">10 · матрица решения</div><h2>Когда говорить “да”, “подумать” или “нет”</h2></div><p class="section-note">Матрица помогает Дарье не решать только по симпатии к руководителю или силе композита.</p></div>
+        <div class="table-wrap">
+          <table class="decision-table">
+            <tr><th>Ситуация</th><th>Что это значит по ДЧ</th><th>Решение для Дарьи</th><th>Что сказать</th></tr>
+            <tr><td><strong>Есть конкретное приглашение в её силу</strong></td><td>Стратегия Проектора соблюдена: её видят и приглашают в понятную роль.</td><td><span class="tag good">можно рассматривать</span></td><td>“Мне интересно. Давайте уточним полномочия, критерии и формат обратной связи”.</td></tr>
+            <tr><td><strong>Руководитель сильный, но роль мутная</strong></td><td>Есть притяжение по связке, но нет ясного контейнера для энергии.</td><td><span class="tag warn">пауза и вопросы</span></td><td>“Мне важно понять, какую зону вы хотите мне доверить и как будет измеряться результат”.</td></tr>
+            <tr><td><strong>Много обещаний развития, но нет границ</strong></td><td>Электромагниты могут включить азарт, но открытые верхние центры требуют фактов.</td><td><span class="tag warn">только после фиксации условий</span></td><td>“Давайте зафиксируем, что входит в роль, а что нет”.</td></tr>
+            <tr><td><strong>Нужно быстро соглашаться</strong></td><td>Для эмоционального авторитета Дарьи это некорректный режим решения.</td><td><span class="tag bad">не давать финальный ответ сразу</span></td><td>“Я не принимаю важные решения мгновенно. Вернусь с ответом после паузы”.</td></tr>
+            <tr><td><strong>Роль — поток задач без права влиять</strong></td><td>Проекторская механика Дарьи будет использоваться как исполнительская, без признания.</td><td><span class="tag bad">скорее не подходит</span></td><td>“Мне важна роль, где есть зона влияния и ответственность, а не только выполнение”.</td></tr>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="protocol">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">11 · пошагово</div><h2>Протокол Дарьи перед принятием предложения</h2></div><p class="section-note">Можно использовать как чек-лист в кабинете соискателя.</p></div>
+        <div class="card">
+          <div class="protocol">
+            <div class="step">Сначала зафиксировать приглашение: какая роль, почему именно она, какую её силу увидели.</div>
+            <div class="step">Взять паузу на эмоциональную волну: не соглашаться на подъёме и не отказываться на тревоге.</div>
+            <div class="step">Письменно уточнить полномочия, критерии результата, формат обратной связи и границы связи.</div>
+            <div class="step">Проверить красные флаги: давление, мутная роль, ответственность без полномочий, постоянная срочность.</div>
+            <div class="step">Сравнить ощущение после паузы: есть спокойная ясность или только азарт, страх, симпатия и желание доказать?</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="summary">
+      <div class="container">
+        <div class="final">
+          <div class="final-grid">
+            <div>
+              <div class="kicker">12 · итог для соискателя</div>
+              <h2>Главный вывод</h2>
+              <ul>
+                <li>Дарье можно рассматривать работу с Артуром, если он приглашает её в признанную проекторскую роль, а не просто в поток исполнительских задач.</li>
+                <li>Самое важное — проверить не “совместимость вообще”, а конкретные условия: роль, полномочия, темп, обратную связь, границы и критерии результата.</li>
+                <li>По ДЧ у связки сильный потенциал через электромагниты: направление и ресурсы, навык и глубина, управление, упаковка ценности, новый опыт.</li>
+                <li>Главный риск — сильное первоначальное включение, из-за которого Дарья может согласиться быстрее, чем её эмоциональный авторитет даст ясность.</li>
+                <li>Лучшее решение для Дарьи — идти не на обещание, не на харизму руководителя и не на “красивую перспективу”, а на ясную роль, где её действительно видят.</li>
+              </ul>
+              <div class="final-line">Формула решения: “Меня пригласили в мою силу? Условия понятны? Полномочия соответствуют ответственности? Я могу взять паузу? После эмоциональной волны я всё ещё чувствую спокойное ‘да’?” Если да — связку можно тестировать. Если нет — сначала уточнять, а не соглашаться.</div>
+            </div>
+            <div class="rings" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="footer"><div class="container chips"><span class="chip artur">Артур · руководитель компании</span><span class="chip darya">Дарья · соискатель</span><span class="chip violet">ДЧ-язык</span><span class="chip gold">карьерное решение</span><span class="chip darya">Проектор + Проектор</span><a class="chip" href="#top">↑ Наверх</a></div></footer>
+</div>
+</body>
+</html>

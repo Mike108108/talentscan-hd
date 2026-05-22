@@ -1,0 +1,45 @@
+# Actual Files Manifest — HR / Employer Agent v1.2
+
+## Package
+
+`TalentScan_HR_Employer_Agent_v1_2.zip`
+
+## Active Source of Truth
+
+- `01_SOURCE_OF_TRUTH/01_HIERARCHY.md`
+- `01_SOURCE_OF_TRUTH/02_ACTIVE_ETALONS.md`
+- `01_SOURCE_OF_TRUTH/03_ACTIVE_CABINET_AND_PERSON_MAP_v1_2.md`
+
+## Active router
+
+- `03_ROUTER/00_ACTIVE_HR_EMPLOYER_ROUTER_v1_2.md`
+
+## Active QA
+
+- `09_QA_PROTOCOL/00_ACTIVE_HR_EMPLOYER_QA_PROTOCOL_v1_2.md`
+
+## Active card etalons
+
+- `11_HTML_EXAMPLES/ACTIVE_HR_CLIENT_ETALONS_v1_2/ETALON_00_HR_PERSON_TALENT_MAP_DARYA_v1_1.html`
+- `11_HTML_EXAMPLES/ACTIVE_HR_CLIENT_ETALONS_v1_2/ETALON_01_HR_CANDIDATE_FOR_ROLE_MARINA_ONESUMMER_SALES_v1_2_1.html`
+- `11_HTML_EXAMPLES/ACTIVE_HR_CLIENT_ETALONS_v1_2/ETALON_02_HR_CANDIDATE_COMPARISON_MARINA_ZARINA_ONESUMMER_SALES_v1_1.html`
+- `11_HTML_EXAMPLES/ACTIVE_HR_CLIENT_ETALONS_v1_2/ETALON_03_HR_TEAMSCAN_ARTUR_MARINA_ONESUMMER_SALES_v1_0.html`
+
+## Active HR cabinet
+
+- `14_HR_EMPLOYER_CABINET/ACTIVE_HTML/TalentScan_HR_Employer_Cabinet_v1_2.html`
+- `14_HR_EMPLOYER_CABINET/00_CABINET_ARCHITECTURE_v1_2.md`
+- `14_HR_EMPLOYER_CABINET/01_CABINET_UX_RULES_v1_2.md`
+- `14_HR_EMPLOYER_CABINET/02_CABINET_DATA_MODEL_v1_2.md`
+- `14_HR_EMPLOYER_CABINET/03_EMPLOYER_FUNCTIONS_OPTIONS_TABLE.md`
+
+## Active card types
+
+- Candidate for Role
+- Candidate Comparison
+- TeamScan HR
+- Person Talent Map
+
+## Superseded / Reference Only
+
+Older HTML examples and old cabinet references remain in the package for context, but the v1.2 source-of-truth files above have priority.

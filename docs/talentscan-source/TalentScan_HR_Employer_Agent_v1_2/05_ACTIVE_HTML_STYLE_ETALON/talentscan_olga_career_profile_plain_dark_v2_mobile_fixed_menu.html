@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TalentScan — Ольга — карта талантов</title>
+<style>
+:root{
+  --bg:#070b1f;
+  --bg2:#10164a;
+  --text:#f7f9ff;
+  --soft:#e1e8ff;
+  --muted:#b6c1d9;
+  --line:rgba(255,255,255,.16);
+  --card:rgba(255,255,255,.078);
+  --card2:rgba(255,255,255,.115);
+  --coral:#ff746b;
+  --coral2:#ffa08a;
+  --gold:#f0b84e;
+  --gold2:#ffe096;
+  --violet:#8f6bff;
+  --violet2:#ccbaff;
+  --cyan:#70d7ff;
+  --green:#72e4c7;
+  --green2:#a9f8df;
+  --red:#ff6469;
+  --shadow:0 24px 80px rgba(0,0,0,.35);
+  --radius-xl:34px;
+  --radius-lg:24px;
+  --radius-md:18px;
+  --max:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:calc(var(--fixed-offset,74px) + 14px)}
+body{
+  margin:0;
+  min-height:100vh;
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+  background:
+    radial-gradient(circle at 13% 7%, rgba(255,116,107,.23), transparent 28%),
+    radial-gradient(circle at 84% 5%, rgba(112,215,255,.28), transparent 34%),
+    radial-gradient(circle at 78% 45%, rgba(114,228,199,.13), transparent 28%),
+    linear-gradient(145deg, #050815 0%, #071425 42%, #12143d 100%);
+  overflow-x:hidden;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background-image:
+    radial-gradient(circle, rgba(255,255,255,.16) 0 1px, transparent 1px),
+    radial-gradient(circle, rgba(112,215,255,.12) 0 1px, transparent 1px);
+  background-size:64px 64px,110px 110px;
+  background-position:12px 18px,50px 80px;
+  mask-image:linear-gradient(to bottom, rgba(0,0,0,.82), transparent 92%);
+}
+a{color:inherit;text-decoration:none}
+.page{position:relative;z-index:1}
+.container{width:min(var(--max), calc(100% - 40px));margin:0 auto}
+.hero{position:relative;padding:52px 0 34px;overflow:hidden}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(310px,.95fr);gap:34px;align-items:center}
+.eyebrow{display:inline-flex;gap:10px;align-items:center;padding:9px 14px;border:1px solid rgba(255,255,255,.18);border-radius:999px;color:var(--soft);background:rgba(255,255,255,.07);backdrop-filter:blur(18px);font-size:14px;letter-spacing:.02em}
+.eyebrow .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 18px var(--green)}
+h1{margin:22px 0 0;font-size:clamp(44px,6.8vw,82px);line-height:.95;letter-spacing:-.055em}
+.names{margin-top:10px;font-size:clamp(38px,6.3vw,78px);line-height:1;font-weight:850;letter-spacing:-.052em;color:var(--green);text-shadow:0 0 36px rgba(112,228,199,.22)}
+.subtitle{margin:18px 0 0;color:var(--muted);font-size:clamp(17px,2vw,22px);max-width:780px}
+.identity-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:24px}
+.identity-card{padding:17px 18px;border:1px solid var(--line);border-radius:var(--radius-md);background:rgba(255,255,255,.075);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.identity-card b{display:block;font-size:20px;margin-bottom:6px;color:var(--gold2)}
+.identity-card span{color:var(--muted);line-height:1.42;font-size:14px}
+.formula-card{margin-top:22px;position:relative;padding:24px 26px;border-radius:var(--radius-lg);border:1px solid rgba(255,255,255,.18);background:linear-gradient(135deg,rgba(255,116,107,.18),rgba(112,215,255,.13) 52%,rgba(112,228,199,.13)),rgba(255,255,255,.07);box-shadow:0 0 0 1px rgba(255,255,255,.04),0 24px 70px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.12);overflow:hidden}
+.formula-card::after{content:"";position:absolute;width:220px;height:220px;right:-80px;bottom:-110px;background:radial-gradient(circle,rgba(112,228,199,.34),transparent 65%);pointer-events:none}
+.formula-card p{position:relative;z-index:1;margin:0;font-size:clamp(23px,2.7vw,33px);line-height:1.25;font-weight:750;letter-spacing:-.025em}.formula-card em{color:var(--green2);font-style:normal}.formula-card strong{color:var(--coral2)}
+.hero-visual{position:relative;min-height:520px;display:grid;place-items:center}.halo{position:absolute;width:min(520px,90vw);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.12) 0 2px,transparent 3px),radial-gradient(circle at 30% 20%,rgba(255,116,107,.28),transparent 30%),radial-gradient(circle at 70% 70%,rgba(112,228,199,.24),transparent 28%),radial-gradient(circle,rgba(112,215,255,.18),transparent 62%);border:1px solid rgba(255,255,255,.11);box-shadow:0 0 100px rgba(112,215,255,.2);animation:pulse 7s ease-in-out infinite;pointer-events:none}@keyframes pulse{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.045);opacity:1}}
+.visual{position:relative;z-index:2;width:min(440px,88vw);filter:drop-shadow(0 30px 60px rgba(0,0,0,.42))}
+.nav-strip{position:sticky;top:0;z-index:1200;padding:12px 0;background:linear-gradient(to bottom,rgba(5,8,21,.94),rgba(5,8,21,.74));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08);box-shadow:0 14px 34px rgba(0,0,0,.18);transform:translate3d(0,0,0)}
+.nav-scroll{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}.nav-scroll::-webkit-scrollbar{display:none}.nav-scroll a,.chip{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:11px 14px;border-radius:999px;color:var(--soft);border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.075);font-size:14px;white-space:nowrap;touch-action:manipulation;-webkit-tap-highlight-color:transparent}.nav-scroll a:hover{border-color:rgba(112,228,199,.55);color:white}
+section{padding:44px 0;scroll-margin-top:calc(var(--fixed-offset,74px) + 22px)}.section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:20px}.kicker{color:var(--green);font-size:14px;text-transform:uppercase;letter-spacing:.12em;font-weight:700}h2{margin:6px 0 0;font-size:clamp(30px,4vw,52px);line-height:1.04;letter-spacing:-.045em}.section-note{max-width:560px;color:var(--muted);line-height:1.55}.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.grid-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.card{position:relative;border-radius:var(--radius-lg);padding:24px;background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.14);box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.08);overflow:hidden}.card::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 12% 5%,rgba(255,255,255,.13),transparent 24%);opacity:.65;pointer-events:none}.card>*{position:relative;z-index:1}.card h3{margin:0 0 14px;font-size:23px;line-height:1.16;letter-spacing:-.025em}.card p{color:var(--soft);line-height:1.62;margin:0 0 12px}.card p:last-child{margin-bottom:0}.muted{color:var(--muted)}
+ul,ol{margin:0;padding-left:18px;color:var(--soft);line-height:1.62}li{margin:7px 0}li::marker{color:var(--green)}.list-coral li::marker{color:var(--coral)}.list-gold li::marker{color:var(--gold)}.list-violet li::marker{color:var(--violet2)}
+.icon{display:inline-grid;place-items:center;width:46px;height:46px;border-radius:16px;margin-bottom:16px;background:linear-gradient(135deg,rgba(255,116,107,.26),rgba(112,228,199,.2));border:1px solid rgba(255,255,255,.18);font-size:23px}.icon.gold{background:linear-gradient(135deg,rgba(240,184,78,.22),rgba(112,228,199,.18))}.icon.violet{background:linear-gradient(135deg,rgba(143,107,255,.22),rgba(112,215,255,.14))}.icon.red{background:linear-gradient(135deg,rgba(255,100,105,.25),rgba(240,184,78,.12))}
+.callout{border-radius:var(--radius-md);padding:18px 20px;margin-top:18px;background:linear-gradient(135deg,rgba(112,228,199,.14),rgba(255,116,107,.1));border:1px solid rgba(112,228,199,.28);color:#eafff8;line-height:1.55}.callout.gold{background:linear-gradient(135deg,rgba(240,184,78,.15),rgba(255,116,107,.1));border-color:rgba(240,184,78,.28);color:#fff2cf}.callout.red{border-color:rgba(255,100,105,.34);background:linear-gradient(135deg,rgba(255,100,105,.15),rgba(255,116,107,.08));color:#ffd7da}
+.metric-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:18px}.metric{padding:16px;border-radius:18px;background:rgba(0,0,0,.17);border:1px solid rgba(255,255,255,.12)}.metric b{display:block;font-size:24px;color:var(--green2);margin-bottom:4px}.metric span{color:var(--muted);font-size:13px;line-height:1.35}.progress{height:8px;border-radius:999px;background:rgba(255,255,255,.09);overflow:hidden;margin-top:10px}.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--green));border-radius:999px}
+.table-wrap{overflow:auto;border:1px solid rgba(255,255,255,.14);border-radius:20px;background:rgba(255,255,255,.06);box-shadow:var(--shadow)}table{border-collapse:collapse;width:100%;min-width:780px}th,td{border-right:1px solid rgba(255,255,255,.12);border-bottom:1px solid rgba(255,255,255,.12);padding:13px;text-align:left;vertical-align:top;color:var(--soft);font-size:14px;line-height:1.45}th{background:rgba(112,228,199,.18);color:#fff;text-transform:uppercase;font-size:12px;letter-spacing:.05em}td strong{color:var(--gold2)}td:last-child,th:last-child{border-right:0}tr:last-child td{border-bottom:0}
+details{margin-top:14px;border-radius:18px;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.14);overflow:hidden}summary{cursor:pointer;list-style:none;padding:13px 44px 13px 16px;font-weight:850;color:var(--green2);position:relative}summary::-webkit-details-marker{display:none}summary::after{content:"+";position:absolute;right:17px;top:50%;transform:translateY(-50%);font-size:22px;color:var(--gold2)}details[open] summary::after{content:"−"}.details-body{padding:0 16px 16px;border-top:1px solid rgba(255,255,255,.1)}.details-body p,.details-body li{font-size:14px;color:var(--soft)}
+.final{padding:38px;border-radius:var(--radius-xl);background:radial-gradient(circle at 88% 18%,rgba(255,116,107,.2),transparent 28%),radial-gradient(circle at 18% 78%,rgba(112,228,199,.18),transparent 26%),linear-gradient(135deg,rgba(255,255,255,.11),rgba(255,255,255,.055));border:1px solid rgba(255,255,255,.18);box-shadow:var(--shadow)}.final h2{margin-bottom:18px}.final-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr);gap:24px;align-items:center}.final-line{margin-top:22px;padding:20px 22px;border-radius:var(--radius-md);background:linear-gradient(135deg,rgba(112,228,199,.18),rgba(255,116,107,.14));border:1px solid rgba(112,228,199,.32);color:#eafff8;font-weight:750;line-height:1.55}.rings{height:220px;border-radius:var(--radius-lg);background:radial-gradient(ellipse at 40% 48%,transparent 0 23%,rgba(255,116,107,.9) 24% 27%,transparent 28%),radial-gradient(ellipse at 60% 52%,transparent 0 23%,rgba(112,228,199,.9) 24% 27%,transparent 28%),radial-gradient(circle at 50% 50%,rgba(112,215,255,.2),transparent 60%);filter:drop-shadow(0 0 22px rgba(112,228,199,.38));border:1px solid rgba(255,255,255,.12)}.footer{padding:26px 0 56px}.chips{display:flex;flex-wrap:wrap;gap:10px}.chip.gold{border-color:rgba(240,184,78,.34);color:#ffe3a2}.chip.green{border-color:rgba(112,228,199,.34);color:#d9fff3}.chip.coral{border-color:rgba(255,116,107,.34);color:#ffd6d1}.chip.violet{border-color:rgba(143,107,255,.36);color:#e5dbff}
+
+/* ===== Mobile fixed menu: adapted from the proven fixed-header pattern ===== */
+.mobile-nav-toggle{position:fixed;opacity:0;pointer-events:none;width:1px;height:1px}
+.mobile-topbar,.mobile-fixed-backdrop,.mobile-fixed-panel{display:none}
+.nav-scroll a:focus-visible,.chip:focus-visible,.back-top-button:focus-visible,.mobile-menu-link:focus-visible,.mobile-fixed-close:focus-visible,.mobile-inline-burger:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+.back-top-section{padding:10px 0 6px}.back-top-button{display:flex;align-items:center;justify-content:center;width:100%;min-height:58px;border-radius:999px;border:1px solid rgba(112,228,199,.35);background:linear-gradient(135deg,rgba(112,228,199,.18),rgba(255,116,107,.14));box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.1);color:#eafff8;font-weight:850;letter-spacing:-.01em;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.back-top-button:hover{border-color:rgba(112,228,199,.58);color:#fff}
+@media(max-width:900px){
+  .mobile-topbar{display:block;position:fixed;top:0;left:0;right:0;width:100%;z-index:2147483600;padding:max(10px,env(safe-area-inset-top)) 0 10px;background:linear-gradient(to bottom,rgba(5,8,21,.98),rgba(5,8,21,.91));backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.12);transform:translate3d(0,0,0);will-change:transform}
+  .mobile-topbar .container{width:min(100% - 24px,var(--max))}
+  .mobile-topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px}
+  .mobile-brand{display:flex;align-items:center;gap:11px;min-width:0;flex:1 1 auto}
+  .mobile-logo{width:46px;height:46px;border-radius:16px;background:linear-gradient(135deg,var(--coral),var(--green));box-shadow:0 0 34px rgba(112,228,199,.22);flex:0 0 auto}
+  .mobile-brand b{display:block;font-size:20px;line-height:1.05;letter-spacing:-.025em;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mobile-brand span{display:block;color:var(--muted);font-size:12px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mobile-inline-burger{display:inline-flex;flex:0 0 auto;width:52px;height:52px;border-radius:18px;border:1px solid rgba(255,255,255,.25);background:linear-gradient(135deg,rgba(255,116,107,.92),rgba(112,228,199,.72));box-shadow:0 14px 38px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.24);align-items:center;justify-content:center;flex-direction:column;gap:5px;cursor:pointer;pointer-events:auto;touch-action:manipulation;user-select:none;-webkit-tap-highlight-color:transparent;position:relative;z-index:2147483602}
+  .mobile-inline-burger span{width:22px;height:2px;border-radius:999px;background:#fff;display:block;transition:transform .18s ease,opacity .18s ease}
+  #mobile-nav-toggle:checked ~ .mobile-topbar .mobile-inline-burger span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+  #mobile-nav-toggle:checked ~ .mobile-topbar .mobile-inline-burger span:nth-child(2){opacity:0}
+  #mobile-nav-toggle:checked ~ .mobile-topbar .mobile-inline-burger span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+  .mobile-fixed-backdrop{display:block;position:fixed;inset:0;z-index:2147483598;background:rgba(2,4,14,.62);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .18s ease}
+  #mobile-nav-toggle:checked ~ .mobile-fixed-backdrop{opacity:1;pointer-events:auto}
+  .mobile-fixed-panel{display:block;position:fixed;top:calc(max(10px,env(safe-area-inset-top)) + 68px);left:12px;right:12px;z-index:2147483599;max-height:calc(100dvh - 92px - env(safe-area-inset-bottom));overflow:auto;-webkit-overflow-scrolling:touch;border-radius:26px;padding:16px;background:radial-gradient(circle at 12% 8%,rgba(255,116,107,.22),transparent 28%),radial-gradient(circle at 84% 18%,rgba(112,228,199,.18),transparent 32%),rgba(8,12,38,.97);border:1px solid rgba(255,255,255,.18);box-shadow:0 28px 90px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.1);transform:translateY(-12px) scale(.98);opacity:0;pointer-events:none;transition:transform .18s ease,opacity .18s ease}
+  #mobile-nav-toggle:checked ~ .mobile-fixed-panel{transform:translateY(0) scale(1);opacity:1;pointer-events:auto}
+  .mobile-fixed-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:13px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:13px}
+  .mobile-fixed-panel-head b{display:block;font-size:20px;letter-spacing:-.03em}.mobile-fixed-panel-head span{display:block;color:var(--muted);font-size:13px;margin-top:4px;line-height:1.35}
+  .mobile-fixed-close{flex:0 0 auto;width:42px;height:42px;border-radius:15px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#fff;font-size:30px;line-height:1;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  .mobile-context-grid{display:grid;gap:10px}.mobile-menu-link{display:block;width:100%;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.075);color:var(--soft);border-radius:20px;padding:14px 15px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}.mobile-menu-link:hover{border-color:rgba(112,228,199,.5);color:#fff}.mobile-menu-link b{display:block;color:#fff;font-size:16px;margin-bottom:4px}.mobile-menu-link span{display:block;color:var(--muted);font-size:13px;line-height:1.35}
+  .mobile-menu-tip{margin-top:13px;padding:13px 14px;border-radius:18px;background:rgba(112,228,199,.1);border:1px solid rgba(112,228,199,.24);color:#dfffee;font-size:13px;line-height:1.45}
+  .page{padding-top:calc(126px + env(safe-area-inset-top))}
+  .nav-strip{position:fixed!important;top:calc(72px + env(safe-area-inset-top))!important;left:0!important;right:0!important;width:100%!important;z-index:2147481000!important;padding:10px 0!important;background:linear-gradient(to bottom,rgba(5,8,21,.96),rgba(5,8,21,.84))!important;backdrop-filter:blur(18px)!important;-webkit-backdrop-filter:blur(18px)!important;border-top:0!important;transform:translate3d(0,0,0)!important;will-change:transform}
+  .nav-strip .container{width:min(100% - 24px,var(--max))}
+  .nav-scroll{gap:8px;padding-bottom:3px}.nav-scroll a,.chip{min-height:44px;padding:10px 13px;font-size:13px}
+  section{scroll-margin-top:calc(150px + env(safe-area-inset-top))!important}.hero{padding-top:34px}.hero-visual{min-height:300px}.visual{width:min(310px,88vw)}
+}
+@media(max-width:420px){
+  .page{padding-top:calc(120px + env(safe-area-inset-top))}.mobile-inline-burger{width:48px;height:48px;border-radius:16px}.mobile-logo{width:44px;height:44px}.mobile-brand b{font-size:19px}.mobile-brand span{display:none}.nav-strip{top:calc(68px + env(safe-area-inset-top))!important}.mobile-fixed-panel{top:calc(max(10px,env(safe-area-inset-top)) + 64px)!important}section{scroll-margin-top:calc(142px + env(safe-area-inset-top))!important}
+}
+
+@media(max-width:960px){.hero-grid,.final-grid{grid-template-columns:1fr}.hero-visual{min-height:360px}.grid-3,.grid-4,.grid-2{grid-template-columns:1fr}.identity-row,.metric-row{grid-template-columns:1fr}.section-head{display:block}.section-note{margin-top:12px}table{min-width:680px}}
+@media(max-width:560px){.container{width:min(100% - 24px,var(--max))}.hero{padding-top:34px}.card{padding:20px}.formula-card{padding:20px}.final{padding:24px}section{padding:34px 0}.hero-visual{min-height:300px}.visual{width:min(310px,88vw)}}
+@media print{body{background:#050815}.nav-strip,.footer{display:none}.card,.final,details{break-inside:avoid}}
+</style>
+</head>
+<body>
+<input class="mobile-nav-toggle" type="checkbox" id="mobile-nav-toggle" aria-hidden="true">
+<header class="mobile-topbar" aria-label="Мобильная верхняя панель">
+  <div class="container mobile-topbar-inner">
+    <div class="mobile-brand"><div class="mobile-logo" aria-hidden="true"></div><div><b>TalentScan · Ольга</b><span>карта талантов · меню всегда под рукой</span></div></div>
+    <label class="mobile-inline-burger" for="mobile-nav-toggle" aria-label="Открыть меню" role="button" tabindex="0"><span></span><span></span><span></span></label>
+  </div>
+</header>
+<label class="mobile-fixed-backdrop" for="mobile-nav-toggle" aria-label="Закрыть меню"></label>
+<nav class="mobile-fixed-panel" aria-label="Мобильное меню разделов">
+  <div class="mobile-fixed-panel-head">
+    <div><b>Меню карты</b><span>можно открыть в любом месте страницы</span></div>
+    <label class="mobile-fixed-close" for="mobile-nav-toggle" aria-label="Закрыть меню" role="button" tabindex="0">×</label>
+  </div>
+  <div class="mobile-context-grid">
+    <a class="mobile-menu-link" href="#summary"><b>Вывод</b><span>Куда лучше смотреть в профессии</span></a>
+    <a class="mobile-menu-link" href="#metrics"><b>Показатели</b><span>Полнота данных и уверенность оценки</span></a>
+    <a class="mobile-menu-link" href="#talents"><b>Таланты</b><span>Рабочий перевод сильных сторон</span></a>
+    <a class="mobile-menu-link" href="#strengths"><b>Сильные стороны</b><span>На что опираться в роли</span></a>
+    <a class="mobile-menu-link" href="#risks"><b>Риски</b><span>Где может падать эффективность</span></a>
+    <a class="mobile-menu-link" href="#directions"><b>Направления</b><span>Профессиональные гипотезы</span></a>
+    <a class="mobile-menu-link" href="#roles"><b>Должности</b><span>На какие позиции смотреть</span></a>
+    <a class="mobile-menu-link" href="#conditions"><b>Среда</b><span>Подходящие и неподходящие условия</span></a>
+    <a class="mobile-menu-link" href="#tests"><b>Проверка</b><span>Как проверить через задачи</span></a>
+    <a class="mobile-menu-link" href="#final"><b>Рекомендация</b><span>Итоговый карьерный вектор</span></a>
+    <a class="mobile-menu-link" href="#top"><b>Наверх</b><span>вернуться к началу карточки</span></a>
+  </div>
+  <div class="mobile-menu-tip">Верхняя панель и горизонтальное меню закреплены поверх страницы. Ссылки работают на телефоне и на ПК.</div>
+</nav>
+<div class="page">
+  <header class="hero" id="top">
+    <div class="container hero-grid">
+      <div>
+        <div class="eyebrow"><span class="dot"></span> TalentScan · профориентационная карта</div>
+        <h1>Карта талантов</h1>
+        <div class="names">Ольга</div>
+        <p class="subtitle">Предварительный разбор по загруженной карте: какие рабочие роли могут подойти, где сильные стороны, где риски и какие направления стоит проверить через реальные задачи.</p>
+        <div class="identity-row">
+          <div class="identity-card"><b>Лучший рабочий формат</b><span>Практичная роль на стыке людей, процессов, качества, развития и результата.</span></div>
+          <div class="identity-card"><b>Ключевой талант</b><span>Видеть слабые места, задавать правильные вопросы, наводить порядок и запускать рост.</span></div>
+          <div class="identity-card"><b>Главный риск</b><span>Попасть в хаотичную среду, где много давления, мало правил и всё держится на срочности.</span></div>
+        </div>
+        <div class="formula-card"><p>Ольге больше всего подходят роли, где нужно <strong>собирать систему, людей и результат</strong>: видеть, что не работает, задавать направление, улучшать процессы и помогать команде или клиенту пройти путь <em>от хаоса к ясному следующему шагу</em>.</p></div>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="halo"></div>
+        <svg class="visual" viewBox="0 0 460 420" role="img" aria-label="Схема карты талантов">
+          <defs>
+            <linearGradient id="p1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff746b"/><stop offset="1" stop-color="#72e4c7"/></linearGradient>
+            <linearGradient id="p2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#70d7ff"/><stop offset="1" stop-color="#f0b84e"/></linearGradient>
+            <filter id="glow"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <rect x="48" y="42" width="364" height="314" rx="38" fill="rgba(255,255,255,.055)" stroke="rgba(255,255,255,.22)" stroke-width="2"/>
+          <circle cx="230" cy="128" r="64" fill="rgba(112,228,199,.16)" stroke="#72e4c7" stroke-width="3" filter="url(#glow)"/>
+          <path d="M230 195 C126 205 100 282 128 318" fill="none" stroke="#ff746b" stroke-width="8" stroke-linecap="round" filter="url(#glow)"/>
+          <path d="M230 195 C334 205 360 282 332 318" fill="none" stroke="#f0b84e" stroke-width="8" stroke-linecap="round" filter="url(#glow)"/>
+          <path d="M150 298 C188 244 274 244 312 298" fill="none" stroke="#8f6bff" stroke-width="8" stroke-linecap="round" filter="url(#glow)"/>
+          <rect x="97" y="274" width="124" height="54" rx="18" fill="rgba(255,116,107,.17)" stroke="rgba(255,116,107,.35)"/>
+          <rect x="239" y="274" width="124" height="54" rx="18" fill="rgba(112,228,199,.17)" stroke="rgba(112,228,199,.35)"/>
+          <text x="230" y="122" text-anchor="middle" fill="#fff" font-size="22" font-weight="800">Ясность</text>
+          <text x="230" y="149" text-anchor="middle" fill="#e1e8ff" font-size="14" font-weight="650">система · люди · результат</text>
+          <text x="159" y="306" text-anchor="middle" fill="#ffd6d1" font-size="15" font-weight="700">качество</text>
+          <text x="301" y="306" text-anchor="middle" fill="#d9fff3" font-size="15" font-weight="700">рост</text>
+        </svg>
+      </div>
+    </div>
+  </header>
+
+  <nav class="nav-strip" aria-label="Навигация по карте талантов">
+    <div class="container nav-scroll">
+      <a href="#summary">Вывод</a>
+      <a href="#metrics">Показатели</a>
+      <a href="#talents">Таланты</a>
+      <a href="#strengths">Сильные стороны</a>
+      <a href="#risks">Риски</a>
+      <a href="#directions">Направления</a>
+      <a href="#roles">Должности</a>
+      <a href="#conditions">Среда</a>
+      <a href="#tests">Проверка</a>
+      <a href="#final">Рекомендация</a>
+    </div>
+  </nav>
+
+  <main>
+    <section id="summary">
+      <div class="container">
+        <div class="section-head">
+          <div><div class="kicker">01 · общий вывод</div><h2>Куда лучше смотреть в профессии</h2></div>
+          <p class="section-note">Это предварительная карта по загруженному расчёту. Без анкеты, опыта и конкретной вакансии выводы лучше считать сильными гипотезами, а не финальным карьерным приговором.</p>
+        </div>
+        <div class="grid-2">
+          <article class="card">
+            <div class="icon">✓</div>
+            <h3>Лучшее направление</h3>
+            <p>Ольге лучше всего подходят роли, где нужно соединять <strong>структуру, людей, процессы и развитие</strong>. Не просто выполнять поток задач, а видеть, что в системе не работает, где нужен порядок, кого куда направить и как довести ситуацию до результата.</p>
+            <p>Самый сильный рабочий образ: <strong>проектный / операционный координатор, менеджер процессов, руководитель небольшого направления, специалист по развитию сервиса или людей</strong>.</p>
+          </article>
+          <article class="card">
+            <div class="icon gold">→</div>
+            <h3>Ключевая формула</h3>
+            <p>Ольга сильна там, где есть вопрос:</p>
+            <ul>
+              <li>что здесь происходит;</li>
+              <li>почему система буксует;</li>
+              <li>какой следующий шаг будет правильным;</li>
+              <li>кого и как нужно вовлечь;</li>
+              <li>как из хаоса сделать понятный рабочий порядок.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="callout"><strong>Коротко:</strong> ей подойдут не самые механические роли, а позиции, где есть развитие, улучшение, работа с людьми, управление процессом, аналитика ситуации и практический результат.</div>
+      </div>
+    </section>
+
+    <section id="metrics">
+      <div class="container">
+        <div class="section-head">
+          <div><div class="kicker">02 · точность</div><h2>Показатели оценки</h2></div>
+          <p class="section-note">Пока есть только карта, без профессиональной анкеты. Этого достаточно для направления, но не для окончательного выбора должности.</p>
+        </div>
+        <div class="metric-row">
+          <div class="metric"><b>42%</b><span>полнота данных</span><div class="progress"><i style="width:42%"></i></div></div>
+          <div class="metric"><b>61%</b><span>уверенность предварительной оценки</span><div class="progress"><i style="width:61%"></i></div></div>
+          <div class="metric"><b>8</b><span>перспективных направлений для проверки</span></div>
+          <div class="metric"><b>MVP</b><span>нужны опыт, навыки и реальные вакансии</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="talents">
+      <div class="container">
+        <div class="section-head">
+          <div><div class="kicker">03 · карта талантов</div><h2>Таланты в рабочем переводе</h2></div>
+          <p class="section-note">Здесь не теория, а рабочий перевод: в каких задачах Ольга может быть полезна и почему.</p>
+        </div>
+        <div class="grid-3">
+          <article class="card"><div class="icon">1</div><h3>Видеть слабые места и улучшать</h3><p>Ольга может быстро замечать, где процесс некачественный, где человек ошибается, где система трещит, где нужно докрутить правила или алгоритм.</p><details><summary>Как это использовать</summary><div class="details-body"><p>Подходят задачи по улучшению сервиса, качества, воронки, адаптации, клиентского пути, внутренних правил и процессов.</p></div></details></article>
+          <article class="card"><div class="icon violet">2</div><h3>Задавать правильные вопросы</h3><p>Её сильная сторона — не принимать всё на веру, а видеть несостыковки, задавать уточняющие вопросы и выводить ситуацию из тумана.</p><details><summary>Где это полезно</summary><div class="details-body"><p>Аналитика процессов, HR-интервью, управленческие разборы, клиентские консультации, оценка рисков, настройка проекта.</p></div></details></article>
+          <article class="card"><div class="icon gold">3</div><h3>Работать с ростом и амбициями</h3><p>В карте сильна тема развития, продвижения, результата и перехода на следующий уровень. Ей могут быть интересны проекты, где есть рост, а не застой.</p><details><summary>Риск</summary><div class="details-body"><p>Если работа не даёт развития, Ольга может быстро терять интерес или внутренне раздражаться на бессмысленную рутину.</p></div></details></article>
+          <article class="card"><div class="icon green">4</div><h3>Чувствовать людей и риски</h3><p>Ольга может считывать, где человек подходит, где есть скрытый риск, где атмосфера напряжённая, где команда или клиент реагируют не так, как говорят словами.</p><details><summary>Как проверить</summary><div class="details-body"><p>Дать ей разобрать кейс по кандидату, клиенту, команде или конфликтной ситуации и посмотреть, какие риски она заметит первой.</p></div></details></article>
+          <article class="card"><div class="icon red">5</div><h3>Держать ритм и порядок</h3><p>Ей важно, чтобы в работе были понятные циклы, договорённости и повторяемость. Тогда она может быть устойчивой и надёжной.</p><details><summary>Где будет сложно</summary><div class="details-body"><p>В среде, где каждый день всё меняется, нет правил, люди постоянно “горят”, а руководитель сам не знает, чего хочет.</p></div></details></article>
+          <article class="card"><div class="icon violet">6</div><h3>Запускать новый опыт</h3><p>Ольге могут подходить проекты, связанные с изменениями: новый продукт, новая команда, новый сервис, мероприятие, запуск, переход на новый формат работы.</p><details><summary>Что важно</summary><div class="details-body"><p>Новый опыт должен иметь рамки: цель, сроки, критерий результата и понятную зону ответственности.</p></div></details></article>
+          <article class="card"><div class="icon gold">7</div><h3>Объяснять и формулировать</h3><p>Она может быть полезна там, где нужно перевести сложную ситуацию в понятные слова: что случилось, почему это важно и что делать дальше.</p><details><summary>Примеры задач</summary><div class="details-body"><ul><li>инструкции;</li><li>разборы ошибок;</li><li>письма клиентам;</li><li>регламенты;</li><li>обучающие материалы;</li><li>структура встречи или презентации.</li></ul></div></details></article>
+          <article class="card"><div class="icon green">8</div><h3>Собирать людей через доверие</h3><p>Её возможности сильнее раскрываются через окружение, связи, рекомендации и нормальное человеческое доверие, а не через грубое продавливание.</p><details><summary>Что это значит</summary><div class="details-body"><p>Лучше тёплые роли: партнёрства, сопровождение, HR, комьюнити, развитие клиентов, работа с постоянными людьми.</p></div></details></article>
+          <article class="card"><div class="icon">9</div><h3>Действовать, когда есть внутреннее “да”</h3><p>Если задача действительно откликается, Ольга может включаться стабильно и надолго. Если нет — механическое “надо” быстро забирает ресурс.</p><details><summary>Практическое правило</summary><div class="details-body"><p>При выборе работы важно смотреть не только на должность и деньги, но и на живой интерес к продукту, людям и задачам.</p></div></details></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="strengths">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">04 · ресурсы</div><h2>Сильные стороны</h2></div><p class="section-note">Это то, на что стоит опираться при выборе должности и формата работы.</p></div>
+        <div class="grid-2">
+          <article class="card"><h3>Что у Ольги может получаться особенно хорошо</h3><ul>
+            <li>видеть, где процесс не работает и что нужно улучшить;</li>
+            <li>задавать точные вопросы и вскрывать скрытые проблемы;</li>
+            <li>наводить порядок в сложных ситуациях;</li>
+            <li>чувствовать людей, атмосферу и риски;</li>
+            <li>держать рабочий ритм, если правила понятны;</li>
+            <li>помогать проекту перейти на следующий уровень;</li>
+            <li>объяснять сложное практичным языком;</li>
+            <li>работать через доверие, связи и рекомендации;</li>
+            <li>разбирать, почему команда, клиент или процесс буксует;</li>
+            <li>доводить задачу до результата, если она действительно имеет смысл.</li>
+          </ul></article>
+          <article class="card"><h3>Где это может дать результат</h3><ul class="list-gold">
+            <li>в проектах, где нужно улучшить качество;</li>
+            <li>в командах, где нужна взрослая координация;</li>
+            <li>в HR, где важно видеть людей, а не только резюме;</li>
+            <li>в сервисе, где нужно разбирать клиентский опыт;</li>
+            <li>в операционке, где много хаоса и нужен порядок;</li>
+            <li>в партнёрствах, где важны доверие и долгий контакт;</li>
+            <li>в образовательных или экспертных продуктах, где нужно сопровождение и структура.</li>
+          </ul></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="risks">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">05 · риски</div><h2>Слабые места и зоны перегруза</h2></div><p class="section-note">Это не “минусы характера”, а условия, где эффективность Ольги может падать.</p></div>
+        <div class="grid-4">
+          <article class="card"><div class="icon red">!</div><h3>Перегруз вопросами</h3><p>Может долго искать правильный ответ, видеть много рисков и зависать в анализе, если нет понятного критерия решения.</p></article>
+          <article class="card"><div class="icon red">!</div><h3>Раздражение от хаоса</h3><p>Если правила постоянно меняются, люди не держат договорённости, а руководитель действует импульсивно, может быстро копиться напряжение.</p></article>
+          <article class="card"><div class="icon red">!</div><h3>Слишком много чужих эмоций</h3><p>Если вокруг много конфликтов и эмоционального давления, Ольга может впитывать фон и уставать быстрее, чем кажется.</p></article>
+          <article class="card"><div class="icon red">!</div><h3>Борьба за смысл</h3><p>Если работа кажется пустой, бессмысленной или некачественной, ей трудно долго делать вид, что всё нормально.</p></article>
+        </div>
+        <div class="callout red"><strong>Главный риск:</strong> поставить Ольгу в роль “просто исполняй и не задавай вопросов”. Ей нужна зона, где её наблюдения, вопросы и предложения реально используются.</div>
+      </div>
+    </section>
+
+    <section id="directions">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">06 · направления</div><h2>Подходящие профессиональные направления</h2></div><p class="section-note">Проценты — предварительная оценка гипотез. Их нужно проверять через опыт, реальные вакансии и тестовые задания.</p></div>
+        <div class="table-wrap"><table>
+          <tr><th>Направление</th><th>Соответствие</th><th>Почему может подойти</th><th>Что проверить</th></tr>
+          <tr><td>Проектный менеджмент / координация проектов</td><td><strong>86%</strong></td><td>Есть способность видеть этапы, риски, людей, порядок и следующий шаг.</td><td>Комфорт с дедлайнами, коммуникацией и ответственностью за результат.</td></tr>
+          <tr><td>Операционный менеджмент / менеджер процессов</td><td><strong>84%</strong></td><td>Подходит наведение порядка, улучшение системы, регламенты, координация задач.</td><td>Чтобы роль не стала только “тушением пожаров” без права улучшать.</td></tr>
+          <tr><td>HR, подбор, адаптация, развитие людей</td><td><strong>82%</strong></td><td>Сильны наблюдение, считывание людей, вопросы, оценка рисков, качество среды.</td><td>Интерес к интервью, документам, обратной связи и работе с людьми в долгую.</td></tr>
+          <tr><td>Менеджер партнёрств / аккаунт-менеджер</td><td><strong>80%</strong></td><td>Можно работать через доверие, связи, долгий контакт, понимание интересов сторон.</td><td>Чтобы продажи были консультационными, не агрессивными и не холодным давлением.</td></tr>
+          <tr><td>Клиентский опыт / customer success / сервис</td><td><strong>79%</strong></td><td>Подходит разбор клиентского пути, улучшение качества и сопровождение людей.</td><td>Нагрузку по конфликтным клиентам и наличие понятных правил.</td></tr>
+          <tr><td>Бизнес-аналитика процессов / качество сервиса</td><td><strong>77%</strong></td><td>Есть потенциал видеть несостыковки, задавать вопросы и предлагать улучшения.</td><td>Чтобы была связь с людьми и внедрением, а не только сухие таблицы.</td></tr>
+          <tr><td>Координатор программ, мероприятий, туров</td><td><strong>75%</strong></td><td>Подходит работа с новым опытом, людьми, деталями, маршрутами и сопровождением.</td><td>Устойчивость к срочным изменениям и сезонной нагрузке.</td></tr>
+          <tr><td>Куратор / наставник / методолог практических программ</td><td><strong>73%</strong></td><td>Может объяснять, вести людей, структурировать путь и помогать пройти этапы.</td><td>Интерес к обучению, публичности и регулярной поддержке участников.</td></tr>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="roles">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">07 · должности</div><h2>На какие должности смотреть</h2></div><p class="section-note">Самая сильная зона — роли, где Ольга не просто исполнитель, а человек, который держит процесс, качество и людей.</p></div>
+        <div class="grid-3">
+          <article class="card"><div class="icon gold">1</div><h3>Руководитель проектов / проектный координатор</h3><p>Лучший формат, если есть понятная цель, команда, этапы, ответственность и возможность влиять на процесс.</p></article>
+          <article class="card"><div class="icon green">2</div><h3>Операционный менеджер</h3><p>Подходит там, где нужно собрать хаос в систему, прописать правила, улучшить качество и довести процессы до результата.</p></article>
+          <article class="card"><div class="icon violet">3</div><h3>HR / people partner / рекрутер</h3><p>Подходит оценка людей, адаптация, культура, обратная связь, развитие команды, подбор под ценности и реальную роль.</p></article>
+          <article class="card"><div class="icon">4</div><h3>Менеджер партнёрств</h3><p>Хорошо, если нужны доверие, переговоры, долгий контакт, понимание интересов и развитие отношений.</p></article>
+          <article class="card"><div class="icon gold">5</div><h3>Customer Success / клиентский опыт</h3><p>Подходит сопровождение клиентов, улучшение пути, работа с обратной связью, удержание и доведение до результата.</p></article>
+          <article class="card"><div class="icon green">6</div><h3>Менеджер по развитию процессов</h3><p>Хорошо для задач, где нужно увидеть слабые места, предложить изменения и аккуратно внедрить новую систему.</p></article>
+        </div>
+        <div class="callout gold"><strong>Главная рекомендация по должности:</strong> начинать проверку с форматов “проектный координатор / операционный менеджер / HR-координатор / customer success”. Это самые понятные мосты между её сильными сторонами и реальным рынком вакансий.</div>
+      </div>
+    </section>
+
+    <section id="conditions">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">08 · рабочая среда</div><h2>В какой среде Ольга раскрывается</h2></div><p class="section-note">Та же должность может быть хорошей или плохой в зависимости от руководителя, команды и правил.</p></div>
+        <div class="grid-2">
+          <article class="card"><h3>Подходящие условия</h3><ul>
+            <li>есть ясные цели и критерии результата;</li>
+            <li>руководитель слышит вопросы и предложения;</li>
+            <li>есть возможность улучшать процесс, а не только выполнять;</li>
+            <li>в команде ценят договорённости и качество;</li>
+            <li>есть рабочий ритм, но не мёртвый микроконтроль;</li>
+            <li>есть развитие, рост и смысл продукта;</li>
+            <li>можно работать с людьми, но не быть эмоциональной “жилеткой” для всех.</li>
+          </ul></article>
+          <article class="card"><h3>Неподходящие условия</h3><ul class="list-coral">
+            <li>хаос, срочность и постоянная смена правил;</li>
+            <li>жёсткие холодные продажи любой ценой;</li>
+            <li>рутина без смысла и развития;</li>
+            <li>руководитель, который запрещает задавать вопросы;</li>
+            <li>много ответственности без полномочий;</li>
+            <li>конфликтная команда и постоянное эмоциональное давление;</li>
+            <li>работа, где нельзя влиять на качество процесса.</li>
+          </ul></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="tests">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">09 · проверка</div><h2>Как проверить направления на практике</h2></div><p class="section-note">Чтобы не гадать, лучше дать маленькие реальные задания и посмотреть, где появляется энергия и результат.</p></div>
+        <div class="grid-3">
+          <article class="card"><h3>1. Разобрать хаотичный процесс</h3><p>Дать описание проекта, где всё запутано: люди, сроки, задачи, ответственность. Попросить Ольгу найти 5 проблем и предложить порядок действий.</p></article>
+          <article class="card"><h3>2. Провести мини-интервью</h3><p>Попросить оценить кандидата или клиента: какие вопросы задать, какие риски проверить, что может быть скрыто за словами.</p></article>
+          <article class="card"><h3>3. Сделать карту клиентского пути</h3><p>Описать путь клиента от первого контакта до результата: где непонятно, где человек теряется, что улучшить.</p></article>
+          <article class="card"><h3>4. Собрать план запуска</h3><p>Дать новую идею или задачу и попросить разложить её на этапы, сроки, риски, роли и критерии результата.</p></article>
+          <article class="card"><h3>5. Написать понятную инструкцию</h3><p>Попросить объяснить сложный процесс простым языком для новичка, клиента или сотрудника.</p></article>
+          <article class="card"><h3>6. Проверить устойчивость к хаосу</h3><p>Смоделировать ситуацию: срочные изменения, конфликт, неясные правила. Посмотреть, как она восстанавливает порядок.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="final">
+      <div class="container">
+        <div class="final">
+          <div class="final-grid">
+            <div>
+              <div class="kicker">10 · итог</div>
+              <h2>Итоговая рекомендация</h2>
+              <ul>
+                <li>Ольге стоит смотреть в сторону проектных, операционных, HR, клиентских и координационных ролей.</li>
+                <li>Ей нужна работа, где её вопросы, наблюдения и предложения считаются ценностью, а не “лишними сложностями”.</li>
+                <li>Лучше выбирать среду с понятными правилами, зрелым руководителем, возможностью улучшать процесс и реальным развитием.</li>
+                <li>Слабый вариант — рутинная роль без влияния, холодное давление, постоянный хаос и ответственность без полномочий.</li>
+              </ul>
+              <div class="final-line">Главный карьерный вектор: не просто “работать больше”, а стать человеком, который видит, где система буксует, помогает людям и процессам собраться, задаёт правильные вопросы и переводит хаос в понятный результат.</div>
+            </div>
+            <div class="rings" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <section class="back-top-section" aria-label="Вернуться в начало">
+    <div class="container">
+      <a class="back-top-button" href="#top" aria-label="Вернуться в начало карты">↑ Вернуться в начало</a>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container chips">
+      <span class="chip green">Ольга · карта талантов</span>
+      <span class="chip gold">Профориентация</span>
+      <span class="chip violet">Проекты</span>
+      <span class="chip green">HR</span>
+      <span class="chip coral">Операционка</span>
+      <a class="chip" href="#top">↑ Наверх</a>
+    </div>
+  </footer>
+</div>
+<script>
+(function(){
+  const root = document.documentElement;
+  const nav = document.querySelector('.nav-strip');
+  const topbar = document.querySelector('.mobile-topbar');
+  const toggle = document.getElementById('mobile-nav-toggle');
+  const isMobile = () => window.matchMedia('(max-width: 900px)').matches;
+  const closeMenu = () => { if (toggle) toggle.checked = false; };
+  const setHeights = () => {
+    const topH = isMobile() && topbar ? topbar.offsetHeight : 0;
+    const navH = nav ? nav.offsetHeight : 0;
+    root.style.setProperty('--mobile-topbar-h', topH + 'px');
+    root.style.setProperty('--nav-h', navH + 'px');
+    root.style.setProperty('--fixed-offset', (topH + navH) + 'px');
+  };
+  setHeights();
+  window.addEventListener('resize', setHeights, {passive:true});
+  window.addEventListener('orientationchange', () => setTimeout(setHeights, 120), {passive:true});
+
+  document.querySelectorAll('a[href^="#"]').forEach((link) => {
+    link.addEventListener('click', (event) => {
+      const href = link.getAttribute('href');
+      if (!href || href === '#') return;
+      const target = document.querySelector(href);
+      if (!target) return;
+      event.preventDefault();
+      setHeights();
+      closeMenu();
+      const topH = isMobile() && topbar ? topbar.offsetHeight : 0;
+      const navH = nav ? nav.offsetHeight : 0;
+      const offset = topH + navH + 12;
+      const targetTop = target.getBoundingClientRect().top + window.pageYOffset;
+      const top = href === '#top' ? 0 : Math.max(targetTop - offset, 0);
+      window.scrollTo({top, behavior:'smooth'});
+      if (history.pushState) history.pushState(null, '', href);
+    });
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeMenu();
+  });
+
+  document.querySelectorAll('label[role="button"]').forEach((label) => {
+    label.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        label.click();
+      }
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

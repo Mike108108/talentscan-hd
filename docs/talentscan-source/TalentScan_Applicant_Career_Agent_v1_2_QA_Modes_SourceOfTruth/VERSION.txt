@@ -1,0 +1,10 @@
+TalentScan Applicant / Career Agent
+Version: v1.2 QA + Modes + Fresh Etalons
+Status: working MVP agent base, not final production base
+Date: 2026-05-19
+Active logic: applicant checks role, vacancy, environment, manager, and personal conditions for раскрытие.
+Socionics: not active in this version.
+Default output: HTML card. PDF only by explicit request.
+Default mode: Development mode. Test mode only by explicit user command.
+
+Patch note: v1.2 name is preserved; added Mikhail OneSummer vacancy assessment v2 as active VACANCY_ASSESSMENT etalon with self-presentation/interview positioning block.

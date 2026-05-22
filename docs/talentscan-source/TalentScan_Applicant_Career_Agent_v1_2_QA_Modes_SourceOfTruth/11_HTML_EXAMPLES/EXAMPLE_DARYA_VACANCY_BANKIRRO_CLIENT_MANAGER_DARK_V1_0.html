@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TalentScan — Дарья — оценка вакансии · менеджер по работе с клиентами</title>
+<style>
+:root{
+  --bg:#070b1f;
+  --text:#f7f9ff;
+  --soft:#e1e8ff;
+  --muted:#b6c1d9;
+  --line:rgba(255,255,255,.16);
+  --card:rgba(255,255,255,.078);
+  --coral:#ff746b;
+  --coral2:#ffa08a;
+  --gold:#f0b84e;
+  --gold2:#ffe096;
+  --violet:#8f6bff;
+  --violet2:#ccbaff;
+  --cyan:#70d7ff;
+  --green:#72e4c7;
+  --green2:#a9f8df;
+  --red:#ff6469;
+  --shadow:0 24px 80px rgba(0,0,0,.35);
+  --radius-xl:34px;
+  --radius-lg:24px;
+  --radius-md:18px;
+  --max:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:92px}
+body{
+  margin:0;
+  min-height:100vh;
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+  background:
+    radial-gradient(circle at 13% 7%, rgba(255,116,107,.23), transparent 28%),
+    radial-gradient(circle at 84% 5%, rgba(112,215,255,.28), transparent 34%),
+    radial-gradient(circle at 78% 45%, rgba(114,228,199,.13), transparent 28%),
+    linear-gradient(145deg,#050815 0%,#071425 42%,#12143d 100%);
+  overflow-x:hidden;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background-image:
+    radial-gradient(circle, rgba(255,255,255,.16) 0 1px, transparent 1px),
+    radial-gradient(circle, rgba(112,215,255,.12) 0 1px, transparent 1px);
+  background-size:64px 64px,110px 110px;
+  background-position:12px 18px,50px 80px;
+  mask-image:linear-gradient(to bottom,rgba(0,0,0,.82),transparent 92%);
+}
+a{color:inherit;text-decoration:none}
+.page{position:relative;z-index:1}
+.container{width:min(var(--max),calc(100% - 40px));margin:0 auto}
+.hero{position:relative;padding:52px 0 34px;overflow:hidden}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(300px,.92fr);gap:34px;align-items:center}
+.eyebrow{display:inline-flex;gap:10px;align-items:center;padding:9px 14px;border:1px solid rgba(255,255,255,.18);border-radius:999px;color:var(--soft);background:rgba(255,255,255,.07);backdrop-filter:blur(18px);font-size:14px;letter-spacing:.02em}
+.eyebrow .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 18px var(--green)}
+h1{margin:22px 0 0;font-size:clamp(40px,6.4vw,78px);line-height:.95;letter-spacing:-.055em}
+.names{margin-top:10px;font-size:clamp(31px,5.35vw,62px);line-height:1;font-weight:850;letter-spacing:-.052em;color:var(--green);text-shadow:0 0 36px rgba(112,228,199,.22)}
+.subtitle{margin:18px 0 0;color:var(--muted);font-size:clamp(17px,2vw,21px);max-width:850px;line-height:1.5}
+.identity-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:24px}
+.identity-card{padding:17px 18px;border:1px solid var(--line);border-radius:var(--radius-md);background:rgba(255,255,255,.075);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.identity-card b{display:block;font-size:20px;margin-bottom:6px;color:var(--gold2)}
+.identity-card span{color:var(--muted);line-height:1.42;font-size:14px}
+.verdict-card{margin-top:22px;position:relative;padding:24px 26px;border-radius:var(--radius-lg);border:1px solid rgba(255,255,255,.18);background:linear-gradient(135deg,rgba(255,116,107,.18),rgba(112,215,255,.13) 52%,rgba(112,228,199,.13)),rgba(255,255,255,.07);box-shadow:0 0 0 1px rgba(255,255,255,.04),0 24px 70px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.12);overflow:hidden}
+.verdict-card::after{content:"";position:absolute;width:230px;height:230px;right:-70px;bottom:-120px;background:radial-gradient(circle,rgba(112,228,199,.34),transparent 65%);pointer-events:none}
+.verdict-card p{position:relative;z-index:1;margin:0;font-size:clamp(23px,2.55vw,32px);line-height:1.26;font-weight:760;letter-spacing:-.025em}
+.verdict-card strong{color:var(--green2)}.verdict-card em{color:var(--coral2);font-style:normal}
+.hero-visual{position:relative;min-height:500px;display:grid;place-items:center}
+.halo{position:absolute;width:min(510px,90vw);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.12) 0 2px,transparent 3px),radial-gradient(circle at 30% 20%,rgba(255,116,107,.28),transparent 30%),radial-gradient(circle at 70% 70%,rgba(112,228,199,.24),transparent 28%),radial-gradient(circle,rgba(112,215,255,.18),transparent 62%);border:1px solid rgba(255,255,255,.11);box-shadow:0 0 100px rgba(112,215,255,.2);animation:pulse 7s ease-in-out infinite;pointer-events:none}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.045);opacity:1}}
+.visual-card{position:relative;z-index:2;width:min(430px,88vw);border-radius:34px;border:1px solid rgba(255,255,255,.17);background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(255,255,255,.055));box-shadow:var(--shadow);padding:28px;overflow:hidden}
+.visual-card:before{content:"";position:absolute;inset:-1px;background:radial-gradient(circle at 80% 12%,rgba(255,116,107,.24),transparent 34%),radial-gradient(circle at 12% 84%,rgba(112,228,199,.22),transparent 30%);pointer-events:none}
+.visual-card>*{position:relative;z-index:1}
+.visual-card h3{margin:0 0 12px;font-size:26px;letter-spacing:-.035em}
+.visual-card .score-big{font-size:72px;line-height:.9;font-weight:900;color:var(--green2);letter-spacing:-.06em;margin:20px 0 8px;text-shadow:0 0 36px rgba(112,228,199,.22)}
+.visual-card p{margin:0;color:var(--soft);line-height:1.55}
+.dial{height:16px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden;margin:22px 0 18px;border:1px solid rgba(255,255,255,.12)}
+.dial i{display:block;height:100%;width:76%;border-radius:999px;background:linear-gradient(90deg,var(--coral),var(--gold),var(--green));box-shadow:0 0 24px rgba(112,228,199,.26)}
+.visual-list{display:grid;gap:10px;margin-top:18px}.visual-item{display:flex;justify-content:space-between;gap:14px;align-items:center;padding:12px 13px;border-radius:18px;background:rgba(0,0,0,.16);border:1px solid rgba(255,255,255,.1);font-size:14px}.visual-item b{color:var(--gold2);text-align:right}
+.nav-strip{position:sticky;top:0;z-index:1200;padding:12px 0;background:linear-gradient(to bottom,rgba(5,8,21,.94),rgba(5,8,21,.74));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08);box-shadow:0 14px 34px rgba(0,0,0,.18);transform:translate3d(0,0,0)}
+.nav-scroll{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}.nav-scroll::-webkit-scrollbar{display:none}.nav-scroll a,.chip{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:11px 14px;border-radius:999px;color:var(--soft);border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.075);font-size:14px;white-space:nowrap;touch-action:manipulation;-webkit-tap-highlight-color:transparent}.nav-scroll a:hover{border-color:rgba(112,228,199,.55);color:white}
+section{padding:44px 0;scroll-margin-top:86px}.section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:20px}.kicker{color:var(--green);font-size:14px;text-transform:uppercase;letter-spacing:.12em;font-weight:700}h2{margin:6px 0 0;font-size:clamp(30px,4vw,52px);line-height:1.04;letter-spacing:-.045em}.section-note{max-width:620px;color:var(--muted);line-height:1.55}.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.grid-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.card{position:relative;border-radius:var(--radius-lg);padding:24px;background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.14);box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.08);overflow:hidden}.card::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 12% 5%,rgba(255,255,255,.13),transparent 24%);opacity:.65;pointer-events:none}.card>*{position:relative;z-index:1}.card h3{margin:0 0 14px;font-size:23px;line-height:1.16;letter-spacing:-.025em}.card p{color:var(--soft);line-height:1.62;margin:0 0 12px}.card p:last-child{margin-bottom:0}.muted{color:var(--muted)}ul,ol{margin:0;padding-left:18px;color:var(--soft);line-height:1.62}li{margin:7px 0}li::marker{color:var(--green)}.list-coral li::marker{color:var(--coral)}.list-gold li::marker{color:var(--gold)}.list-violet li::marker{color:var(--violet2)}.list-red li::marker{color:var(--red)}.icon{display:inline-grid;place-items:center;width:46px;height:46px;border-radius:16px;margin-bottom:16px;background:linear-gradient(135deg,rgba(255,116,107,.26),rgba(112,228,199,.2));border:1px solid rgba(255,255,255,.18);font-size:23px}.icon.gold{background:linear-gradient(135deg,rgba(240,184,78,.22),rgba(112,228,199,.18))}.icon.violet{background:linear-gradient(135deg,rgba(143,107,255,.22),rgba(112,215,255,.14))}.icon.red{background:linear-gradient(135deg,rgba(255,100,105,.25),rgba(240,184,78,.12))}.callout{border-radius:var(--radius-md);padding:18px 20px;margin-top:18px;background:linear-gradient(135deg,rgba(112,228,199,.14),rgba(255,116,107,.1));border:1px solid rgba(112,228,199,.28);color:#eafff8;line-height:1.55}.callout.gold{background:linear-gradient(135deg,rgba(240,184,78,.15),rgba(255,116,107,.1));border-color:rgba(240,184,78,.28);color:#fff2cf}.callout.red{border-color:rgba(255,100,105,.34);background:linear-gradient(135deg,rgba(255,100,105,.15),rgba(255,116,107,.08));color:#ffd7da}.metric-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:18px}.metric{padding:16px;border-radius:18px;background:rgba(0,0,0,.17);border:1px solid rgba(255,255,255,.12)}.metric b{display:block;font-size:24px;color:var(--green2);margin-bottom:4px}.metric span{color:var(--muted);font-size:13px;line-height:1.35}.progress{height:8px;border-radius:999px;background:rgba(255,255,255,.09);overflow:hidden;margin-top:10px}.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--green));border-radius:999px}.tag{display:inline-flex;align-items:center;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.075);border-radius:999px;padding:5px 9px;font-size:12px;font-weight:800;color:var(--soft);margin:0 4px 5px 0}.tag.good{border-color:rgba(112,228,199,.35);color:#d9fff3}.tag.warn{border-color:rgba(240,184,78,.35);color:#ffe3a2}.tag.bad{border-color:rgba(255,100,105,.35);color:#ffd9dc}.table-wrap{overflow:auto;border:1px solid rgba(255,255,255,.14);border-radius:20px;background:rgba(255,255,255,.06);box-shadow:var(--shadow)}table{border-collapse:collapse;width:100%;min-width:820px}th,td{border-right:1px solid rgba(255,255,255,.12);border-bottom:1px solid rgba(255,255,255,.12);padding:13px;text-align:left;vertical-align:top;color:var(--soft);font-size:14px;line-height:1.45}th{background:rgba(112,228,199,.18);color:#fff;text-transform:uppercase;font-size:12px;letter-spacing:.05em}td strong{color:var(--gold2)}td:last-child,th:last-child{border-right:0}tr:last-child td{border-bottom:0}.salary{font-size:clamp(28px,4vw,48px);font-weight:900;letter-spacing:-.045em;color:var(--gold2);margin:0 0 10px}.timeline{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.step{padding:19px;border-radius:20px;background:rgba(0,0,0,.14);border:1px solid rgba(255,255,255,.12)}.step b{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:12px;background:rgba(112,228,199,.14);border:1px solid rgba(112,228,199,.28);margin-bottom:10px;color:var(--green2)}.final{padding:38px;border-radius:var(--radius-xl);background:radial-gradient(circle at 88% 18%,rgba(255,116,107,.2),transparent 28%),radial-gradient(circle at 18% 78%,rgba(112,228,199,.18),transparent 26%),linear-gradient(135deg,rgba(255,255,255,.11),rgba(255,255,255,.055));border:1px solid rgba(255,255,255,.18);box-shadow:var(--shadow)}.final h2{margin-bottom:18px}.final-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr);gap:24px;align-items:center}.final-line{margin-top:22px;padding:20px 22px;border-radius:var(--radius-md);background:linear-gradient(135deg,rgba(112,228,199,.18),rgba(255,116,107,.14));border:1px solid rgba(112,228,199,.32);color:#eafff8;font-weight:750;line-height:1.55}.rings{height:220px;border-radius:var(--radius-lg);background:radial-gradient(ellipse at 40% 48%,transparent 0 23%,rgba(255,116,107,.9) 24% 27%,transparent 28%),radial-gradient(ellipse at 60% 52%,transparent 0 23%,rgba(112,228,199,.9) 24% 27%,transparent 28%),radial-gradient(circle at 50% 50%,rgba(112,215,255,.2),transparent 60%);filter:drop-shadow(0 0 22px rgba(112,228,199,.38));border:1px solid rgba(255,255,255,.12)}.footer{padding:26px 0 56px}.chips{display:flex;flex-wrap:wrap;gap:10px}.chip.gold{border-color:rgba(240,184,78,.34);color:#ffe3a2}.chip.green{border-color:rgba(112,228,199,.34);color:#d9fff3}.chip.coral{border-color:rgba(255,116,107,.34);color:#ffd6d1}.chip.violet{border-color:rgba(143,107,255,.36);color:#e5dbff}.back-top-section{padding:10px 0 6px}.back-top-button{display:flex;align-items:center;justify-content:center;width:100%;min-height:58px;border-radius:999px;border:1px solid rgba(112,228,199,.35);background:linear-gradient(135deg,rgba(112,228,199,.18),rgba(255,116,107,.14));box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.1);color:#eafff8;font-weight:850;letter-spacing:-.01em;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+@media(max-width:960px){.hero-grid,.final-grid{grid-template-columns:1fr}.hero-visual{min-height:360px}.grid-3,.grid-4,.grid-2,.identity-row,.metric-row,.timeline{grid-template-columns:1fr}.section-head{display:block}.section-note{margin-top:12px}table{min-width:760px}}
+@media(max-width:560px){.container{width:min(100% - 24px,var(--max))}.hero{padding-top:34px}.card,.verdict-card{padding:20px}.final{padding:24px}section{padding:34px 0}.hero-visual{min-height:300px}.visual-card{width:min(320px,88vw)}.visual-card .score-big{font-size:58px}.nav-strip{top:0}.nav-scroll a,.chip{font-size:13px;padding:10px 13px}}
+@media print{body{background:#050815}.nav-strip,.footer{display:none}.card,.final{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="hero" id="top">
+    <div class="container hero-grid">
+      <div>
+        <div class="eyebrow"><span class="dot"></span> TalentScan · оценка вакансии</div>
+        <h1>Карточка соответствия вакансии</h1>
+        <div class="names">Дарья · Менеджер по работе с клиентами</div>
+        <p class="subtitle">Дарья рассматривает вакансию БАНКИРРО: сопровождение действующих клиентов, без продаж, удалённо, график 5/2. Разбор показывает, стоит ли откликаться, что уточнить у работодателя и какие условия проверить до решения.</p>
+        <div class="identity-row">
+          <div class="identity-card"><b>Вакансия</b><span>Менеджер по работе с клиентами: сопровождение, звонки, Telegram, CRM, информирование клиентов по делу.</span></div>
+          <div class="identity-card"><b>Главный плюс</b><span>Без холодных звонков и продаж: работа с действующими клиентами, обучение, наставник, удалённый формат.</span></div>
+          <div class="identity-card"><b>Главный риск</b><span>Большой объём информации, телефонный поток, эмоционально сложная тема долгов и банкротства.</span></div>
+        </div>
+        <div class="verdict-card"><p><strong>Вердикт:</strong> вакансию стоит смотреть глубже и можно откликаться, но не соглашаться “вслепую”. Это <em>подходящий клиентский формат с условием</em>: нужно проверить нагрузку, KPI, объём звонков, эмоциональный фон и реальные границы ответственности.</p></div>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="halo"></div>
+        <div class="visual-card">
+          <h3>Быстрый ответ</h3>
+          <div class="score-big">76%</div>
+          <p><strong>Предварительное соответствие:</strong> подходит для проверки. Хороший мост в клиентское сопровождение, если роль не превращается в call-центр под давлением.</p>
+          <div class="dial"><i></i></div>
+          <div class="visual-list">
+            <div class="visual-item"><span>Сопровождение клиентов</span><b>84%</b></div>
+            <div class="visual-item"><span>Без продаж</span><b>сильный плюс</b></div>
+            <div class="visual-item"><span>Телефонный поток</span><b>риск</b></div>
+            <div class="visual-item"><span>Рекомендация</span><b>откликаться + уточнять</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <nav class="nav-strip" aria-label="Навигация по карточке">
+    <div class="container nav-scroll">
+      <a href="#verdict">Вердикт</a>
+      <a href="#vacancy">Вакансия</a>
+      <a href="#metrics">Проценты</a>
+      <a href="#fit">Матрица</a>
+      <a href="#strengths">Что подходит</a>
+      <a href="#risks">Риски</a>
+      <a href="#questions">Что уточнить</a>
+      <a href="#redflags">Флаги</a>
+      <a href="#decision">Решение</a>
+      <a href="#plan">План</a>
+      <a href="#final">Итог</a>
+    </div>
+  </nav>
+
+  <main>
+    <section id="verdict">
+      <div class="container">
+        <div class="section-head">
+          <div><div class="kicker">01 · сильное начало</div><h2>Быстрый ответ по вакансии</h2></div>
+          <p class="section-note">Это не финальное “да”, а навигация для Дарьи: смотреть ли вакансию глубже, какие условия проверить и где может быть скрытая нагрузка.</p>
+        </div>
+        <div class="grid-2">
+          <article class="card">
+            <div class="icon">✓</div>
+            <h3>Вердикт: смотреть глубже, откликаться можно</h3>
+            <p>Вакансия попадает в сильную зону Дарьи: сопровождение людей, объяснение, информирование, работа с обращениями, помощь клиенту пройти понятный путь. Отдельный плюс — <strong>без холодных звонков, продаж и дебиторки</strong>.</p>
+            <p>Но это не идеальная вакансия “по умолчанию”. Тема банкротства может быть эмоционально тяжёлой, обучение — информационно плотным, а звонки и CRM — рутинными. Поэтому решение зависит от реальных условий: сколько клиентов, какие KPI, какая поддержка наставника, какой объём звонков и есть ли право работать человеческим языком.</p>
+            <div class="callout"><strong>Решение:</strong> откликаться можно. На собеседовании главная задача Дарьи — не “понравиться работодателю”, а проверить, будет ли это сопровождение людей, а не замаскированный call-центр с высокой эмоциональной нагрузкой.</div>
+          </article>
+          <article class="card">
+            <div class="icon gold">→</div>
+            <h3>Главное условие подхода</h3>
+            <p>Вакансия будет хорошей, если Дарья получает понятную клиентскую зону: информировать, объяснять, сопровождать, помогать сориентироваться, фиксировать обращения и поддерживать клиента в процессе.</p>
+            <p>Вакансия станет тяжёлой, если внутри окажется:</p>
+            <ul class="list-coral">
+              <li>очень большой поток звонков без пауз;</li>
+              <li>строгий скрипт без живого разговора;</li>
+              <li>эмоционально тяжёлые клиенты без поддержки старших;</li>
+              <li>ответственность за результат без реальных полномочий;</li>
+              <li>партнёрская программа как скрытая продажа;</li>
+              <li>постоянная срочность в Telegram и CRM.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="vacancy">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">02 · данные вакансии</div><h2>Что известно из описания</h2></div><p class="section-note">Разбор строится по данным вакансии, которую Дарья рассматривает. Компания и условия не проверялись отдельно.</p></div>
+        <div class="grid-2">
+          <article class="card gold">
+            <h3>БАНКИРРО · менеджер по сопровождению клиентов</h3>
+            <p class="salary">80 000–110 000 ₽</p>
+            <p>До вычета налогов, выплаты два раза в месяц. Полная занятость, трудовой договор, удалённо, график 5/2 с 9:00 до 18:00, рабочий день 8 часов.</p>
+            <p><span class="tag good">без продаж</span><span class="tag good">действующие клиенты</span><span class="tag good">удалённо</span><span class="tag warn">много информации</span><span class="tag warn">звонки + Telegram + CRM</span></p>
+          </article>
+          <article class="card">
+            <h3>Ключевые обязанности</h3>
+            <ul>
+              <li>исходящие звонки закреплённым клиентам с текущим информированием по делу;</li>
+              <li>обработка входящих обращений: звонки и Telegram;</li>
+              <li>создание и обработка заявок в Битрикс24;</li>
+              <li>обработка автоматических заявок по этапам дела;</li>
+              <li>работа с партнёрской программой;</li>
+              <li>освоение сферы банкротства физических лиц через дистанционное обучение.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="metrics">
+      <div class="container">
+        <div class="section-head">
+          <div><div class="kicker">03 · проценты</div><h2>Показатели соответствия</h2></div>
+          <p class="section-note">Проценты показывают, где вакансия совпадает с картой Дарьи, а где нужна проверка условий.</p>
+        </div>
+        <div class="metric-row">
+          <div class="metric"><b>74–81%</b><span>общее соответствие вакансии</span><div class="progress"><i style="width:76%"></i></div></div>
+          <div class="metric"><b>84%</b><span>сопровождение клиентов</span><div class="progress"><i style="width:84%"></i></div></div>
+          <div class="metric"><b>88%</b><span>формат без продаж</span><div class="progress"><i style="width:88%"></i></div></div>
+          <div class="metric"><b>55%</b><span>риск перегруза звонками</span><div class="progress"><i style="width:55%"></i></div></div>
+        </div>
+        <div class="grid-4" style="margin-top:14px">
+          <div class="card"><h3>Удалёнка</h3><p><span class="tag good">78%</span></p><p>Плюс для спокойной среды, если есть ясный график и нет связи 24/7.</p></div>
+          <div class="card"><h3>График 5/2</h3><p><span class="tag warn">68%</span></p><p>Стабильно, но нужно понять плотность потока с 9 до 18.</p></div>
+          <div class="card"><h3>CRM и заявки</h3><p><span class="tag warn">62%</span></p><p>Нормально при хорошей структуре, но может стать сухой рутиной.</p></div>
+          <div class="card"><h3>Тема долгов</h3><p><span class="tag warn">58%</span></p><p>Может быть эмоционально тяжёлой: важно наличие поддержки и регламентов.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="fit">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">04 · матрица</div><h2>Матрица соответствия задач</h2></div><p class="section-note">Самая сильная часть — сопровождение и объяснение. Самая спорная — объём потока, эмоциональная нагрузка и степень скриптовости.</p></div>
+        <div class="table-wrap"><table>
+          <tr><th>Зона вакансии</th><th>Совпадение</th><th>Почему так</th><th>Что проверить</th></tr>
+          <tr><td>Сопровождение действующих клиентов</td><td><strong>84%</strong></td><td>Дарье подходит помогать человеку пройти путь, объяснять шаги и снижать тревогу.</td><td>Сколько клиентов закреплено за менеджером и какая глубина сопровождения.</td></tr>
+          <tr><td>Работа без продаж</td><td><strong>88%</strong></td><td>Снимает главный риск холодного давления и позволяет общаться через помощь.</td><td>Нет ли скрытых продаж внутри партнёрской программы и бонусов.</td></tr>
+          <tr><td>Исходящие звонки клиентам</td><td><strong>68%</strong></td><td>Подходит, если это информирование и поддержка, а не поток формальных звонков.</td><td>Норма звонков в день, средняя длительность, скрипт, контроль качества.</td></tr>
+          <tr><td>Входящие звонки и Telegram</td><td><strong>70%</strong></td><td>Живой контакт подходит, но Telegram может создавать ощущение постоянной доступности.</td><td>SLA ответов, часы связи, кто помогает при сложных обращениях.</td></tr>
+          <tr><td>Битрикс24 и обработка заявок</td><td><strong>62%</strong></td><td>Структура полезна, но сухая CRM-рутина не должна стать основной частью дня.</td><td>Сколько заявок в день, какие статусы, есть ли автоматизация и база знаний.</td></tr>
+          <tr><td>Большой объём информации в обучении</td><td><strong>64%</strong></td><td>Дарья может освоить сложную тему, если обучение структурное и есть наставник.</td><td>Срок обучения, материалы, экзамены, поддержка куратора, темп адаптации.</td></tr>
+          <tr><td>Эмоционально сложные клиенты</td><td><strong>50–60%</strong></td><td>Люди с долгами могут приходить в тревоге, стыде, раздражении или страхе.</td><td>Есть ли регламент эскалации, психологическая дистанция и поддержка старших.</td></tr>
+          <tr><td>Карьерный рост и развитие</td><td><strong>74%</strong></td><td>Может быть хорошим мотиватором, если рост связан с качеством, обучением и экспертностью.</td><td>Какая реальная траектория роста через 3–6–12 месяцев.</td></tr>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="strengths">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">05 · что подходит</div><h2>Почему вакансия может раскрывать Дарью</h2></div><p class="section-note">В лучшем варианте эта роль может стать для Дарьи клиентским сопровождением с понятным смыслом, а не продажей или хаотичной поддержкой.</p></div>
+        <div class="grid-3">
+          <article class="card"><div class="icon">🤝</div><h3>Работа с действующими клиентами</h3><p>Дарье легче включаться, когда человек уже находится в процессе и ему нужно объяснить, поддержать, провести дальше, а не “продавить” первый шаг.</p></article>
+          <article class="card"><div class="icon gold">💬</div><h3>Объяснение сложной темы</h3><p>Банкротство — сложная юридическая услуга. Дарья может быть полезна там, где нужно переводить сложное в человеческий язык.</p></article>
+          <article class="card"><div class="icon violet">🧭</div><h3>Клиентский маршрут</h3><p>Автоматические заявки по этапам дела дают структуру: можно понимать, где клиент находится и какой следующий шаг ему нужно объяснить.</p></article>
+          <article class="card"><div class="icon">🏡</div><h3>Удалённый формат</h3><p>Удалёнка может снизить лишнюю социальную нагрузку и дать более спокойную рабочую среду, если график действительно соблюдается.</p></article>
+          <article class="card"><div class="icon gold">📚</div><h3>Обучение и наставник</h3><p>Для входа в сложную сферу важны материалы, куратор и понятная адаптация. В описании это заявлено как плюс.</p></article>
+          <article class="card"><div class="icon violet">📈</div><h3>Развитие экспертизы</h3><p>Если роль не сводится к потоку звонков, Дарья может постепенно стать специалистом, который понимает процесс и умеет спокойно вести клиента.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="risks">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">06 · риски</div><h2>Что может не подойти Дарье</h2></div><p class="section-note">Риски не означают, что вакансия плохая. Это точки, которые нужно прояснить до согласия.</p></div>
+        <div class="grid-4">
+          <article class="card"><div class="icon red">!</div><h3>Поток звонков</h3><p>Если звонков слишком много, роль может стать call-центром, где нет глубины, только скорость и контроль.</p></article>
+          <article class="card"><div class="icon red">!</div><h3>Эмоциональная тяжесть</h3><p>Клиенты с долгами могут быть тревожными и напряжёнными. Дарье важно не брать их состояние на себя.</p></article>
+          <article class="card"><div class="icon red">!</div><h3>CRM-рутина</h3><p>Битрикс24 и автоматические заявки полезны, но если весь день — статусы и шаблоны, интерес может снижаться.</p></article>
+          <article class="card"><div class="icon red">!</div><h3>Скрытые продажи</h3><p>Вакансия говорит “без продаж”, но партнёрская программа и бонусы требуют уточнения: нет ли коммерческого давления.</p></article>
+        </div>
+        <div class="callout red"><strong>Главный риск:</strong> вакансия выглядит как сопровождение, но внутри может оказаться плотный поток звонков, статусов и эмоционально тяжёлых клиентов. Дарье нужно проверить не название роли, а реальный день менеджера.</div>
+      </div>
+    </section>
+
+    <section id="questions">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">07 · вопросы работодателю</div><h2>Что уточнить на собеседовании</h2></div><p class="section-note">Эти вопросы помогут Дарье понять, подходит ли не только вакансия на бумаге, но и реальный рабочий формат.</p></div>
+        <div class="grid-3">
+          <article class="card"><div class="icon">📞</div><h3>Про звонки и поток</h3><ul><li>Сколько исходящих звонков в день в среднем?</li><li>Сколько входящих обращений в день?</li><li>Есть ли норма по звонкам или SLA?</li><li>Сколько клиентов закреплено за менеджером?</li><li>Можно ли вести диалог живо или строго по скрипту?</li></ul></article>
+          <article class="card"><div class="icon gold">📚</div><h3>Про обучение</h3><ul><li>Сколько длится обучение?</li><li>Есть ли база знаний, чек-листы и примеры диалогов?</li><li>Как устроена помощь наставника?</li><li>Когда менеджер начинает работать самостоятельно?</li><li>Как проверяют готовность после обучения?</li></ul></article>
+          <article class="card"><div class="icon violet">⚖️</div><h3>Про сложные кейсы</h3><ul><li>Кто отвечает на юридически сложные вопросы?</li><li>Когда менеджер передаёт клиента юристу/куратору?</li><li>Что делать с агрессивным или тревожным клиентом?</li><li>Есть ли шаблоны объяснения этапов банкротства?</li><li>Какие ошибки в коммуникации критичны?</li></ul></article>
+          <article class="card"><div class="icon">💬</div><h3>Про Telegram и CRM</h3><ul><li>Нужно ли отвечать вне рабочего времени?</li><li>Как быстро надо отвечать в Telegram?</li><li>Сколько заявок в CRM обрабатывается за день?</li><li>Какие статусы и отчёты обязательны?</li><li>Есть ли автоматизация повторяющихся ответов?</li></ul></article>
+          <article class="card"><div class="icon gold">💰</div><h3>Про деньги и бонусы</h3><ul><li>Какая фиксированная часть зарплаты?</li><li>От чего зависят бонусы?</li><li>Что такое конкурсы и индивидуальные достижения?</li><li>Есть ли KPI, которые могут давить на общение?</li><li>Что именно означает партнёрская программа?</li></ul></article>
+          <article class="card"><div class="icon violet">🌿</div><h3>Про среду</h3><ul><li>Какой стиль руководства в отделе?</li><li>Как часто дают обратную связь?</li><li>Как помогают новичкам в первый месяц?</li><li>Что считается хорошим результатом после испытательного срока?</li><li>Какие есть возможности роста без перехода в продажи?</li></ul></article>
+        </div>
+        <div class="callout"><strong>Сильная фраза Дарьи:</strong> “Мне интересна роль сопровождения, где можно помогать клиенту разобраться и спокойно пройти процесс. Хочу уточнить реальный объём звонков, критерии результата и границы ответственности, чтобы понять, насколько формат мне подходит”.</div>
+      </div>
+    </section>
+
+    <section id="redflags">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">08 · флаги</div><h2>Зелёные, жёлтые и красные сигналы</h2></div><p class="section-note">Эта матрица помогает не решать только по зарплате, удалёнке или красивому описанию.</p></div>
+        <div class="grid-3">
+          <article class="card"><h3>Зелёные сигналы</h3><ul><li>“У нас есть наставник и понятная база знаний”.</li><li>“Продаж нет, KPI связан с качеством сопровождения”.</li><li>“Есть эскалация сложных юридических вопросов”.</li><li>“После 18:00 менеджер не обязан отвечать”.</li><li>“Мы оцениваем точность, спокойствие и качество коммуникации”.</li></ul></article>
+          <article class="card"><h3>Жёлтые сигналы</h3><ul class="list-gold"><li>“Звонков много, но все привыкают”.</li><li>“Сначала будет трудно, информации очень много”.</li><li>“Клиенты бывают разные, нужно быть стрессоустойчивой”.</li><li>“Бонусы зависят от активности и конкурсов”.</li><li>“Telegram нужно держать под контролем”.</li></ul></article>
+          <article class="card"><h3>Красные сигналы</h3><ul class="list-red"><li>“Это без продаж, но надо активно рекомендовать партнёров”.</li><li>“Главное — быстро закрывать заявки”.</li><li>“Скрипт обязателен дословно”.</li><li>“Клиенты кричат, но это нормально”.</li><li>“После работы иногда нужно отвечать, команда же сильная”.</li></ul></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="decision">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">09 · решение</div><h2>Как Дарье принять решение</h2></div><p class="section-note">Вакансия выглядит перспективно, но решение должно зависеть от ответов работодателя.</p></div>
+        <div class="table-wrap"><table>
+          <tr><th>Ситуация после собеседования</th><th>Что это значит</th><th>Решение</th><th>Следующий шаг</th></tr>
+          <tr><td>Понятный объём звонков, наставник, нет продаж, нет связи после 18:00</td><td>Роль похожа на настоящее сопровождение клиентов.</td><td><strong>Можно пробовать</strong></td><td>Согласиться на следующий этап и уточнить план адаптации.</td></tr>
+          <tr><td>Зарплата и удалёнка нравятся, но KPI и поток неясны</td><td>Высокий риск красивой упаковки без реальной ясности.</td><td><strong>Взять паузу</strong></td><td>Попросить письменно описать KPI, график, нагрузку и бонусы.</td></tr>
+          <tr><td>Много звонков, строгий скрипт, конфликты, но “без продаж”</td><td>Вероятно, роль близка к call-центру поддержки.</td><td><strong>Скорее не брать</strong></td><td>Сравнить с более тёплыми клиентскими/кураторскими вакансиями.</td></tr>
+          <tr><td>Есть рост в экспертность, обучение, качество сопровождения</td><td>Роль может стать хорошим мостом в клиентский опыт и консультационную сферу.</td><td><strong>Смотреть глубже</strong></td><td>Уточнить карьерный путь через 3–6 месяцев.</td></tr>
+        </table></div>
+        <div class="callout gold"><strong>Главный критерий:</strong> Дарье стоит идти не туда, где просто “удалёнка и нормальная зарплата”, а туда, где её способность объяснять, сопровождать и успокаивать клиента действительно считается ценностью.</div>
+      </div>
+    </section>
+
+    <section id="plan">
+      <div class="container">
+        <div class="section-head"><div><div class="kicker">10 · план</div><h2>Что сделать перед откликом и после собеседования</h2></div><p class="section-note">План помогает Дарье не потеряться в эмоциях и проверить вакансию как взрослый карьерный вариант.</p></div>
+        <div class="timeline">
+          <div class="step"><b>1</b><h3>До отклика</h3><p>Сохранить вакансию, выписать плюсы и риски, подготовить вопросы про звонки, KPI, обучение, границы Telegram и партнёрскую программу.</p></div>
+          <div class="step"><b>2</b><h3>На собеседовании</h3><p>Проверить реальный день менеджера: количество звонков, клиентов, заявок, сложных ситуаций, поддержку наставника и критерии результата.</p></div>
+          <div class="step"><b>3</b><h3>После собеседования</h3><p>Не соглашаться сразу. Сравнить ответы с зелёными/красными сигналами и решить: тестировать дальше, уточнять письменно или искать другой вариант.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="final">
+      <div class="container">
+        <div class="final">
+          <div class="final-grid">
+            <div>
+              <div class="kicker">11 · итог</div>
+              <h2>Итоговая рекомендация</h2>
+              <ul>
+                <li>Вакансия БАНКИРРО для Дарьи выглядит <strong>перспективной, но условной</strong>: совпадает тема сопровождения, объяснения, клиентского пути и формата без продаж.</li>
+                <li>Главное, что нужно проверить: объём звонков, эмоциональную сложность клиентов, KPI, работу в Telegram, партнёрскую программу и реальную поддержку наставника.</li>
+                <li>Если это спокойное сопровождение действующих клиентов с понятной базой знаний и границами — можно пробовать.</li>
+                <li>Если это поток звонков, стрессовых клиентов, CRM-гонка и скрытые продажи — лучше не брать как основной карьерный вектор.</li>
+              </ul>
+              <div class="final-line">Формула решения: “Я иду не просто на удалёнку и зарплату, а в роль, где могу спокойно сопровождать людей, объяснять сложное, держать качество общения и не разрушать себя постоянным потоком”. Если эти условия подтверждаются — вакансию стоит тестировать дальше.</div>
+            </div>
+            <div class="rings" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <section class="back-top-section" aria-label="Вернуться в начало">
+    <div class="container"><a class="back-top-button" href="#top" aria-label="Вернуться в начало карты">↑ Вернуться в начало</a></div>
+  </section>
+
+  <footer class="footer">
+    <div class="container chips">
+      <span class="chip green">Дарья · оценка вакансии</span>
+      <span class="chip gold">БАНКИРРО</span>
+      <span class="chip violet">сопровождение клиентов</span>
+      <span class="chip green">без продаж</span>
+      <span class="chip coral">проверить нагрузку</span>
+      <a class="chip" href="#top">↑ Наверх</a>
+    </div>
+  </footer>
+</div>
+<script>
+(function(){
+  document.querySelectorAll('a[href^="#"]').forEach(function(link){
+    link.addEventListener('click', function(event){
+      var href = link.getAttribute('href');
+      if(!href || href === '#') return;
+      var target = document.querySelector(href);
+      if(!target) return;
+      event.preventDefault();
+      var nav = document.querySelector('.nav-strip');
+      var offset = (nav ? nav.offsetHeight : 0) + 14;
+      var targetTop = target.getBoundingClientRect().top + window.pageYOffset;
+      var top = href === '#top' ? 0 : Math.max(targetTop - offset, 0);
+      window.scrollTo({top: top, behavior:'smooth'});
+      if(history.pushState) history.pushState(null, '', href);
+    }, {passive:false});
+  });
+})();
+</script>
+</body>
+</html>

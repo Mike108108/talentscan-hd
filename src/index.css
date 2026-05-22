@@ -5,6 +5,7 @@
 }
 
 :root {
+  /* Base palette — dark (default) */
   --bg: #0f1419;
   --bg-elevated: #1a2332;
   --bg-card: #1e2a3a;
@@ -16,6 +17,15 @@
   --border: rgba(148, 163, 184, 0.2);
   --radius: 12px;
   --shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+
+  /* Header */
+  --header-bg: rgba(15, 20, 25, 0.88);
+
+  /* Result card sections */
+  --result-section-bg: rgba(255, 255, 255, 0.04);
+  --result-section-border: rgba(201, 162, 39, 0.22);
+  --result-badge-bg: rgba(201, 162, 39, 0.14);
+
   font-family: "Manrope", system-ui, sans-serif;
   line-height: 1.6;
   color: var(--text);
@@ -23,6 +33,25 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f6fa;
+    --bg-elevated: #ffffff;
+    --bg-card: #ffffff;
+    --text: #1a2332;
+    --text-muted: #536070;
+    --accent: #9a7a10;
+    --accent-soft: rgba(154, 122, 16, 0.1);
+    --accent-hover: #b89015;
+    --border: rgba(26, 35, 50, 0.13);
+    --shadow: 0 8px 32px rgba(0, 0, 0, 0.09);
+    --header-bg: rgba(245, 246, 250, 0.92);
+    --result-section-bg: rgba(0, 0, 0, 0.03);
+    --result-section-border: rgba(154, 122, 16, 0.2);
+    --result-badge-bg: rgba(154, 122, 16, 0.12);
+  }
 }
 
 html {

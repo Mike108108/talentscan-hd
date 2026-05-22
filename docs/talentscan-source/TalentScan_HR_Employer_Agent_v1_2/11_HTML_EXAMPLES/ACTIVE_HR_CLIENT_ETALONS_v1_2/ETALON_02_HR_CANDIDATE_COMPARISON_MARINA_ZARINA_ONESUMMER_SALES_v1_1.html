@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TalentScan — Сравнение кандидатов — Марина и Зарина × OneSummer</title>
+<style>
+:root{
+  --bg:#070b1f;
+  --bg2:#10164a;
+  --text:#f7f9ff;
+  --soft:#e1e8ff;
+  --muted:#b6c1d9;
+  --line:rgba(255,255,255,.16);
+  --line2:rgba(255,255,255,.23);
+  --card:rgba(255,255,255,.078);
+  --card2:rgba(255,255,255,.115);
+  --coral:#ff746b;
+  --coral2:#ffa08a;
+  --gold:#f0b84e;
+  --gold2:#ffe096;
+  --violet:#8f6bff;
+  --violet2:#ccbaff;
+  --cyan:#70d7ff;
+  --green:#72e4c7;
+  --green2:#a9f8df;
+  --red:#ff6469;
+  --shadow:0 24px 80px rgba(0,0,0,.35);
+  --radius-xl:34px;
+  --radius-lg:24px;
+  --radius-md:18px;
+  --max:1220px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:calc(var(--fixed-offset,74px) + 14px)}
+body{
+  margin:0; min-height:100vh; color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+  background:
+    radial-gradient(circle at 13% 7%, rgba(255,116,107,.23), transparent 28%),
+    radial-gradient(circle at 84% 5%, rgba(112,215,255,.28), transparent 34%),
+    radial-gradient(circle at 78% 45%, rgba(114,228,199,.13), transparent 28%),
+    linear-gradient(145deg, #050815 0%, #071425 42%, #12143d 100%);
+  overflow-x:hidden;
+}
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none;
+  background-image:
+    radial-gradient(circle, rgba(255,255,255,.16) 0 1px, transparent 1px),
+    radial-gradient(circle, rgba(112,215,255,.12) 0 1px, transparent 1px);
+  background-size:64px 64px,110px 110px; background-position:12px 18px,50px 80px;
+  mask-image:linear-gradient(to bottom, rgba(0,0,0,.82), transparent 92%);
+}
+a{color:inherit;text-decoration:none}
+.page{position:relative;z-index:1}
+.container{width:min(var(--max), calc(100% - 40px));margin:0 auto}
+.hero{position:relative;padding:52px 0 34px;overflow:hidden}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(320px,.92fr);gap:34px;align-items:center}
+.eyebrow{display:inline-flex;gap:10px;align-items:center;padding:9px 14px;border:1px solid rgba(255,255,255,.18);border-radius:999px;color:var(--soft);background:rgba(255,255,255,.07);backdrop-filter:blur(18px);font-size:14px;letter-spacing:.02em}
+.eyebrow .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 18px var(--green)}
+h1{margin:22px 0 0;font-size:clamp(40px,6.4vw,72px);line-height:.95;letter-spacing:-.055em}
+.names{margin-top:10px;font-size:clamp(32px,5.5vw,64px);line-height:1;font-weight:850;letter-spacing:-.052em;color:var(--green);text-shadow:0 0 36px rgba(112,228,199,.22)}
+.subtitle{margin:18px 0 0;color:var(--muted);font-size:clamp(17px,2vw,22px);max-width:820px;line-height:1.45}
+.identity-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:24px}
+.identity-card{padding:17px 18px;border:1px solid var(--line);border-radius:var(--radius-md);background:rgba(255,255,255,.075);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.identity-card b{display:block;font-size:20px;margin-bottom:6px;color:var(--gold2)}
+.identity-card span{color:var(--muted);line-height:1.42;font-size:14px}
+.formula-card{margin-top:22px;position:relative;padding:24px 26px;border-radius:var(--radius-lg);border:1px solid rgba(255,255,255,.18);background:linear-gradient(135deg,rgba(255,116,107,.18),rgba(112,215,255,.13) 52%,rgba(112,228,199,.13)),rgba(255,255,255,.07);box-shadow:0 0 0 1px rgba(255,255,255,.04),0 24px 70px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.12);overflow:hidden}
+.formula-card::after{content:"";position:absolute;width:220px;height:220px;right:-80px;bottom:-110px;background:radial-gradient(circle,rgba(112,228,199,.34),transparent 65%);pointer-events:none}
+.formula-card p{position:relative;z-index:1;margin:0;font-size:clamp(21px,2.4vw,29px);line-height:1.25;font-weight:750;letter-spacing:-.025em}
+.formula-card em{color:var(--green2);font-style:normal}
+.formula-card strong{color:var(--coral2)}
+.hero-vis{position:relative;min-height:430px;border:1px solid rgba(255,255,255,.17);border-radius:var(--radius-xl);background:radial-gradient(circle at 24% 18%,rgba(255,116,107,.25),transparent 31%),radial-gradient(circle at 74% 22%,rgba(112,215,255,.21),transparent 29%),rgba(255,255,255,.07);box-shadow:var(--shadow);overflow:hidden}
+.hero-vis::before{content:"";position:absolute;inset:18px;border-radius:28px;border:1px solid rgba(255,255,255,.12);background:linear-gradient(145deg,rgba(255,255,255,.08),rgba(255,255,255,.025));}
+.split-score{position:absolute;left:28px;right:28px;top:34px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;z-index:2}
+.score-box{padding:18px;border-radius:26px;border:1px solid rgba(255,255,255,.14);background:rgba(8,12,38,.76);backdrop-filter:blur(18px);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.score-box b{display:block;font-size:16px;color:#fff}
+.score-box .num{display:block;font-size:42px;font-weight:850;letter-spacing:-.06em;line-height:1;margin-top:8px}
+.score-box .meta{display:block;margin-top:6px;color:var(--muted);font-size:13px;line-height:1.35}
+.badge-row{position:absolute;left:28px;right:28px;top:176px;display:flex;gap:10px;flex-wrap:wrap;z-index:2}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:9px 11px;border-radius:999px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.075);color:var(--soft);font-size:13px}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 14px rgba(114,228,199,.5)}
+.mini-stack{position:absolute;left:28px;right:28px;bottom:26px;display:grid;gap:12px;z-index:2}
+.mini-card{padding:16px;border-radius:22px;border:1px solid rgba(255,255,255,.14);background:rgba(8,12,38,.76);backdrop-filter:blur(18px);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.mini-card b{display:block;color:#fff;font-size:16px}
+.mini-card span{display:block;color:var(--muted);font-size:13px;line-height:1.35;margin-top:5px}
+.nav-strip{position:sticky;top:0;z-index:1200;padding:12px 0;background:linear-gradient(to bottom,rgba(5,8,21,.94),rgba(5,8,21,.74));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08);box-shadow:0 14px 34px rgba(0,0,0,.18);transform:translate3d(0,0,0)}
+.nav-scroll{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}.nav-scroll::-webkit-scrollbar{display:none}
+.nav-scroll a,.chip{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:11px 14px;border-radius:999px;color:var(--soft);border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.075);font-size:14px;white-space:nowrap;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.nav-scroll a:hover{border-color:rgba(112,228,199,.55);color:white}.nav-scroll a.active{border-color:rgba(114,228,199,.6);background:rgba(114,228,199,.13);color:#fff}
+main{padding:24px 0 70px}
+section{margin:22px 0;scroll-margin-top:calc(var(--fixed-offset,74px) + 18px)}
+.section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:16px}
+.section-kicker{color:var(--green2);font-weight:750;font-size:13px;text-transform:uppercase;letter-spacing:.11em}
+.section-head h2{margin:6px 0 0;font-size:clamp(28px,3.5vw,42px);line-height:1.05;letter-spacing:-.04em}
+.section-head p{margin:0;color:var(--muted);max-width:560px;line-height:1.45}
+.grid{display:grid;gap:16px}
+.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.grid.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+.card{border:1px solid var(--line);border-radius:var(--radius-lg);background:rgba(255,255,255,.074);box-shadow:0 18px 58px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.08);padding:22px;overflow:hidden}
+.card.highlight{background:linear-gradient(135deg,rgba(114,228,199,.13),rgba(255,116,107,.09)),rgba(255,255,255,.078);border-color:rgba(114,228,199,.25)}
+.card.warning{background:linear-gradient(135deg,rgba(255,116,107,.16),rgba(240,184,78,.08)),rgba(255,255,255,.074);border-color:rgba(255,116,107,.28)}
+.card.marina{background:linear-gradient(135deg,rgba(112,215,255,.12),rgba(114,228,199,.10)),rgba(255,255,255,.078);border-color:rgba(112,215,255,.26)}
+.card.zarina{background:linear-gradient(135deg,rgba(143,107,255,.16),rgba(255,184,78,.08)),rgba(255,255,255,.074);border-color:rgba(143,107,255,.28)}
+.card h3{margin:0 0 9px;font-size:22px;line-height:1.12;letter-spacing:-.025em}
+.card h4{margin:0 0 9px;font-size:18px;color:var(--gold2)}
+.card p{margin:0;color:var(--muted);line-height:1.55}
+.card p+p{margin-top:10px}
+.small{font-size:13px;color:var(--muted);line-height:1.45}
+.big-number{font-size:54px;letter-spacing:-.07em;font-weight:850;color:var(--green);line-height:.95}.big-number small{font-size:18px;color:var(--muted);letter-spacing:0}
+.status{display:inline-flex;align-items:center;gap:8px;padding:8px 11px;border-radius:999px;border:1px solid rgba(114,228,199,.28);background:rgba(114,228,199,.10);color:#dfffee;font-size:13px;font-weight:650}
+.status.coral{border-color:rgba(255,116,107,.3);background:rgba(255,116,107,.11);color:#ffe0dc}
+.status.gold{border-color:rgba(240,184,78,.32);background:rgba(240,184,78,.1);color:#fff2c8}
+.status.violet{border-color:rgba(143,107,255,.35);background:rgba(143,107,255,.12);color:#ece2ff}
+.list{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.list li{position:relative;padding:13px 14px 13px 38px;border:1px solid rgba(255,255,255,.12);border-radius:16px;background:rgba(255,255,255,.055);color:var(--soft);line-height:1.45}
+.list li::before{content:"";position:absolute;left:14px;top:18px;width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 14px rgba(114,228,199,.5)}
+.list.red li::before{background:var(--coral);box-shadow:0 0 14px rgba(255,116,107,.45)}
+.list.gold li::before{background:var(--gold);box-shadow:0 0 14px rgba(240,184,78,.45)}
+.list.violet li::before{background:var(--violet);box-shadow:0 0 14px rgba(143,107,255,.45)}
+.table-wrap{overflow-x:auto;border-radius:var(--radius-lg);border:1px solid var(--line);background:rgba(255,255,255,.055)}
+table{width:100%;border-collapse:collapse;min-width:880px}
+th,td{padding:15px 16px;text-align:left;border-bottom:1px solid rgba(255,255,255,.1);vertical-align:top}
+th{color:#fff;font-size:13px;text-transform:uppercase;letter-spacing:.08em;background:rgba(255,255,255,.06)}
+td{color:var(--soft);line-height:1.45}
+.tag{display:inline-flex;align-items:center;gap:8px;padding:7px 11px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border:1px solid rgba(255,255,255,.15)}
+.tag.green{background:rgba(114,228,199,.14);border-color:rgba(114,228,199,.22);color:#dfffee}
+.tag.gold{background:rgba(240,184,78,.12);border-color:rgba(240,184,78,.25);color:#fff2c8}
+.tag.red{background:rgba(255,116,107,.12);border-color:rgba(255,116,107,.25);color:#ffe0dc}
+.tag.violet{background:rgba(143,107,255,.12);border-color:rgba(143,107,255,.28);color:#efe7ff}
+.tag.cyan{background:rgba(112,215,255,.12);border-color:rgba(112,215,255,.24);color:#d8f6ff}
+.quote{position:relative;padding:22px 24px 22px 64px;border-radius:var(--radius-lg);border:1px solid rgba(112,228,199,.24);background:rgba(114,228,199,.09);color:#effff9;line-height:1.55;box-shadow:0 18px 55px rgba(0,0,0,.16)}
+.quote::before{content:"“";position:absolute;left:22px;top:4px;font-size:64px;line-height:1;color:rgba(169,248,223,.7)}
+.quote small{display:block;margin-top:10px;color:var(--muted)}
+.score-line{display:grid;grid-template-columns:180px minmax(120px,1fr) 52px;gap:12px;align-items:center;margin-top:14px}
+.score-line:first-of-type{margin-top:0}
+.score-line b{font-size:14px;color:#fff;font-weight:650}
+.bar{height:12px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden;border:1px solid rgba(255,255,255,.07)}
+.bar span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--green),var(--cyan))}
+.bar.gold span{background:linear-gradient(90deg,var(--gold),#ffd887)}
+.bar.coral span{background:linear-gradient(90deg,var(--coral),#ffb2a1)}
+.bar.violet span{background:linear-gradient(90deg,var(--violet),#d2c2ff)}
+.compare-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:stretch}
+.vs-card{display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:22px;background:rgba(255,255,255,.06);font-size:28px;font-weight:850;color:var(--gold2);padding:12px;min-width:74px}
+.kpi-band{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpi-card{padding:16px;border-radius:20px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06)}
+.kpi-card b{display:block;font-size:14px;color:var(--muted);font-weight:600;margin-bottom:8px}
+.kpi-card span{display:block;font-size:30px;line-height:1;font-weight:850;letter-spacing:-.05em}
+.link-list{display:grid;gap:10px}
+.link-list a{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:#fff}
+.link-list small{color:var(--muted)}
+.footer-note{padding:22px;border-radius:22px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.055);color:var(--muted);line-height:1.55}
+.back-top{display:inline-flex;align-items:center;gap:10px;margin-top:22px;padding:12px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);color:#fff}
+@media (max-width: 1080px){
+  .hero-grid,.grid.two,.grid.three,.grid.four,.kpi-band,.compare-grid{grid-template-columns:1fr}
+  .compare-grid{gap:16px}
+  .vs-card{min-height:64px}
+  .identity-row{grid-template-columns:1fr}
+  .hero-vis{min-height:540px}
+  .split-score{grid-template-columns:1fr;top:28px}
+  .badge-row{top:240px}
+  .mini-stack{bottom:24px}
+}
+@media (max-width: 760px){
+  .container{width:min(var(--max), calc(100% - 24px))}
+  .hero{padding-top:34px}
+  h1{font-size:clamp(34px,11vw,54px)}
+  .names{font-size:clamp(28px,9vw,44px)}
+  .hero-vis{min-height:580px}
+  .score-line{grid-template-columns:1fr;gap:6px}
+  .badge-row{top:252px}
+  main{padding-bottom:56px}
+}
+
+
+/* v1.1 client fix: верхний сравнительный блок больше не использует абсолютную раскладку,
+   поэтому карточки, бейджи и выводы не накладываются друг на друга на узких экранах. */
+.hero-vis{
+  min-height:auto !important;
+  display:grid !important;
+  gap:14px !important;
+  align-content:start !important;
+  padding:28px !important;
+}
+.hero-vis::before{z-index:0;}
+.hero-vis > *{position:relative !important; z-index:2 !important;}
+.split-score{
+  left:auto !important;
+  right:auto !important;
+  top:auto !important;
+  display:grid !important;
+  grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  gap:14px !important;
+}
+.badge-row{
+  left:auto !important;
+  right:auto !important;
+  top:auto !important;
+  display:flex !important;
+  gap:10px !important;
+  flex-wrap:wrap !important;
+}
+.mini-stack{
+  left:auto !important;
+  right:auto !important;
+  bottom:auto !important;
+  display:grid !important;
+  gap:12px !important;
+}
+@media (max-width: 1080px){
+  .hero-vis{min-height:auto !important;}
+  .split-score{grid-template-columns:1fr !important;}
+  .badge-row{top:auto !important;}
+  .mini-stack{bottom:auto !important;}
+}
+@media (max-width: 760px){
+  .hero-vis{min-height:auto !important; padding:18px !important; border-radius:26px !important;}
+  .score-box{border-radius:22px;}
+  .score-box .num{font-size:38px;}
+}
+
+</style>
+</head>
+<body>
+<div class="page">
+<header class="hero" id="top">
+  <div class="container hero-grid">
+    <div>
+      <div class="eyebrow"><span class="dot"></span> TalentScan · HR / Employer · сравнение кандидатов</div>
+      <h1>Одна роль.</h1>
+      <div class="names">Марина × Зарина</div>
+      <p class="subtitle">Сравнительная HR-карточка для работодателя: <strong>OneSummer</strong>, вакансия <strong>менеджер по продажам в сфере туризма</strong>. Цель — быстро понять, кого вести в следующий этап, какие риски проверить и как привязать решение к реальному формату продаж компании.</p>
+      <div class="identity-row">
+        <div class="identity-card"><b>Компания</b><span>OneSummer — мини-отели и виллы для тематических групповых туров: фитнес, йога, танцы, психология, бизнес и другие направления.</span></div>
+        <div class="identity-card"><b>Роль</b><span>Удалённый менеджер по продажам: привлекать учителей и организаторов, продавать локации и сопровождение, вести CRM и клиента по всей сделке.</span></div>
+        <div class="identity-card"><b>Для кого</b><span>Для HR, предпринимателя или руководителя продаж. Карточка не выносит приговор, а помогает принять решение: кого тестировать, как интервьюировать и как адаптировать.</span></div>
+      </div>
+      <div class="formula-card">
+        <p><em>Короткая формула:</em> для OneSummer важен не просто “харизматичный продавец”, а человек, который умеет <strong>строить доверие с преподавателями и организаторами</strong>, объяснять ценность локации и сопровождения, дожимать сделку без потери качества контакта и при этом держать <strong>CRM, follow-up и удалённую дисциплину</strong>.</p>
+      </div>
+    </div>
+    <aside class="hero-vis" aria-label="Быстрый сравнительный вывод">
+      <div class="split-score">
+        <div class="score-box">
+          <b>Марина</b>
+          <span class="num">81%</span>
+          <span class="meta">Приоритет №1, если нужен более зрелый full-cycle менеджер под консультационные и партнёрские продажи.</span>
+        </div>
+        <div class="score-box">
+          <b>Зарина</b>
+          <span class="num" style="color:var(--gold2)">77%</span>
+          <span class="meta">Сильный финалист, если нужен быстрый контакт, лёгкость входа и тёплое развитие отношений с клиентом.</span>
+        </div>
+      </div>
+      <div class="badge-row">
+        <span class="pill"><i></i> обе — в следующий этап</span>
+        <span class="pill"><i></i> Марина — выше по зрелости</span>
+        <span class="pill"><i></i> Зарина — сильнее в лёгком входе</span>
+        <span class="pill"><i></i> CRM и дожим проверять у обеих</span>
+      </div>
+      <div class="mini-stack">
+        <div class="mini-card"><b>Главный вывод</b><span>Если нужен один кандидат на универсальную роль менеджера по продажам OneSummer, приоритет сейчас у Марины. Если можно вести двух финалистов, Зарину тоже стоит оставить в воронке — особенно если важны тёплый контакт и работа с экспертной аудиторией.</span></div>
+        <div class="mini-card"><b>Критическая развилка</b><span>Финальное решение зависит от того, что в OneSummer важнее прямо сейчас: полный цикл с дисциплиной и дожимом или первичный контакт, доверие и развитие отношений с преподавателями.</span></div>
+      </div>
+    </aside>
+  </div>
+</header>
+
+<nav class="nav-strip" aria-label="Навигация по сравнительной HR-карточке">
+  <div class="container nav-scroll">
+    <a href="#quick">Вывод</a>
+    <a href="#company">Компания</a>
+    <a href="#vacancy">Вакансия</a>
+    <a href="#compare">Сравнение</a>
+    <a href="#profiles">Профили</a>
+    <a href="#strengths">Сильные</a>
+    <a href="#risks">Риски</a>
+    <a href="#interview">Интервью</a>
+    <a href="#tests">Тестовое</a>
+    <a href="#decision">Решение</a>
+  </div>
+</nav>
+
+<main>
+  <section id="quick">
+    <div class="container">
+      <div class="section-head"><div><div class="section-kicker">01 · быстрый HR-вывод</div><h2>Обеих стоит смотреть глубже, но с разной логикой</h2></div><p>Этот блок должен дать работодателю решение за 20–30 секунд: кого вести дальше, под какую задачу и где основные зоны проверки.</p></div>
+      <div class="grid three">
+        <div class="card marina">
+          <span class="status">Марина</span>
+          <h3 style="margin-top:14px">Приоритетный кандидат на универсальную full-cycle роль</h3>
+          <p>Марина выглядит сильнее там, где нужен более зрелый цикл: доверительный контакт, объяснение ценности, удержание структуры сделки и способность не только понравиться клиенту, но и довести его до решения.</p>
+        </div>
+        <div class="card zarina">
+          <span class="status violet">Зарина</span>
+          <h3 style="margin-top:14px">Сильный финалист под тёплый контакт и развитие отношений</h3>
+          <p>Зарина выглядит особенно интересной для мягкого входа в контакт, установления симпатии и работы с аудиторией, где важна лёгкость, естественность и “человеческое ощущение” от общения.</p>
+        </div>
+        <div class="card warning">
+          <span class="status coral">Что ещё нельзя считать решённым</span>
+          <h3 style="margin-top:14px">Нужны интервью, ролевая продажа и CRM-проверка</h3>
+          <p>У обеих кандидатов финальная оценка зависит от того, как они держат процесс: follow-up, возражения, самоорганизацию на удалёнке и рутину в CRM.</p>
+        </div>
+      </div>
+      <div class="grid two" style="margin-top:16px">
+        <div class="quote">Для OneSummer это не просто “продажа тура”. Это продажа доверия, локации и партнёрского формата для преподавателя, который ведёт с собой группу. Поэтому сильнее выглядит кандидат, который умеет соединить <strong>контакт + ценность + процесс</strong>.<small>Предварительный приоритет: Марина — если нужен один основной кандидат. Зарина — сохранять в финальном пуле и обязательно проверять практикой.</small></div>
+        <div class="card">
+          <h3>Рекомендованный следующий шаг для HR</h3>
+          <ul class="list">
+            <li>Обеих позвать на следующий этап: структурированное интервью + ролевая продажа + мини-задание по CRM.</li>
+            <li>Сравнивать не по общему впечатлению, а по 4 вещам: контакт, ценность, дожим, дисциплина процесса.</li>
+            <li>Если нужен один оффер — сначала тестировать Марину как основного кандидата, Зарину как сильный резерв/второй вариант.</li>
+            <li>Если компания готова строить связку из двух продавцов, можно рассмотреть разделение функций: Марина — ближе к full-cycle, Зарина — ближе к первичному прогреву и тёплому развитию клиента.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="company">
+    <div class="container">
+      <div class="section-head"><div><div class="section-kicker">02 · контекст компании</div><h2>Что важно знать HR про OneSummer, чтобы не ошибиться в оценке</h2></div><p>Сильная HR-карточка должна учитывать не только человека, но и реальный продукт, клиента и бизнес-модель компании.</p></div>
+      <div class="grid two">
+        <div class="card highlight">
+          <h3>OneSummer в одном предложении</h3>
+          <p>Компания владеет мини-отелями и локациями для тематических групповых туров на Мальдивах, Шри-Ланке, Бали, в России, Грузии и других направлениях, помогая преподавателям и организаторам проводить выездные туры под ключ.</p>
+          <div class="kpi-band" style="margin-top:16px">
+            <div class="kpi-card"><b>Опыт</b><span>9+ лет</span></div>
+            <div class="kpi-card"><b>Туристы</b><span>4000+</span></div>
+            <div class="kpi-card"><b>Текущие локации</b><span>5+</span></div>
+            <div class="kpi-card"><b>План расширения</b><span>8 стран</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Кто клиенты</h3>
+          <ul class="list">
+            <li>Йога-преподаватели, фитнес-тренеры, танцевальные и спортивные школы.</li>
+            <li>Психологи, блогеры и организаторы со своей аудиторией.</li>
+            <li>Люди, которые делают выездные мероприятия для своих учеников и клиентов.</li>
+            <li>Аудитория, которой важны не только условия проживания, но и атмосфера, безопасность, сервис и поддержка организации тура.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="grid two" style="margin-top:16px">
+        <div class="card">
+          <h3>Что на самом деле продаёт компания</h3>
+          <p>Сотрудник продаёт не просто “номер в отеле” и не обычный турпакет. Он продаёт организатору возможность провести тур на готовой локации с условиями для проживания, тренировок, отдыха и набора группы.</p>
+          <p>Дополнительная ценность — сопровождение по всей цепочке: программа, сайт, реклама, набор участников, организация и встреча на локации.</p>
+        </div>
+        <div class="card warning">
+          <h3>Что это значит для найма</h3>
+          <ul class="list red">
+            <li>Нужен продавец, который понимает экспертную аудиторию и умеет говорить с преподавателем или организатором как с партнёром, а не как с случайным туристом.</li>
+            <li>Важна консультативная продажа и доверие: клиент принимает решение не за 30 секунд.</li>
+            <li>Нужна способность держать долгий follow-up и не терять лидов между касаниями.</li>
+            <li>CRM и удалённая самоорганизация — не “дополнение”, а часть результата.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h3>Сайты компании</h3>
+        <div class="link-list" style="margin-top:12px">
+          <a href="https://onesummertours.com" target="_blank" rel="noopener noreferrer"><span><b>onesummertours.com</b><br><small>О виллах, мини-отелях и локациях компании</small></span><span>↗</span></a>
+          <a href="https://onesummertravel.com" target="_blank" rel="noopener noreferrer"><span><b>onesummertravel.com</b><br><small>О тематических турах и аудитории клиентов</small></span><span>↗</span></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="vacancy">
+    <div class="container">
+      <div class="section-head"><div><div class="section-kicker">03 · контекст вакансии</div><h2>Что работодатель реально ищет в этой роли</h2></div><p>Без понимания роли сравнение кандидатов быстро становится расплывчатым. Здесь зафиксирована прикладная модель вакансии.</p></div>
+      <div class="grid two">
+        <div class="card highlight">
+          <h3>Основные условия</h3>
+          <ul class="list">
+            <li>Менеджер по продажам в сфере туризма.</li>
+            <li>Доход: 100 000–300 000 ₽ на руки, оклад + KPI.</li>
+            <li>Опыт: 1–3 года.</li>
+            <li>Удалённо, 5/2, 8 часов, полная занятость.</li>
+            <li>Внутреннее обучение, курсы, возможность путешествовать по локациям.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Задачи роли</h3>
+          <ul class="list gold">
+            <li>Продавать учителям и организаторам туры/локации OneSummer.</li>
+            <li>Объяснять ценность локации, формата тура и сопровождения компании.</li>
+            <li>Вести клиента и отчётность в CRM-системе.</li>
+            <li>Держать связь с клиентом на всех этапах сделки.</li>
+            <li>Работать через телефонные переговоры, консультативные и тёплые продажи.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="grid two" style="margin-top:16px">
+        <div class="card">
+          <h3>Ключевые навыки, которые реально критичны</h3>
+          <div class="score-line"><b>Контакт и доверие</b><div class="bar"><span style="width:92%"></span></div><span>высоко</span></div>
+          <div class="score-line"><b>Консультативная продажа</b><div class="bar"><span style="width:89%"></span></div><span>высоко</span></div>
+          <div class="score-line"><b>Работа с экспертной аудиторией</b><div class="bar gold"><span style="width:84%"></span></div><span>важно</span></div>
+          <div class="score-line"><b>Follow-up и дожим</b><div class="bar gold"><span style="width:82%"></span></div><span>важно</span></div>
+          <div class="score-line"><b>CRM и дисциплина</b><div class="bar coral"><span style="width:80%"></span></div><span>критично</span></div>
+          <div class="score-line"><b>Удалённая самоорганизация</b><div class="bar coral"><span style="width:78%"></span></div><span>критично</span></div>
+        </div>
+        <div class="card warning">
+          <h3>Что важно уточнить до оффера</h3>
+          <ul class="list red">
+            <li>Доля холодных и тёплых касаний: это радикально меняет профиль идеального кандидата.</li>
+            <li>Длина цикла сделки: быстрый отклик или партнёрский диалог на несколько касаний.</li>
+            <li>Какой KPI основной: количество назначений, договоров, броней, выручка, конверсия.</li>
+            <li>Насколько жёстко ведётся CRM: ежедневные отчёты, темп follow-up, стандарты записи контактов.</li>
+            <li>Есть ли у роли компонент “аккаунтинга” после продажи или это чисто первый цикл.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="compare">
+    <div class="container">
+      <div class="section-head"><div><div class="section-kicker">04 · прямое сравнение</div><h2>Кто как совпадает с задачами роли</h2></div><p>Сравнение ниже — не про “кто лучше вообще”, а про конкретную вакансию OneSummer и реальный рабочий контекст.</p></div>
+      <div class="compare-grid">
+        <div class="card marina">
+          <span class="status">Марина · общий профиль</span>
+          <h3 style="margin-top:12px">Более зрелая full-cycle логика</h3>
+          <p>Сильнее выглядит там, где нужно удерживать доверие, выдерживать диалог, объяснять ценность и доводить отношения с клиентом до решения.</p>
+        </div>
+        <div class="vs-card">VS</div>
+        <div class="card zarina">
+          <span class="status violet">Зарина · общий профиль</span>
+          <h3 style="margin-top:12px">Более лёгкий вход и естественный контакт</h3>
+          <p>Сильнее выглядит там, где важно быстро расположить к себе, создать симпатию и удержать тёплую человеческую линию общения.</p>
+        </div>
+      </div>
+      <div class="table-wrap" style="margin-top:16px">
+        <table>
+          <thead>
+            <tr>
+              <th>Критерий</th>
+              <th>Вес для роли</th>
+              <th>Марина</th>
+              <th>Зарина</th>
+              <th>Комментарий для HR</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Установление доверия</td><td><span class="tag green">высокий</span></td><td>85%</td><td>87%</td><td>Зарина чуть легче входит в контакт; Марина может быть чуть спокойнее, но глубже удерживает разговор.</td></tr>
+            <tr><td>Выявление потребности</td><td><span class="tag green">высокий</span></td><td>84%</td><td>79%</td><td>Марина выглядит сильнее в более зрелом ведении беседы и уточнении запроса клиента.</td></tr>
+            <tr><td>Объяснение ценности продукта</td><td><span class="tag green">высокий</span></td><td>83%</td><td>78%</td><td>Для OneSummer это важно: нужно продавать не просто поездку, а формат и поддержку тура.</td></tr>
+            <tr><td>Работа с возражениями</td><td><span class="tag gold">средне-высокий</span></td><td>76%</td><td>70%</td><td>Обеих нужно проверять практикой; у Марины чуть выше потенциал выдержать диалог и дожим без ухода в поверхностный контакт.</td></tr>
+            <tr><td>Follow-up и удержание клиента</td><td><span class="tag gold">средне-высокий</span></td><td>81%</td><td>73%</td><td>Марина выглядит устойчивее для цикла из нескольких касаний; Зарине важно проверить, не теряет ли она ритм после первого яркого контакта.</td></tr>
+            <tr><td>CRM и отчётность</td><td><span class="tag red">критично</span></td><td>74%</td><td>66%</td><td>Это зона проверки для обеих, но у Зарины риск выше: нужно отдельно смотреть дисциплину процесса и регулярность.</td></tr>
+            <tr><td>Удалённая самоорганизация</td><td><span class="tag red">критично</span></td><td>78%</td><td>70%</td><td>Марина выглядит более надёжной ставкой на удалённый full-time режим; Зарине лучше показать понятную рамку и контрольные точки.</td></tr>
+            <tr><td>Совпадение с аудиторией учителей и организаторов</td><td><span class="tag green">высокий</span></td><td>82%</td><td>84%</td><td>Обе потенциально подходят. Зарина может быстрее “зацепить” человека, Марина — глубже удержать ценность и решение.</td></tr>
+            <tr><td><b>Итоговое соответствие роли</b></td><td><span class="tag violet">итог</span></td><td><b>81%</b></td><td><b>77%</b></td><td>Разрыв не критический. Марина — основной приоритет, Зарина — сильный альтернативный/резервный кандидат.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="profiles">
+    <div class="container">
+      <div class="section-head"><div><div class="section-kicker">05 · профили кандидатов</div><h2>Как каждая кандидатка, вероятно, будет работать внутри команды</h2></div><p>Этот блок объясняет рабочее поведение простым языком: как кандидат будет продавать, вести клиента и взаимодействовать с руководителем.</p></div>
+      <div class="grid two">
+        <div class="card marina">
+          <span class="status">Марина</span>
+          <h3>Какой рабочий стиль вероятнее всего</h3>
+          <p>Марина выглядит как кандидат с более зрелой, взрослой манерой продаж: не только создать симпатию, но и выдержать цикл сделки, не потеряв уважение клиента и внутреннюю опору.</p>
+          <p>Её сильный сценарий — продажи, где нужно слушать, объяснять, подбирать аргументы под запрос, сопровождать решение и возвращать клиента в диалог после паузы.</p>
+          <p>Для удалённой роли это плюс: на неё проще опираться в full-cycle формате, если есть понятные правила, воронка и обратная связь.</p>
+        </div>
+        <div class="card zarina">
+          <span class="status violet">Зарина</span>
+          <h3>Какой рабочий стиль вероятнее всего</h3>
+          <p>Зарина выглядит как кандидат с более естественным, лёгким и быстро располагающим стилем коммуникации. Её сильная сторона — быстро создать контакт и ощущение живого, приятного общения.</p>
+          <p>Она может хорошо зайти в роли, где важны первичное касание, разогрев клиента, тёплая вовлечённость и работа с аудиторией, для которой важна симпатия к человеку, а не только логика предложения.</p>
+          <p>При этом для full-cycle удалённой роли ей особенно важно проверить устойчивость: как она ведёт рутину, follow-up и CRM после первого удачного контакта.</p>
+        </div>
+      </div>
+      <div class="grid two" style="margin-top:16px">
+        <div class="card">
+          <h3>Когда сильнее Марина</h3>
+          <ul class="list">
+            <li>Если нужен один продавец, который тянет большую часть цикла сам.</li>
+            <li>Если много follow-up, повторных касаний и объяснения сложной ценности.</li>
+            <li>Если руководителю важнее предсказуемость, зрелость и управляемость на удалёнке.</li>
+            <li>Если в роли важен не только первый контакт, но и дожим до сделки.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Когда особенно интересна Зарина</h3>
+          <ul class="list violet">
+            <li>Если компании нужен сильный человеческий контакт уже с первых минут разговора.</li>
+            <li>Если сегмент клиентов чувствителен к тону, симпатии, лёгкости и атмосферности общения.</li>
+            <li>Если в роли высока доля тёплых лидов и задача — быстро оживить диалог.</li>
+            <li>Если компанию интересует не только один продавец, а потенциально связка “первичный контакт + full-cycle”.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="strengths">
+    <div class="container">
+      <div class="section-head"><div><div class="section-kicker">06 · сильные стороны</div><h2>За что можно брать в работу каждую кандидатуру</h2></div><p>Здесь не общая психология, а именно то, что может дать пользу OneSummer в продажах.</p></div>
+      <div class="grid two">
+        <div class="card marina">
+          <h3>Сильные стороны Марины</h3>
+          <ul class="list">
+            <li>Способность вести более зрелый и содержательный диалог с клиентом.</li>
+            <li>Хороший потенциал для консультативной продажи и объяснения сложной ценности.</li>
+            <li>Более надёжный прогноз на full-cycle процесс и удалённую структуру.</li>
+            <li>Лучше подходит на роль, где есть follow-up, CRM и необходимость доводить до решения.</li>
+            <li>Вероятно, легче выдержит продажи не только “на эмоции”, но и на ответственности за результат.</li>
+          </ul>
+        </div>
+        <div class="card zarina">
+          <h3>Сильные стороны Зарины</h3>
+          <ul class="list violet">
+            <li>Быстрый человеческий контакт и ощущение лёгкого входа в общение.</li>
+            <li>Хороший потенциал под тёплые продажи, работу с симпатией и атмосферой.</li>
+            <li>Может понравиться аудитории учителей и организаторов, которым важно “с кем я еду”.</li>
+            <li>Вероятно, сильна в оживлении лида, первом касании и мягком прогреве.</li>
+            <li>Может быть хорошим активом в сегменте, где продажа начинается с отношений, а не с прямого дожима.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="risks">
+    <div class="container">
+      <div class="section-head"><div><div class="section-kicker">07 · риски</div><h2>Что может пойти не так и что HR обязан проверить</h2></div><p>Сильный HR-анализ нужен не для идеализации кандидата, а для снижения риска ошибочного найма.</p></div>
+      <div class="grid two">
+        <div class="card warning">
+          <span class="status coral">Марина · риски</span>
+          <h3>Что проверить до оффера</h3>
+          <ul class="list red">
+            <li>Не уходит ли она в слишком мягкую или длинную коммуникацию там, где нужен конкретный дожим.</li>
+            <li>Как она ведёт CRM и темп касаний: делает ли follow-up вовремя и системно.</li>
+            <li>Как реагирует на повторяющиеся отказы и есть ли у неё запас устойчивости.</li>
+            <li>Насколько ей подходит уровень энергии и темп именно этой команды.</li>
+          </ul>
+        </div>
+        <div class="card warning">
+          <span class="status coral">Зарина · риски</span>
+          <h3>Что проверить до оффера</h3>
+          <ul class="list red">
+            <li>Не ограничивается ли её сила в основном первым контактом без устойчивого продолжения сделки.</li>
+            <li>Как она ведёт рутину: CRM, записи, повторные касания, дисциплину удалённого графика.</li>
+            <li>Насколько уверенно и спокойно она ведёт возражения и дожим, когда клиент сомневается.</li>
+            <li>Не будет ли у неё скачка “яркий старт — слабое удержание процесса”.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h3>Главный риск ошибки HR в этом кейсе</h3>
+        <p>Ошибиться можно двумя способами: <strong>взять более “приятного в общении” кандидата и недооценить процессную часть</strong>, либо наоборот — взять более “надёжного” кандидата, но не проверить, насколько он умеет быстро оживить и зацепить аудиторию преподавателей.</p>
+        <p>Поэтому здесь нельзя решать только по впечатлению от интервью. Нужна короткая практическая проверка.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="interview">
+    <div class="container">
+      <div class="section-head"><div><div class="section-kicker">08 · интервью</div><h2>Какие вопросы помогут развести Марину и Зарину по делу, а не по симпатии</h2></div><p>Вопросы ниже проверяют именно различия, важные для этой роли: зрелость цикла, доверие, дожим и дисциплина процесса.</p></div>
+      <div class="grid two">
+        <div class="card">
+          <h3>Общие вопросы для обеих</h3>
+          <ul class="list gold">
+            <li>Как вы продаёте организатору/преподавателю продукт, где важно не просто “купить”, а доверить вам свою группу?</li>
+            <li>Что вы делаете после первого удачного разговора, если клиент сказал: “Мне интересно, я подумаю”?</li>
+            <li>Как вы ведёте CRM и почему это важно лично для вас?</li>
+            <li>Что для вас сложнее: первый контакт, выявление потребности, возражения или дожим? Почему?</li>
+            <li>Как вы работаете удалённо, когда рядом нет постоянного контроля руководителя?</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Разводящие вопросы</h3>
+          <ul class="list">
+            <li><b>Для Марины:</b> приведите пример, когда сделка шла долго и клиент несколько раз откладывал решение. Что вы делали между касаниями?</li>
+            <li><b>Для Марины:</b> как вы понимаете, когда клиента уже пора мягко, но конкретно вести к решению?</li>
+            <li><b>Для Зарины:</b> как вы удерживаете интерес клиента после первого сильного контакта?</li>
+            <li><b>Для Зарины:</b> что вы делаете, чтобы не терять дисциплину в CRM и повторных касаниях?</li>
+            <li><b>Для обеих:</b> продайте нам в двух минутах идею тура на нашей локации для йога-преподавателя со своей аудиторией.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tests">
+    <div class="container">
+      <div class="section-head"><div><div class="section-kicker">09 · тестовое задание</div><h2>Практика, которая быстро покажет реальную разницу между кандидатами</h2></div><p>Тест должен проверять не только харизму, но и ход сделки, понимание ценности и процессную дисциплину.</p></div>
+      <div class="grid three">
+        <div class="card highlight">
+          <h3>Тест 1 · ролевая продажа</h3>
+          <p>Сценарий: йога-преподаватель думает, стоит ли провести тур на Шри-Ланке с OneSummer. Нужно выявить его запрос, объяснить ценность и довести до следующего шага.</p>
+          <p class="small">Смотреть: контакт, структура, вопросы, аргументация, переход к следующему шагу.</p>
+        </div>
+        <div class="card">
+          <h3>Тест 2 · follow-up</h3>
+          <p>Сценарий: после первого разговора клиент написал “спасибо, я подумаю”. Нужно составить 3 следующих касания: сообщение, звонок, аргумент/ценность.</p>
+          <p class="small">Смотреть: зрелость дожима, отсутствие давления, логика сопровождения клиента.</p>
+        </div>
+        <div class="card warning">
+          <h3>Тест 3 · CRM и удалёнка</h3>
+          <p>Дать 6 лидов на разных стадиях и попросить кандидатку: расставить приоритеты, описать следующие действия и показать, как она бы это вела в CRM.</p>
+          <p class="small">Смотреть: дисциплина, структурность, приоритизация, понимание воронки.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="decision">
+    <div class="container">
+      <div class="section-head"><div><div class="section-kicker">10 · финальное HR-решение</div><h2>Кого рекомендовать дальше и в каком статусе</h2></div><p>Финальный блок должен дать работодателю сценарий действия, а не абстрактную картинку.</p></div>
+      <div class="grid two">
+        <div class="card highlight">
+          <span class="status">Рекомендация №1</span>
+          <h3 style="margin-top:14px">Марина — основной приоритет на следующий этап</h3>
+          <p>Если нужен один продавец на вакансию “менеджер по продажам OneSummer”, Марина сейчас выглядит более безопасной и сильной ставкой. У неё выше прогноз по зрелому ведению сделки, удержанию цикла и процессной устойчивости на удалёнке.</p>
+          <p>Это не значит, что её нужно брать без проверки. Но именно её стоит тестировать как наиболее вероятного кандидата на универсальную роль.</p>
+        </div>
+        <div class="card zarina">
+          <span class="status violet">Рекомендация №2</span>
+          <h3 style="margin-top:14px">Зарина — сильный финалист / резерв / возможный второй оффер</h3>
+          <p>Зарину не стоит отсекать. Её имеет смысл оставить в финальном пуле, потому что для аудитории учителей и организаторов её лёгкость контакта и тёплая коммуникация могут оказаться очень ценными.</p>
+          <p>Но до оффера её нужно особенно тщательно проверять на CRM, follow-up и способность доводить диалог до конкретного следующего шага.</p>
+        </div>
+      </div>
+      <div class="grid two" style="margin-top:16px">
+        <div class="card">
+          <h3>Если нужен один кандидат</h3>
+          <ul class="list">
+            <li>Первой вести в офферную воронку Марину.</li>
+            <li>Зарину держать как сильный альтернативный вариант, если по практике она покажет лучший реальный коннект с аудиторией.</li>
+            <li>Финальный выбор делать по ролику/ролевой продаже и CRM-кейсу, а не по симпатии на интервью.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Если компания готова расширять команду</h3>
+          <ul class="list violet">
+            <li>Марину можно рассматривать ближе к full-cycle и более зрелому ведению клиента.</li>
+            <li>Зарину — под тёплый вход, коммуникацию, оживление первичных диалогов и работу с более чувствительной аудиторией.</li>
+            <li>Такое разведение ролей имеет смысл только если компания реально готова разделить функции, а не ждать одинакового результата от обеих.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-note" style="margin-top:16px">
+        <b style="color:#fff;display:block;margin-bottom:8px">Важно:</b>
+        Эта карточка создана для HR и работодателя и является инструментом предварительного отбора. Она не заменяет интервью, тестовое задание, проверку опыта, рекомендации и оценку реальных KPI. Часть выводов основана на сопоставлении данных о кандидатах с контекстом вакансии и бизнес-моделью OneSummer, поэтому финальный вывод должен подтверждаться практикой.
+      </div>
+      <a href="#top" class="back-top">↑ Вернуться в начало</a>
+    </div>
+  </section>
+</main>
+</div>
+<script>
+(function(){
+  const nav = document.querySelector('.nav-strip');
+  const setOffset = () => {
+    const h = nav ? nav.getBoundingClientRect().height : 74;
+    document.documentElement.style.setProperty('--fixed-offset', h + 'px');
+  };
+  setOffset();
+  window.addEventListener('resize', setOffset);
+
+  const links = Array.from(document.querySelectorAll('.nav-scroll a'));
+  const sections = links.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(entry=>{
+      if(entry.isIntersecting){
+        const id = '#' + entry.target.id;
+        links.forEach(link => link.classList.toggle('active', link.getAttribute('href') === id));
+      }
+    });
+  }, {rootMargin:'-35% 0px -55% 0px', threshold:0.01});
+  sections.forEach(sec => io.observe(sec));
+})();
+</script>
+</body>
+</html>

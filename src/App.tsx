@@ -186,7 +186,10 @@ export default function App() {
     setAuthError("");
     setAuthMessage("");
 
-    const { error } = await supabase.auth.signInWithOtp({ email: authEmail });
+    const { error } = await supabase.auth.signInWithOtp({
+      email: authEmail,
+      options: { emailRedirectTo: window.location.origin },
+    });
     setAuthSending(false);
     if (error) {
       setAuthError(`Ошибка входа: ${error.message}`);

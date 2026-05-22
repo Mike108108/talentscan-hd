@@ -62,20 +62,31 @@ function renderSectionBody(body: string): JSX.Element {
   return <>{nodes}</>;
 }
 
-export const testRaveChart = {
-  type: "Проектор",
-  profile: "1/3",
-  authority: "Селезёночный",
-  personalitySun: "18.1",
-  personalityEarth: "17.1",
-  designSun: "52.3",
-  designEarth: "58.3",
-} as const;
+type AnalysisType = "talent_map" | "current_role" | "vacancy_assessment";
+
+const ANALYSIS_OPTIONS: {
+  id: AnalysisType;
+  icon: string;
+  label: string;
+}[] = [
+  { id: "talent_map", icon: "✨", label: "Карта талантов" },
+  { id: "current_role", icon: "🧭", label: "Моя текущая роль" },
+  { id: "vacancy_assessment", icon: "📄", label: "Оценить вакансию" },
+];
+
+const RESULT_HEADING: Record<AnalysisType, string> = {
+  talent_map: "Ваша карта талантов",
+  current_role: "Анализ текущей роли",
+  vacancy_assessment: "Оценка вакансии",
+};
 
 type BirthFormData = {
   birthDate: string;
   birthTime: string;
   birthCity: string;
+  analysisType: AnalysisType;
+  currentRoleDescription?: string;
+  vacancyDescription?: string;
 };
 
 type TalentReportResponse = {
@@ -84,9 +95,7 @@ type TalentReportResponse = {
   source?: string;
 };
 
-async function generateTalentReport(
-  formData: BirthFormData,
-): Promise<string> {
+async function generateTalentReport(formData: BirthFormData): Promise<string> {
   try {
     const response = await fetch("/.netlify/functions/talent-report", {
       method: "POST",
@@ -150,20 +159,44 @@ export default function App() {
   const [birthDate, setBirthDate] = useState("");
   const [birthTime, setBirthTime] = useState("");
   const [birthCity, setBirthCity] = useState("");
+  const [analysisType, setAnalysisType] = useState<AnalysisType>("talent_map");
+  const [currentRoleDescription, setCurrentRoleDescription] = useState("");
+  const [vacancyDescription, setVacancyDescription] = useState("");
   const [showResult, setShowResult] = useState(false);
   const [talentReport, setTalentReport] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [resultHeading, setResultHeading] = useState(RESULT_HEADING["talent_map"]);
+  const [validationError, setValidationError] = useState("");
+
+  function validate(): boolean {
+    if (analysisType === "current_role" && !currentRoleDescription.trim()) {
+      setValidationError("Опишите вашу текущую роль, чтобы продолжить.");
+      return false;
+    }
+    if (analysisType === "vacancy_assessment" && !vacancyDescription.trim()) {
+      setValidationError("Вставьте описание вакансии, чтобы продолжить.");
+      return false;
+    }
+    setValidationError("");
+    return true;
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!validate()) return;
+
     setIsLoading(true);
     setShowResult(false);
+    setResultHeading(RESULT_HEADING[analysisType]);
 
     try {
       const report = await generateTalentReport({
         birthDate,
         birthTime,
         birthCity,
+        analysisType,
+        currentRoleDescription: currentRoleDescription.trim() || undefined,
+        vacancyDescription: vacancyDescription.trim() || undefined,
       });
       setTalentReport(report);
       setShowResult(true);
@@ -255,6 +288,67 @@ export default function App() {
             />
           </div>
 
+          {/* Analysis type selector */}
+          <div className="field">
+            <span className="field-label">Тип анализа</span>
+            <div className="analysis-type-grid" role="group" aria-label="Тип анализа">
+              {ANALYSIS_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`analysis-type-card${analysisType === opt.id ? " analysis-type-card--active" : ""}`}
+                  onClick={() => {
+                    setAnalysisType(opt.id);
+                    setValidationError("");
+                  }}
+                  aria-pressed={analysisType === opt.id}
+                >
+                  <span className="analysis-type-icon" aria-hidden="true">{opt.icon}</span>
+                  <span className="analysis-type-label">{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Conditional context fields */}
+          {analysisType === "current_role" && (
+            <div className="field">
+              <label htmlFor="current-role-desc">Опишите вашу текущую роль</label>
+              <textarea
+                id="current-role-desc"
+                className="field-textarea"
+                rows={4}
+                placeholder="Например: я работаю администратором в котокафе, общаюсь с гостями, слежу за порядком, решаю конфликты…"
+                value={currentRoleDescription}
+                onChange={(e) => {
+                  setCurrentRoleDescription(e.target.value);
+                  if (e.target.value.trim()) setValidationError("");
+                }}
+              />
+            </div>
+          )}
+
+          {analysisType === "vacancy_assessment" && (
+            <div className="field">
+              <label htmlFor="vacancy-desc">Вставьте описание вакансии</label>
+              <textarea
+                id="vacancy-desc"
+                className="field-textarea"
+                rows={5}
+                placeholder="Вставьте сюда текст вакансии, обязанности, условия, требования…"
+                value={vacancyDescription}
+                onChange={(e) => {
+                  setVacancyDescription(e.target.value);
+                  if (e.target.value.trim()) setValidationError("");
+                }}
+              />
+            </div>
+          )}
+
+          {validationError && (
+            <p className="form-validation-error" role="alert">{validationError}</p>
+          )}
+
           <button type="submit" className="submit-btn" disabled={isLoading}>
             {isLoading ? "Формируем отчёт…" : "Рассчитать рейв‑карту"}
           </button>
@@ -262,7 +356,7 @@ export default function App() {
 
         {showResult && (
           <section className="result" id="result" aria-live="polite">
-            <h2 className="result-heading">Ваша карта талантов</h2>
+            <h2 className="result-heading">{resultHeading}</h2>
 
             {(birthDate || birthTime || birthCity) && (
               <div className="report-badges">

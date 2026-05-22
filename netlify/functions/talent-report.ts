@@ -1,9 +1,14 @@
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
 
+type AnalysisType = "talent_map" | "current_role" | "vacancy_assessment";
+
 type BirthRequest = {
   birthDate: string;
   birthTime: string;
   birthCity: string;
+  analysisType: AnalysisType;
+  currentRoleDescription?: string;
+  vacancyDescription?: string;
 };
 
 type HdChartCoordinatesRequest = {
@@ -120,7 +125,27 @@ function parseBirthRequest(body: string | null): BirthRequest {
 
   const normalizedTime = normalizeBirthTime(birthTime);
 
-  return { birthDate, birthTime: normalizedTime, birthCity };
+  const rawAnalysisType = asString(record.analysisType ?? record.analysis_type);
+  const validTypes: AnalysisType[] = ["talent_map", "current_role", "vacancy_assessment"];
+  const analysisType: AnalysisType = validTypes.includes(rawAnalysisType as AnalysisType)
+    ? (rawAnalysisType as AnalysisType)
+    : "talent_map";
+
+  const currentRoleDescription = asString(
+    record.currentRoleDescription ?? record.current_role_description,
+  ) || undefined;
+  const vacancyDescription = asString(
+    record.vacancyDescription ?? record.vacancy_description,
+  ) || undefined;
+
+  return {
+    birthDate,
+    birthTime: normalizedTime,
+    birthCity,
+    analysisType,
+    currentRoleDescription,
+    vacancyDescription,
+  };
 }
 
 function normalizeBirthTime(time: string): string {
@@ -313,23 +338,13 @@ async function fetchHumanDesignChart(
   return data;
 }
 
-function buildPrompt(chart: ChartData): string {
-  const gatesText =
-    chart.gates.length > 0 ? chart.gates.join(", ") : "не указаны";
-  const channelsText =
-    chart.channels.length > 0 ? chart.channels.join(", ") : "не указаны";
-  const definedCentersText =
-    chart.definedCenters.length > 0
-      ? chart.definedCenters.join(", ")
-      : "не указаны";
-  const undefinedCentersText =
-    chart.undefinedCenters.length > 0
-      ? chart.undefinedCenters.join(", ")
-      : "не указаны";
+function buildChartSummary(chart: ChartData): string {
+  const gatesText = chart.gates.length > 0 ? chart.gates.join(", ") : "не указаны";
+  const channelsText = chart.channels.length > 0 ? chart.channels.join(", ") : "не указаны";
+  const definedCentersText = chart.definedCenters.length > 0 ? chart.definedCenters.join(", ") : "не указаны";
+  const undefinedCentersText = chart.undefinedCenters.length > 0 ? chart.undefinedCenters.join(", ") : "не указаны";
 
-  return `Ты — эксперт по Human Design в контексте карьеры. Ниже данные рейв-карты клиента из Human Design API.
-
-Тип: ${chart.type}
+  return `Тип: ${chart.type}
 Профиль: ${chart.profile}
 Стратегия: ${chart.strategy}
 Авторитет: ${chart.authority}
@@ -337,22 +352,95 @@ function buildPrompt(chart: ChartData): string {
 Определённые центры: ${definedCentersText}
 Неопределённые центры: ${undefinedCentersText}
 Ворота: ${gatesText}
-Каналы: ${channelsText}
+Каналы: ${channelsText}`;
+}
 
-Объясни себе (внутренне), что это показатели Human Design: тип, профиль, стратегия, авторитет, центры, ворота и каналы.
+function buildPrompt(chart: ChartData, request: BirthRequest): string {
+  const chartSummary = buildChartSummary(chart);
+  const gatesText = chart.gates.length > 0 ? chart.gates.join(", ") : "не указаны";
+  const channelsText = chart.channels.length > 0 ? chart.channels.join(", ") : "не указаны";
 
-Верни ответ на русском языке строго в трёх блоках с такими заголовками (сохрани формулировки заголовков):
+  const intro = `Ты — эксперт по карьере, который использует данные Human Design как инструмент самопознания. Пиши простым русским языком, без лишних терминов. Давай практичные выводы. Используй заголовки строго в формате «...» — фронтенд разбивает отчёт по ним.
+
+Данные рейв-карты:
+${chartSummary}
+
+`;
+
+  if (request.analysisType === "current_role") {
+    const roleDesc = request.currentRoleDescription ?? "не указано";
+    return `${intro}Клиент описывает свою текущую роль:
+«${roleDesc}»
+
+Проанализируй, насколько эта роль подходит человеку с такой картой. Дай честный и практичный ответ.
+
+Верни ответ строго в пяти блоках с такими заголовками (сохрани формулировки):
+
+«Быстрый ответ по текущей роли»
+1–2 предложения: общий вывод — подходит ли эта роль человеку с такими данными.
+
+«Что подходит»
+Маркированный список: что в описанной роли хорошо совпадает с сильными сторонами человека.
+
+«Где может быть перегруз»
+Маркированный список: что в этой роли может забирать энергию или идти вразрез с природой человека.
+
+«Что изменить в условиях»
+Маркированный список из 2–3 практичных советов: как скорректировать условия работы, чтобы роль стала комфортнее.
+
+«Итоговая рекомендация»
+2–3 предложения: стоит ли оставаться в этой роли, что менять, куда двигаться дальше.
+
+Не добавляй текст вне этих пяти блоков. Не используй # заголовки.`;
+  }
+
+  if (request.analysisType === "vacancy_assessment") {
+    const vacancyDesc = request.vacancyDescription ?? "не указано";
+    return `${intro}Клиент рассматривает вакансию и хочет понять, стоит ли изучить её глубже.
+
+Описание вакансии:
+«${vacancyDesc}»
+
+Проанализируй, насколько эта вакансия подходит человеку с такой картой.
+
+Верни ответ строго в шести блоках с такими заголовками (сохрани формулировки):
+
+«Быстрый ответ по вакансии»
+1–2 предложения: общий вывод — стоит ли рассматривать эту вакансию дальше.
+
+«Где есть совпадение»
+Маркированный список: что в вакансии хорошо совпадает с природой и сильными сторонами человека.
+
+«Где есть риски»
+Маркированный список: что в вакансии может быть энергозатратным или проблемным.
+
+«Что уточнить у работодателя»
+Маркированный список из 2–4 конкретных вопросов, которые стоит задать на собеседовании.
+
+«Как преподнести себя на собеседовании»
+Маркированный список из 2–3 советов: на что делать акцент, как говорить о своих сильных сторонах.
+
+«Итоговая рекомендация»
+2–3 предложения: финальный вывод — идти или нет, и на что обратить внимание при принятии решения.
+
+Не добавляй текст вне этих шести блоков. Не используй # заголовки.`;
+  }
+
+  // Default: talent_map
+  return `${intro}Составь карьерный отчёт: карта талантов человека, его сильные стороны и подходящие направления в работе.
+
+Верни ответ строго в трёх блоках с такими заголовками (сохрани формулировки):
 
 «Лучшее направление»
 2–3 предложения: куда двигаться в карьере с учётом типа ${chart.type}, профиля ${chart.profile}, стратегии ${chart.strategy} и авторитета ${chart.authority}.
 
 «Сильные рабочие образы»
-Список из 4–6 конкретных ролей или форматов работы (маркированный список), опираясь на определённые центры, ворота (${gatesText}) и каналы (${channelsText}).
+Маркированный список из 4–6 конкретных ролей или форматов работы, опираясь на определённые центры, ворота (${gatesText}) и каналы (${channelsText}).
 
 «Как использовать»
-2–3 практичных совета, как применять эти данные в поиске работы, переговорах о роли и ежедневных решениях.
+Маркированный список из 2–3 практичных советов: как применять эти данные в поиске работы, переговорах о роли и ежедневных решениях.
 
-Не добавляй вступлений и заключений вне этих трёх блоков. Не используй markdown-заголовки с # — только указанные названия блоков в кавычках «».`;
+Не добавляй текст вне этих трёх блоков. Не используй # заголовки.`;
 }
 
 export const handler: Handler = async (
@@ -388,6 +476,7 @@ export const handler: Handler = async (
 
     const chartData = buildChartData(hdChart);
     console.log("Chart data for OpenAI:", JSON.stringify(chartData, null, 2));
+    console.log("Analysis type:", birthInput.analysisType);
 
     const openAiResponse = await fetch(
       "https://api.openai.com/v1/chat/completions",
@@ -408,7 +497,7 @@ export const handler: Handler = async (
             },
             {
               role: "user",
-              content: buildPrompt(chartData),
+              content: buildPrompt(chartData, birthInput),
             },
           ],
         }),

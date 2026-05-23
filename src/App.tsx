@@ -8,6 +8,16 @@ import {
 } from "./lib/supabase";
 
 // ---------------------------------------------------------------------------
+// Auth helpers
+// ---------------------------------------------------------------------------
+
+async function getAccessToken(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // Report rendering helpers
 // ---------------------------------------------------------------------------
 
@@ -121,10 +131,18 @@ type TalentReportResponse = {
 };
 
 async function generateTalentReport(formData: BirthFormData): Promise<string> {
+  const token = await getAccessToken();
+  if (!token) {
+    return "AUTH_ERROR:Войдите в кабинет, чтобы запустить разбор.";
+  }
+
   try {
     const response = await fetch("/.netlify/functions/talent-report", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify(formData),
     });
 
@@ -133,6 +151,9 @@ async function generateTalentReport(formData: BirthFormData): Promise<string> {
       .catch(() => null)) as TalentReportResponse | null;
 
     if (!response.ok) {
+      if (response.status === 401 || data?.source === "auth") {
+        return "AUTH_ERROR:Сессия истекла. Войдите заново.";
+      }
       if (data?.error) {
         if (data.source === "humandesign-api")
           return `Ошибка Human Design API: ${data.error}`;
@@ -272,6 +293,8 @@ export default function App() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
   const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [authSending, setAuthSending] = useState(false);
   const [authMessage, setAuthMessage] = useState("");
   const [authError, setAuthError] = useState("");
@@ -296,31 +319,57 @@ export default function App() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  async function handleMagicLink(e: FormEvent) {
+  async function handleEmailAuth(e: FormEvent) {
     e.preventDefault();
     if (!supabase) return;
     setAuthSending(true);
     setAuthError("");
     setAuthMessage("");
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email: authEmail,
-      options: { emailRedirectTo: window.location.origin },
-    });
-    setAuthSending(false);
-    if (error) {
-      setAuthError(`Ошибка входа: ${error.message}`);
+    if (authMode === "register") {
+      const { error } = await supabase.auth.signUp({
+        email: authEmail,
+        password: authPassword,
+      });
+      setAuthSending(false);
+      if (error) {
+        if (error.message.includes("already registered") || error.message.includes("already exists")) {
+          setAuthError("Аккаунт с таким email уже существует. Войдите.");
+        } else if (error.message.includes("password")) {
+          setAuthError("Пароль слишком короткий. Минимум 6 символов.");
+        } else {
+          setAuthError(`Ошибка регистрации: ${error.message}`);
+        }
+      } else {
+        setAuthMessage("Аккаунт создан. Проверьте почту для подтверждения или войдите.");
+        setAuthMode("login");
+      }
     } else {
-      setAuthMessage(`Ссылка для входа отправлена на ${authEmail}. Проверьте почту.`);
+      const { error } = await supabase.auth.signInWithPassword({
+        email: authEmail,
+        password: authPassword,
+      });
+      setAuthSending(false);
+      if (error) {
+        if (error.message.includes("Invalid login credentials") || error.message.includes("invalid")) {
+          setAuthError("Неверный email или пароль. Попробуйте ещё раз.");
+        } else if (error.message.includes("Email not confirmed")) {
+          setAuthError("Email не подтверждён. Проверьте почту и перейдите по ссылке.");
+        } else {
+          setAuthError(`Ошибка входа: ${error.message}`);
+        }
+      }
     }
   }
 
   async function handleSignOut() {
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();
-    if (error) setAuthError(`Ошибка выхода: ${error.message}`);
-    else {
+    if (error) {
+      setAuthError(`Ошибка выхода: ${error.message}`);
+    } else {
       setAuthEmail("");
+      setAuthPassword("");
       setAuthMessage("");
       setReports([]);
     }
@@ -409,6 +458,12 @@ export default function App() {
         currentRoleDescription: currentRoleDescription.trim() || undefined,
         vacancyDescription: vacancyDescription.trim() || undefined,
       });
+
+      if (report.startsWith("AUTH_ERROR:")) {
+        setSaveError(report.slice("AUTH_ERROR:".length));
+        setIsLoading(false);
+        return;
+      }
 
       setTalentReport(report);
       setResultBirthDate(birthDate);
@@ -506,70 +561,175 @@ export default function App() {
         </button>
       </header>
 
-      {/* ===== Account bar ===== */}
-      <div className="account-bar">
-        {!isSupabaseConfigured ? (
-          <p className="account-notice">Сохранение разборов временно недоступно.</p>
-        ) : authLoading ? (
-          <p className="account-notice account-notice--muted">Загрузка…</p>
-        ) : authUser ? (
-          <div className="account-logged-in">
-            <span className="account-email">{authUser.email}</span>
-            <button
-              className="account-btn account-btn--secondary"
-              onClick={handleSignOut}
-            >
-              Выйти
-            </button>
-          </div>
-        ) : (
-          <form className="account-login-form" onSubmit={handleMagicLink}>
-            <input
-              className="account-email-input"
-              type="email"
-              placeholder="your@email.com"
-              value={authEmail}
-              onChange={(e) => {
-                setAuthEmail(e.target.value);
-                setAuthError("");
-                setAuthMessage("");
-              }}
-              required
-              aria-label="Email для входа"
-            />
-            <button
-              className="account-btn account-btn--primary"
-              type="submit"
-              disabled={authSending}
-            >
-              {authSending ? "Отправляем…" : "Войти, чтобы сохранять разборы"}
-            </button>
-            {authMessage && <p className="account-message">{authMessage}</p>}
-            {authError && (
-              <p className="account-error" role="alert">
-                {authError}
+      {/* ===== Auth gate: show login screen when not authenticated ===== */}
+      {!authLoading && !authUser && (
+        <main className="auth-gate">
+          <div className="auth-gate-card">
+            <div className="auth-gate-logo">TalentScan</div>
+            <h1 className="auth-gate-title">
+              TalentScan — личный кабинет соискателя
+            </h1>
+            <p className="auth-gate-subtitle">
+              Войдите, чтобы получить доступ к карьерной карте, оценке ролей,
+              вакансиям и сохранённым разборам.
+            </p>
+
+            {!isSupabaseConfigured ? (
+              <p className="auth-gate-unavailable">
+                Авторизация временно недоступна: Supabase не настроен.
               </p>
+            ) : (
+              <>
+                <form className="auth-gate-form" onSubmit={handleEmailAuth}>
+                  <div className="auth-gate-field">
+                    <label htmlFor="gate-email" className="auth-gate-label">
+                      Email
+                    </label>
+                    <input
+                      id="gate-email"
+                      className="auth-gate-input"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={authEmail}
+                      onChange={(e) => {
+                        setAuthEmail(e.target.value);
+                        setAuthError("");
+                        setAuthMessage("");
+                      }}
+                      required
+                      autoComplete="email"
+                    />
+                  </div>
+                  <div className="auth-gate-field">
+                    <label htmlFor="gate-password" className="auth-gate-label">
+                      Пароль
+                    </label>
+                    <input
+                      id="gate-password"
+                      className="auth-gate-input"
+                      type="password"
+                      placeholder="••••••••"
+                      value={authPassword}
+                      onChange={(e) => {
+                        setAuthPassword(e.target.value);
+                        setAuthError("");
+                        setAuthMessage("");
+                      }}
+                      required
+                      autoComplete={authMode === "login" ? "current-password" : "new-password"}
+                      minLength={6}
+                    />
+                  </div>
+
+                  {authError && (
+                    <p className="auth-gate-error" role="alert">
+                      {authError}
+                    </p>
+                  )}
+                  {authMessage && (
+                    <p className="auth-gate-message">{authMessage}</p>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="auth-gate-submit"
+                    disabled={authSending}
+                  >
+                    {authSending
+                      ? "Подождите…"
+                      : authMode === "login"
+                      ? "Войти"
+                      : "Создать аккаунт"}
+                  </button>
+                </form>
+
+                <div className="auth-gate-toggle">
+                  {authMode === "login" ? (
+                    <>
+                      <span className="auth-gate-toggle-text">
+                        Нет аккаунта?
+                      </span>
+                      <button
+                        className="auth-gate-toggle-btn"
+                        onClick={() => {
+                          setAuthMode("register");
+                          setAuthError("");
+                          setAuthMessage("");
+                        }}
+                      >
+                        Создать аккаунт
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="auth-gate-toggle-text">
+                        Уже есть аккаунт?
+                      </span>
+                      <button
+                        className="auth-gate-toggle-btn"
+                        onClick={() => {
+                          setAuthMode("login");
+                          setAuthError("");
+                          setAuthMessage("");
+                        }}
+                      >
+                        Войти
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                <p className="auth-gate-hint">
+                  Кабинет хранит ваши личные разборы по Human Design. Данные
+                  доступны только вам.
+                </p>
+              </>
             )}
-          </form>
-        )}
-      </div>
+          </div>
+        </main>
+      )}
 
-      {/* ===== Cabinet navigation ===== */}
-      <nav className="cabinet-nav" aria-label="Навигация кабинета">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            className={`cabinet-tab${activeTab === tab.id ? " cabinet-tab--active" : ""}`}
-            onClick={() => setActiveTab(tab.id)}
-            aria-current={activeTab === tab.id ? "page" : undefined}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </nav>
+      {/* ===== Loading state ===== */}
+      {authLoading && (
+        <main className="auth-gate">
+          <div className="auth-gate-card auth-gate-card--loading">
+            <p className="auth-gate-loading-text">Загрузка…</p>
+          </div>
+        </main>
+      )}
 
-      {/* ===== Main content ===== */}
-      <main className="cabinet-content">
+      {/* ===== Authenticated cabinet ===== */}
+      {!authLoading && authUser && (
+        <>
+          {/* Account bar */}
+          <div className="account-bar">
+            <div className="account-logged-in">
+              <span className="account-email">{authUser.email}</span>
+              <button
+                className="account-btn account-btn--secondary"
+                onClick={handleSignOut}
+              >
+                Выйти
+              </button>
+            </div>
+          </div>
+
+          {/* Cabinet navigation */}
+          <nav className="cabinet-nav" aria-label="Навигация кабинета">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                className={`cabinet-tab${activeTab === tab.id ? " cabinet-tab--active" : ""}`}
+                onClick={() => setActiveTab(tab.id)}
+                aria-current={activeTab === tab.id ? "page" : undefined}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+
+          {/* Main content */}
+          <main className="cabinet-content">
 
         {/* ══════════════════════════════════════
             Tab: Обзор — карьерный дашборд
@@ -1129,7 +1289,9 @@ export default function App() {
             </div>
           </div>
         )}
-      </main>
+          </main>
+        </>
+      )}
 
       <footer className="footer">
         © {new Date().getFullYear()} TalentScan. Human Design для карьеры.

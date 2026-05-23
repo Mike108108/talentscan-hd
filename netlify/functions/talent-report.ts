@@ -1,4 +1,5 @@
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
+import { createClient } from "@supabase/supabase-js";
 
 type AnalysisType = "talent_map" | "current_role" | "vacancy_assessment";
 
@@ -443,6 +444,22 @@ ${chartSummary}
 Не добавляй текст вне этих трёх блоков. Не используй # заголовки.`;
 }
 
+async function verifySupabaseToken(token: string): Promise<boolean> {
+  const supabaseUrl =
+    process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
+  const supabaseAnonKey =
+    process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? "";
+
+  if (!supabaseUrl.trim() || !supabaseAnonKey.trim()) {
+    throw new Error("supabase_not_configured");
+  }
+
+  const client = createClient(supabaseUrl, supabaseAnonKey);
+  const { data, error } = await client.auth.getUser(token);
+  if (error || !data.user) return false;
+  return true;
+}
+
 export const handler: Handler = async (
   event: HandlerEvent,
   _context: HandlerContext,
@@ -451,6 +468,40 @@ export const handler: Handler = async (
     return jsonResponse(405, { error: "Разрешён только метод POST." });
   }
 
+  // ---- Auth check -----------------------------------------------------------
+  const authHeader = event.headers["authorization"] ?? event.headers["Authorization"] ?? "";
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!bearerMatch) {
+    return jsonResponse(401, {
+      error: "Требуется вход в личный кабинет.",
+      source: "auth",
+    });
+  }
+
+  const token = bearerMatch[1];
+  try {
+    const valid = await verifySupabaseToken(token);
+    if (!valid) {
+      return jsonResponse(401, {
+        error: "Требуется вход в личный кабинет.",
+        source: "auth",
+      });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg === "supabase_not_configured") {
+      return jsonResponse(500, {
+        error: "Supabase не настроен на сервере.",
+        source: "config",
+      });
+    }
+    return jsonResponse(401, {
+      error: "Требуется вход в личный кабинет.",
+      source: "auth",
+    });
+  }
+
+  // ---- Config check ---------------------------------------------------------
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return jsonResponse(500, {

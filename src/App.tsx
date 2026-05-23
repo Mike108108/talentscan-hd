@@ -153,47 +153,95 @@ async function generateTalentReport(formData: BirthFormData): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// Cabinet types & config
+// Cabinet config
 // ---------------------------------------------------------------------------
 
-type Tab = "overview" | "new-report" | "my-reports" | "data";
+type Tab =
+  | "overview"
+  | "career-map"
+  | "roles-vacancies"
+  | "new-report"
+  | "my-reports"
+  | "data";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Обзор" },
+  { id: "career-map", label: "Моя карьерная карта" },
+  { id: "roles-vacancies", label: "Роли и вакансии" },
   { id: "new-report", label: "Новый разбор" },
   { id: "my-reports", label: "Мои разборы" },
   { id: "data", label: "Данные" },
 ];
 
-const OVERVIEW_CARDS: {
+const CAREER_MAP_SECTIONS: {
   icon: string;
   title: string;
   desc: string;
-  analysisType: AnalysisType | null;
+  action?: { label: string; type: AnalysisType };
+  placeholder?: string;
 }[] = [
   {
     icon: "✨",
     title: "Карта талантов",
-    desc: "Врождённые сильные стороны и природная стратегия",
-    analysisType: "talent_map",
+    desc: "Врождённые таланты, стратегия и авторитет по Human Design",
+    action: { label: "Запустить анализ", type: "talent_map" },
   },
+  {
+    icon: "💪",
+    title: "Сильные стороны",
+    desc: "Определённые центры и их устойчивые качества",
+    placeholder: "Появится после анализа карты талантов",
+  },
+  {
+    icon: "🎯",
+    title: "Подходящие направления",
+    desc: "Карьерные треки, совместимые с вашим дизайном",
+    placeholder: "Появится после анализа карты талантов",
+  },
+  {
+    icon: "🏢",
+    title: "Рабочая среда",
+    desc: "Условия и формат работы, в которых вы раскрываетесь",
+    placeholder: "Появится после анализа карты талантов",
+  },
+  {
+    icon: "⚠️",
+    title: "Спорные направления",
+    desc: "Роли и среда, которые могут давать сопротивление",
+    placeholder: "Появится после анализа карты талантов",
+  },
+];
+
+const ROLES_SECTIONS: {
+  icon: string;
+  title: string;
+  desc: string;
+  action?: { label: string; type: AnalysisType };
+  comingSoon?: boolean;
+}[] = [
   {
     icon: "🧭",
     title: "Текущая роль",
-    desc: "Как ваша работа совпадает с вашим Human Design",
-    analysisType: "current_role",
+    desc: "Как ваша нынешняя работа совпадает с вашим дизайном",
+    action: { label: "Анализировать", type: "current_role" },
   },
   {
     icon: "📄",
     title: "Оценка вакансии",
-    desc: "Подходит ли вакансия вашему дизайну",
-    analysisType: "vacancy_assessment",
+    desc: "Вставьте описание — получите разбор совместимости",
+    action: { label: "Оценить", type: "vacancy_assessment" },
   },
   {
-    icon: "📚",
-    title: "Мои сохранённые разборы",
-    desc: "Все ваши отчёты в одном месте",
-    analysisType: null,
+    icon: "⚖️",
+    title: "Сравнение вариантов",
+    desc: "Сравните несколько вакансий по критериям дизайна",
+    comingSoon: true,
+  },
+  {
+    icon: "❓",
+    title: "Вопросы к работодателю",
+    desc: "Персональные вопросы для интервью по вашему Human Design",
+    comingSoon: true,
   },
 ];
 
@@ -431,7 +479,7 @@ export default function App() {
     }
   }
 
-  // ---- Navigate to new report with preset analysis type ----------------------
+  // ---- Navigate helpers ------------------------------------------------------
   function goToNewReport(type: AnalysisType) {
     setAnalysisType(type);
     setValidationError("");
@@ -523,42 +571,233 @@ export default function App() {
       {/* ===== Main content ===== */}
       <main className="cabinet-content">
 
-        {/* ──────────────────────────────────────
-            Tab: Обзор
-        ────────────────────────────────────── */}
+        {/* ══════════════════════════════════════
+            Tab: Обзор — карьерный дашборд
+        ══════════════════════════════════════ */}
         {activeTab === "overview" && (
           <div className="tab-screen">
-            <div className="overview-header">
-              <h1 className="overview-title">Кабинет соискателя</h1>
-              <p className="overview-subtitle">
-                Human Design для карьеры — выберите тип анализа
+
+            {/* Welcome */}
+            <div className="dash-welcome">
+              <h1 className="dash-welcome-title">Кабинет соискателя</h1>
+              <p className="dash-welcome-sub">
+                {authUser
+                  ? `Добро пожаловать, ${authUser.email}`
+                  : "Human Design для осознанных карьерных решений"}
               </p>
             </div>
-            <div className="overview-grid">
-              {OVERVIEW_CARDS.map((card) => (
+
+            {/* Quick actions */}
+            <section className="dash-section">
+              <p className="dash-section-label">Быстрые действия</p>
+              <div className="quick-actions">
                 <button
-                  key={card.title}
-                  className="overview-card"
-                  onClick={() =>
-                    card.analysisType
-                      ? goToNewReport(card.analysisType)
-                      : setActiveTab("my-reports")
-                  }
+                  className="quick-action-btn"
+                  onClick={() => goToNewReport("talent_map")}
                 >
-                  <span className="overview-card-icon" aria-hidden="true">
-                    {card.icon}
-                  </span>
-                  <span className="overview-card-title">{card.title}</span>
-                  <span className="overview-card-desc">{card.desc}</span>
+                  <span className="quick-action-icon" aria-hidden="true">✨</span>
+                  <span className="quick-action-label">Карта талантов</span>
                 </button>
+                <button
+                  className="quick-action-btn"
+                  onClick={() => goToNewReport("current_role")}
+                >
+                  <span className="quick-action-icon" aria-hidden="true">🧭</span>
+                  <span className="quick-action-label">Текущая роль</span>
+                </button>
+                <button
+                  className="quick-action-btn"
+                  onClick={() => goToNewReport("vacancy_assessment")}
+                >
+                  <span className="quick-action-icon" aria-hidden="true">📄</span>
+                  <span className="quick-action-label">Оценить вакансию</span>
+                </button>
+              </div>
+            </section>
+
+            {/* Stats + last report */}
+            <div className="dash-cards-row">
+
+              {/* Last report */}
+              <section className="dash-card dash-card--last-report">
+                <p className="dash-section-label">Последний разбор</p>
+                {!isSupabaseConfigured || !authUser ? (
+                  <div className="dash-empty">
+                    <p className="dash-empty-text">
+                      Войдите, чтобы видеть историю разборов
+                    </p>
+                    <button
+                      className="dash-link-btn"
+                      onClick={() => setActiveTab("new-report")}
+                    >
+                      Сделать первый разбор →
+                    </button>
+                  </div>
+                ) : reportsLoading ? (
+                  <p className="dash-empty-text">Загружаем…</p>
+                ) : reports.length === 0 ? (
+                  <div className="dash-empty">
+                    <p className="dash-empty-text">Разборов пока нет</p>
+                    <button
+                      className="dash-link-btn"
+                      onClick={() => setActiveTab("new-report")}
+                    >
+                      Сделать первый разбор →
+                    </button>
+                  </div>
+                ) : (
+                  <div className="dash-last-report">
+                    <span className="dash-last-report-type">
+                      {ANALYSIS_TYPE_LABEL[reports[0].analysis_type]}
+                    </span>
+                    <span className="dash-last-report-place">
+                      {reports[0].birth_place}
+                      {reports[0].birth_date ? ` · ${reports[0].birth_date}` : ""}
+                    </span>
+                    <span className="dash-last-report-date">
+                      {new Date(reports[0].created_at).toLocaleString("ru-RU", {
+                        day: "2-digit",
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </span>
+                    <div className="dash-last-report-actions">
+                      <button
+                        className="history-btn history-btn--open"
+                        onClick={() => openReport(reports[0])}
+                      >
+                        Открыть
+                      </button>
+                      <button
+                        className="dash-link-btn"
+                        onClick={() => setActiveTab("my-reports")}
+                      >
+                        Все разборы →
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              {/* Stats + next step */}
+              <div className="dash-card-stack">
+                <section className="dash-card dash-card--stat">
+                  <p className="dash-section-label">Сохранено разборов</p>
+                  <span className="dash-stat-number">
+                    {!authUser ? "—" : reportsLoading ? "…" : reports.length}
+                  </span>
+                </section>
+
+                <section className="dash-card dash-card--next-step">
+                  <p className="dash-section-label">Следующий шаг</p>
+                  {!authUser || reports.length === 0 ? (
+                    <p className="dash-next-step-text">
+                      Запустите анализ <strong>Карты талантов</strong> — это
+                      основа вашего карьерного профиля
+                    </p>
+                  ) : reports.some((r) => r.analysis_type === "talent_map") ? (
+                    <p className="dash-next-step-text">
+                      Оцените конкретную <strong>вакансию</strong> или
+                      проверьте, как меняется разбор с новыми данными
+                    </p>
+                  ) : (
+                    <p className="dash-next-step-text">
+                      Запустите анализ <strong>Карты талантов</strong> — она
+                      поможет точнее оценить роли и вакансии
+                    </p>
+                  )}
+                </section>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════
+            Tab: Моя карьерная карта
+        ══════════════════════════════════════ */}
+        {activeTab === "career-map" && (
+          <div className="tab-screen">
+            <div className="screen-header">
+              <h1 className="screen-title">Моя карьерная карта</h1>
+              <p className="screen-subtitle">
+                Личный карьерный профиль на основе Human Design
+              </p>
+            </div>
+
+            <div className="profile-sections">
+              {CAREER_MAP_SECTIONS.map((sec) => (
+                <div key={sec.title} className="profile-section">
+                  <div className="profile-section-header">
+                    <span className="profile-section-icon" aria-hidden="true">
+                      {sec.icon}
+                    </span>
+                    <div className="profile-section-meta">
+                      <span className="profile-section-title">{sec.title}</span>
+                      <span className="profile-section-desc">{sec.desc}</span>
+                    </div>
+                    {sec.action ? (
+                      <button
+                        className="profile-action-btn"
+                        onClick={() => goToNewReport(sec.action!.type)}
+                      >
+                        {sec.action.label} →
+                      </button>
+                    ) : (
+                      <span className="profile-placeholder-badge">Нет данных</span>
+                    )}
+                  </div>
+                  {sec.placeholder && (
+                    <p className="profile-section-placeholder">{sec.placeholder}</p>
+                  )}
+                </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* ──────────────────────────────────────
+        {/* ══════════════════════════════════════
+            Tab: Роли и вакансии
+        ══════════════════════════════════════ */}
+        {activeTab === "roles-vacancies" && (
+          <div className="tab-screen">
+            <div className="screen-header">
+              <h1 className="screen-title">Роли и вакансии</h1>
+              <p className="screen-subtitle">
+                Проверьте, подходит ли работа вашему Human Design
+              </p>
+            </div>
+
+            <div className="profile-sections">
+              {ROLES_SECTIONS.map((sec) => (
+                <div key={sec.title} className="profile-section">
+                  <div className="profile-section-header">
+                    <span className="profile-section-icon" aria-hidden="true">
+                      {sec.icon}
+                    </span>
+                    <div className="profile-section-meta">
+                      <span className="profile-section-title">{sec.title}</span>
+                      <span className="profile-section-desc">{sec.desc}</span>
+                    </div>
+                    {sec.action ? (
+                      <button
+                        className="profile-action-btn"
+                        onClick={() => goToNewReport(sec.action!.type)}
+                      >
+                        {sec.action.label} →
+                      </button>
+                    ) : (
+                      <span className="coming-soon-badge">В разработке</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════
             Tab: Новый разбор
-        ────────────────────────────────────── */}
+        ══════════════════════════════════════ */}
         {activeTab === "new-report" && (
           <div className="tab-screen">
             <form className="form-card" onSubmit={handleSubmit}>
@@ -752,9 +991,9 @@ export default function App() {
           </div>
         )}
 
-        {/* ──────────────────────────────────────
+        {/* ══════════════════════════════════════
             Tab: Мои разборы
-        ────────────────────────────────────── */}
+        ══════════════════════════════════════ */}
         {activeTab === "my-reports" && (
           <div className="tab-screen">
             <section className="history-section">
@@ -819,16 +1058,31 @@ export default function App() {
           </div>
         )}
 
-        {/* ──────────────────────────────────────
-            Tab: Данные
-        ────────────────────────────────────── */}
+        {/* ══════════════════════════════════════
+            Tab: Данные — центр точности профиля
+        ══════════════════════════════════════ */}
         {activeTab === "data" && (
           <div className="tab-screen">
-            <div className="data-screen">
-              <h2 className="data-heading">Мои данные</h2>
-              <p className="data-hint">
-                Профиль соискателя — в разработке. Данные пока не сохраняются.
+            <div className="screen-header">
+              <h1 className="screen-title">Данные профиля</h1>
+              <p className="screen-subtitle">
+                Точные данные рождения — основа корректного Human Design анализа
               </p>
+            </div>
+
+            <div className="data-screen">
+              <div className="data-accuracy-note">
+                <span className="data-accuracy-icon" aria-hidden="true">🎯</span>
+                <div>
+                  <p className="data-accuracy-title">Почему точность важна</p>
+                  <p className="data-accuracy-text">
+                    Разница в 1–2 часа меняет тип, авторитет и профиль.
+                    Используйте данные из свидетельства о рождении.
+                  </p>
+                </div>
+              </div>
+
+              <p className="data-section-label">Анкетные данные</p>
               <div className="data-fields-grid">
                 <div className="field">
                   <label htmlFor="data-birth-date">Дата рождения</label>
@@ -868,6 +1122,7 @@ export default function App() {
                   </select>
                 </div>
               </div>
+
               <p className="data-coming-soon">
                 🚧 Сохранение данных профиля будет доступно в следующей версии
               </p>

@@ -1,7 +1,11 @@
-import { FormEvent, useEffect, useState, type JSX } from "react";
+import { FormEvent, useCallback, useEffect, useState, type JSX } from "react";
 import "./App.css";
+import { supabase, isSupabaseConfigured, type AnalysisType, type Report } from "./lib/supabase";
 
-/** Splits report text into named sections by «Title» guillemet headers. */
+// ---------------------------------------------------------------------------
+// Report rendering helpers
+// ---------------------------------------------------------------------------
+
 function parseReportSections(text: string): Array<{ title: string; body: string }> {
   const parts = text.split(/(?=«[^»]+»)/);
   const sections: Array<{ title: string; body: string }> = [];
@@ -20,7 +24,6 @@ function parseReportSections(text: string): Array<{ title: string; body: string 
   return sections.length > 0 ? sections : [{ title: "", body: text }];
 }
 
-/** Renders section body: bullet lists, ordered lists, and plain paragraphs. */
 function renderSectionBody(body: string): JSX.Element {
   const lines = body.split("\n").map((l) => l.trim()).filter(Boolean);
   const nodes: JSX.Element[] = [];
@@ -62,13 +65,11 @@ function renderSectionBody(body: string): JSX.Element {
   return <>{nodes}</>;
 }
 
-type AnalysisType = "talent_map" | "current_role" | "vacancy_assessment";
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
-const ANALYSIS_OPTIONS: {
-  id: AnalysisType;
-  icon: string;
-  label: string;
-}[] = [
+const ANALYSIS_OPTIONS: { id: AnalysisType; icon: string; label: string }[] = [
   { id: "talent_map", icon: "✨", label: "Карта талантов" },
   { id: "current_role", icon: "🧭", label: "Моя текущая роль" },
   { id: "vacancy_assessment", icon: "📄", label: "Оценить вакансию" },
@@ -79,6 +80,16 @@ const RESULT_HEADING: Record<AnalysisType, string> = {
   current_role: "Анализ текущей роли",
   vacancy_assessment: "Оценка вакансии",
 };
+
+const ANALYSIS_TYPE_LABEL: Record<AnalysisType, string> = {
+  talent_map: "✨ Карта талантов",
+  current_role: "🧭 Текущая роль",
+  vacancy_assessment: "📄 Вакансия",
+};
+
+// ---------------------------------------------------------------------------
+// API helper
+// ---------------------------------------------------------------------------
 
 type BirthFormData = {
   birthDate: string;
@@ -103,42 +114,35 @@ async function generateTalentReport(formData: BirthFormData): Promise<string> {
       body: JSON.stringify(formData),
     });
 
-    const data = (await response.json().catch(() => null)) as
-      | TalentReportResponse
-      | null;
+    const data = (await response.json().catch(() => null)) as TalentReportResponse | null;
 
     if (!response.ok) {
       if (data?.error) {
-        if (data.source === "humandesign-api") {
-          return `Ошибка Human Design API: ${data.error}`;
-        }
-        if (data.source === "validation") {
-          return data.error;
-        }
-        if (data.source === "config") {
-          return `Настройка сервера: ${data.error}`;
-        }
+        if (data.source === "humandesign-api") return `Ошибка Human Design API: ${data.error}`;
+        if (data.source === "validation") return data.error;
+        if (data.source === "config") return `Настройка сервера: ${data.error}`;
         return data.error;
       }
-
-      if (response.status === 404) {
+      if (response.status === 404)
         return "Сервер функций недоступен. Перезапустите проект командой npm run dev.";
-      }
-
       return `Не удалось получить отчёт (код ${response.status}). Попробуйте позже.`;
     }
 
-    if (!data?.report) {
-      return "Сервер вернул неожиданный ответ. Попробуйте позже.";
-    }
-
+    if (!data?.report) return "Сервер вернул неожиданный ответ. Попробуйте позже.";
     return data.report;
   } catch {
     return "Ошибка сети. Проверьте подключение и убедитесь, что dev-сервер запущен (npm run dev).";
   }
 }
 
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
+
+type AuthUser = { id: string; email?: string };
+
 export default function App() {
+  // ---- Theme ----------------------------------------------------------------
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     const saved = localStorage.getItem("talentscan-theme");
     const initial: "dark" | "light" = saved === "light" ? "light" : "dark";
@@ -151,10 +155,61 @@ export default function App() {
     localStorage.setItem("talentscan-theme", theme);
   }, [theme]);
 
-  function toggleTheme() {
-    setTheme((t) => (t === "dark" ? "light" : "dark"));
+  // ---- Auth state -----------------------------------------------------------
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authSending, setAuthSending] = useState(false);
+  const [authMessage, setAuthMessage] = useState("");
+  const [authError, setAuthError] = useState("");
+
+  useEffect(() => {
+    if (!supabase) return;
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAuthUser(session?.user ? { id: session.user.id, email: session.user.email } : null);
+      setAuthLoading(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user ? { id: session.user.id, email: session.user.email } : null);
+      setAuthLoading(false);
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  async function handleMagicLink(e: FormEvent) {
+    e.preventDefault();
+    if (!supabase) return;
+    setAuthSending(true);
+    setAuthError("");
+    setAuthMessage("");
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email: authEmail,
+      options: { emailRedirectTo: window.location.origin },
+    });
+    setAuthSending(false);
+    if (error) {
+      setAuthError(`Ошибка входа: ${error.message}`);
+    } else {
+      setAuthMessage(`Ссылка для входа отправлена на ${authEmail}. Проверьте почту.`);
+    }
   }
 
+  async function handleSignOut() {
+    if (!supabase) return;
+    const { error } = await supabase.auth.signOut();
+    if (error) setAuthError(`Ошибка выхода: ${error.message}`);
+    else {
+      setAuthEmail("");
+      setAuthMessage("");
+      setReports([]);
+    }
+  }
+
+  // ---- Form state -----------------------------------------------------------
   const [who, setWho] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [birthTime, setBirthTime] = useState("");
@@ -162,12 +217,46 @@ export default function App() {
   const [analysisType, setAnalysisType] = useState<AnalysisType>("talent_map");
   const [currentRoleDescription, setCurrentRoleDescription] = useState("");
   const [vacancyDescription, setVacancyDescription] = useState("");
-  const [showResult, setShowResult] = useState(false);
-  const [talentReport, setTalentReport] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [resultHeading, setResultHeading] = useState(RESULT_HEADING["talent_map"]);
   const [validationError, setValidationError] = useState("");
 
+  // ---- Result state ---------------------------------------------------------
+  const [showResult, setShowResult] = useState(false);
+  const [talentReport, setTalentReport] = useState("");
+  const [resultHeading, setResultHeading] = useState(RESULT_HEADING["talent_map"]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  // ---- Reports history ------------------------------------------------------
+  const [reports, setReports] = useState<Report[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportsError, setReportsError] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const loadReports = useCallback(async () => {
+    if (!supabase || !authUser) return;
+    setReportsLoading(true);
+    setReportsError("");
+
+    const { data, error } = await supabase
+      .from("reports")
+      .select("*")
+      .eq("user_id", authUser.id)
+      .order("created_at", { ascending: false });
+
+    setReportsLoading(false);
+    if (error) {
+      setReportsError(`Не удалось загрузить историю: ${error.message}`);
+    } else {
+      setReports((data as Report[]) ?? []);
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    if (authUser) loadReports();
+    else setReports([]);
+  }, [authUser, loadReports]);
+
+  // ---- Validation -----------------------------------------------------------
   function validate(): boolean {
     if (analysisType === "current_role" && !currentRoleDescription.trim()) {
       setValidationError("Опишите вашу текущую роль, чтобы продолжить.");
@@ -181,12 +270,14 @@ export default function App() {
     return true;
   }
 
+  // ---- Submit ---------------------------------------------------------------
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!validate()) return;
 
     setIsLoading(true);
     setShowResult(false);
+    setSaveError("");
     setResultHeading(RESULT_HEADING[analysisType]);
 
     try {
@@ -201,11 +292,61 @@ export default function App() {
       setTalentReport(report);
       setShowResult(true);
       document.getElementById("result")?.scrollIntoView({ behavior: "smooth" });
+
+      // Auto-save if logged in
+      if (supabase && authUser) {
+        const { error: saveErr } = await supabase.from("reports").insert({
+          user_id: authUser.id,
+          analysis_type: analysisType,
+          person_name: null,
+          birth_date: birthDate,
+          birth_time: birthTime,
+          birth_place: birthCity,
+          current_role_description: currentRoleDescription.trim() || null,
+          vacancy_description: vacancyDescription.trim() || null,
+          result_text: report,
+          input_data: {
+            who,
+            birthDate,
+            birthTime,
+            birthCity,
+            analysisType,
+            currentRoleDescription: currentRoleDescription.trim() || null,
+            vacancyDescription: vacancyDescription.trim() || null,
+          },
+        });
+        if (saveErr) {
+          setSaveError(`Разбор сгенерирован, но не сохранился: ${saveErr.message}`);
+        } else {
+          loadReports();
+        }
+      }
     } finally {
       setIsLoading(false);
     }
   }
 
+  // ---- History actions -------------------------------------------------------
+  function openReport(r: Report) {
+    setTalentReport(r.result_text);
+    setResultHeading(RESULT_HEADING[r.analysis_type] ?? "Разбор");
+    setShowResult(true);
+    document.getElementById("result")?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  async function deleteReport(id: string) {
+    if (!supabase) return;
+    setDeletingId(id);
+    const { error } = await supabase.from("reports").delete().eq("id", id);
+    setDeletingId(null);
+    if (error) {
+      setReportsError(`Не удалось удалить разбор: ${error.message}`);
+    } else {
+      setReports((prev) => prev.filter((r) => r.id !== id));
+    }
+  }
+
+  // ---- Render ---------------------------------------------------------------
   return (
     <div className="app">
       <header className="header">
@@ -218,7 +359,7 @@ export default function App() {
         </nav>
         <button
           className="theme-toggle"
-          onClick={toggleTheme}
+          onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
           aria-label={theme === "dark" ? "Переключить на светлую тему" : "Переключить на тёмную тему"}
         >
           {theme === "dark" ? "☀️" : "🌙"}
@@ -234,6 +375,50 @@ export default function App() {
       </section>
 
       <main className="main">
+        {/* ---- Account block ------------------------------------------------ */}
+        <div className="account-block">
+          {!isSupabaseConfigured ? (
+            <p className="account-notice">
+              Сохранение разборов временно недоступно.
+            </p>
+          ) : authLoading ? (
+            <p className="account-notice account-notice--muted">Загрузка…</p>
+          ) : authUser ? (
+            <div className="account-logged-in">
+              <span className="account-email">{authUser.email}</span>
+              <button className="account-btn account-btn--secondary" onClick={handleSignOut}>
+                Выйти
+              </button>
+            </div>
+          ) : (
+            <form className="account-login-form" onSubmit={handleMagicLink}>
+              <input
+                className="account-email-input"
+                type="email"
+                placeholder="your@email.com"
+                value={authEmail}
+                onChange={(e) => {
+                  setAuthEmail(e.target.value);
+                  setAuthError("");
+                  setAuthMessage("");
+                }}
+                required
+                aria-label="Email для входа"
+              />
+              <button
+                className="account-btn account-btn--primary"
+                type="submit"
+                disabled={authSending}
+              >
+                {authSending ? "Отправляем…" : "Войти, чтобы сохранять разборы"}
+              </button>
+              {authMessage && <p className="account-message">{authMessage}</p>}
+              {authError && <p className="account-error" role="alert">{authError}</p>}
+            </form>
+          )}
+        </div>
+
+        {/* ---- Main form ----------------------------------------------------- */}
         <form className="form-card" onSubmit={handleSubmit}>
           <h2>Данные для расчёта</h2>
 
@@ -288,7 +473,6 @@ export default function App() {
             />
           </div>
 
-          {/* Analysis type selector */}
           <div className="field">
             <span className="field-label">Тип анализа</span>
             <div className="analysis-type-grid" role="group" aria-label="Тип анализа">
@@ -310,7 +494,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Conditional context fields */}
           {analysisType === "current_role" && (
             <div className="field">
               <label htmlFor="current-role-desc">Опишите вашу текущую роль</label>
@@ -354,6 +537,7 @@ export default function App() {
           </button>
         </form>
 
+        {/* ---- Result card --------------------------------------------------- */}
         {showResult && (
           <section className="result" id="result" aria-live="polite">
             <h2 className="result-heading">{resultHeading}</h2>
@@ -364,6 +548,12 @@ export default function App() {
                 {birthTime && <span className="report-badge">{birthTime}</span>}
                 {birthCity && <span className="report-badge">{birthCity}</span>}
               </div>
+            )}
+
+            {saveError && (
+              <p className="account-error" role="alert" style={{ marginBottom: "1rem" }}>
+                {saveError}
+              </p>
             )}
 
             {talentReport ? (
@@ -387,6 +577,61 @@ export default function App() {
             )}
           </section>
         )}
+
+        {/* ---- History section ---------------------------------------------- */}
+        <section className="history-section" id="history">
+          <h2 className="history-heading">Мои разборы</h2>
+
+          {!isSupabaseConfigured || !authUser ? (
+            <p className="history-hint">
+              Войдите по email, чтобы сохранять историю разборов.
+            </p>
+          ) : reportsLoading ? (
+            <p className="history-hint">Загружаем историю…</p>
+          ) : reportsError ? (
+            <p className="account-error" role="alert">{reportsError}</p>
+          ) : reports.length === 0 ? (
+            <p className="history-hint">Разборов пока нет. Сделайте первый расчёт!</p>
+          ) : (
+            <ul className="history-list">
+              {reports.map((r) => (
+                <li key={r.id} className="history-item">
+                  <div className="history-item-meta">
+                    <span className="history-item-type">{ANALYSIS_TYPE_LABEL[r.analysis_type]}</span>
+                    <span className="history-item-details">
+                      {r.birth_place && <span>{r.birth_place}</span>}
+                      {r.birth_date && <span>{r.birth_date}</span>}
+                    </span>
+                    <span className="history-item-date">
+                      {new Date(r.created_at).toLocaleString("ru-RU", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                  <div className="history-item-actions">
+                    <button
+                      className="history-btn history-btn--open"
+                      onClick={() => openReport(r)}
+                    >
+                      Открыть
+                    </button>
+                    <button
+                      className="history-btn history-btn--delete"
+                      onClick={() => deleteReport(r.id)}
+                      disabled={deletingId === r.id}
+                    >
+                      {deletingId === r.id ? "…" : "Удалить"}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </main>
 
       <section className="section-anchor" id="about">

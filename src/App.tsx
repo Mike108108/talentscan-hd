@@ -90,6 +90,32 @@ function renderSectionBody(body: string): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
+// HD Data Audit types
+// ---------------------------------------------------------------------------
+
+type HdAuditDetected = {
+  hasCenters: boolean;
+  hasGates: boolean;
+  hasChannels: boolean;
+  hasActivations: boolean;
+  hasVariables: boolean;
+  hasProfile: boolean;
+  hasType: boolean;
+  hasAuthority: boolean;
+  hasStrategy: boolean;
+  hasIncarnationCross: boolean;
+};
+
+type HdAuditResult = {
+  input: { birthDate: string; birthTime: string; birthCity: string };
+  coordinates: { lat: number; lng: number };
+  hdRaw: unknown;
+  hdTopLevelKeys: string[];
+  hdDataKeys: string[];
+  detected: HdAuditDetected;
+};
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -827,6 +853,69 @@ export default function App() {
   // ---- Profile field helper --------------------------------------------------
   function setProfileField(field: keyof UserProfile, value: string) {
     setUserProfile((prev) => ({ ...prev, [field]: value }));
+  }
+
+  // ---- HD Data Audit state ---------------------------------------------------
+  const [hdAuditLoading, setHdAuditLoading] = useState(false);
+  const [hdAuditResult, setHdAuditResult] = useState<HdAuditResult | null>(null);
+  const [hdAuditError, setHdAuditError] = useState("");
+
+  async function runHdAudit() {
+    setHdAuditLoading(true);
+    setHdAuditError("");
+    setHdAuditResult(null);
+
+    const auditDate = birthDate || userProfile.birthDate;
+    const auditTime = birthTime || userProfile.birthTime;
+    const auditCity = birthCity || userProfile.birthPlace;
+
+    if (!auditDate || !auditTime || !auditCity) {
+      setHdAuditError(
+        "Заполните дату, время и город рождения (в форме «Новый разбор» или в профиле).",
+      );
+      setHdAuditLoading(false);
+      return;
+    }
+
+    const token = await getAccessToken();
+    if (!token) {
+      setHdAuditError("Необходимо войти в кабинет.");
+      setHdAuditLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/.netlify/functions/hd-chart-debug", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          birthDate: auditDate,
+          birthTime: auditTime,
+          birthCity: auditCity,
+        }),
+      });
+
+      const data = (await response.json().catch(() => null)) as
+        | (HdAuditResult & { error?: string })
+        | null;
+
+      if (!response.ok) {
+        setHdAuditError(
+          data?.error ?? `Ошибка ${response.status}. Проверьте логи Netlify.`,
+        );
+      } else if (data) {
+        setHdAuditResult(data as HdAuditResult);
+      } else {
+        setHdAuditError("Пустой ответ от функции.");
+      }
+    } catch {
+      setHdAuditError("Сетевая ошибка. Проверьте подключение и dev-сервер.");
+    } finally {
+      setHdAuditLoading(false);
+    }
   }
 
   // ---- Profile completeness --------------------------------------------------
@@ -2127,6 +2216,118 @@ export default function App() {
                     </button>
                   </div>
                 )}
+
+                {/* ── HD Data Audit ─────────────────────────────────── */}
+                <div className="hd-audit-card">
+                  <div className="hd-audit-header">
+                    <span className="hd-audit-title">HD Data Audit</span>
+                    <span className="hd-audit-badge">dev</span>
+                  </div>
+                  <p className="hd-audit-desc">
+                    Технический режим: показывает полный JSON, который возвращает Human Design API.
+                    Используется для разработки бодиграфа и экрана «Сегодня».
+                    Данные <strong>не сохраняются</strong>.
+                  </p>
+                  <p className="hd-audit-hint">
+                    Будут использованы данные из формы «Новый разбор»; если они пустые —
+                    из профиля.{" "}
+                    {(birthDate || userProfile.birthDate) ? (
+                      <span className="hd-audit-hint-ok">
+                        ✓ {birthDate || userProfile.birthDate} ·{" "}
+                        {birthTime || userProfile.birthTime} ·{" "}
+                        {birthCity || userProfile.birthPlace}
+                      </span>
+                    ) : (
+                      <span className="hd-audit-hint-warn">
+                        Данные рождения не заполнены
+                      </span>
+                    )}
+                  </p>
+
+                  <button
+                    className="hd-audit-btn"
+                    onClick={runHdAudit}
+                    disabled={hdAuditLoading}
+                  >
+                    {hdAuditLoading
+                      ? "Запрашиваем HD API…"
+                      : "Проверить данные Human Design API"}
+                  </button>
+
+                  {hdAuditError && (
+                    <p className="hd-audit-error" role="alert">
+                      {hdAuditError}
+                    </p>
+                  )}
+
+                  {hdAuditResult && (
+                    <div className="hd-audit-result">
+                      <div className="hd-audit-section">
+                        <span className="hd-audit-section-title">Входные данные</span>
+                        <div className="hd-audit-kv-row">
+                          <span className="hd-audit-kv-key">birthDate</span>
+                          <span className="hd-audit-kv-val">{hdAuditResult.input.birthDate}</span>
+                        </div>
+                        <div className="hd-audit-kv-row">
+                          <span className="hd-audit-kv-key">birthTime</span>
+                          <span className="hd-audit-kv-val">{hdAuditResult.input.birthTime}</span>
+                        </div>
+                        <div className="hd-audit-kv-row">
+                          <span className="hd-audit-kv-key">birthCity</span>
+                          <span className="hd-audit-kv-val">{hdAuditResult.input.birthCity}</span>
+                        </div>
+                        <div className="hd-audit-kv-row">
+                          <span className="hd-audit-kv-key">coordinates</span>
+                          <span className="hd-audit-kv-val">
+                            lat {hdAuditResult.coordinates.lat} · lng {hdAuditResult.coordinates.lng}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="hd-audit-section">
+                        <span className="hd-audit-section-title">Ключи верхнего уровня</span>
+                        <p className="hd-audit-keys">
+                          {hdAuditResult.hdTopLevelKeys.join(", ") || "—"}
+                        </p>
+                      </div>
+
+                      {hdAuditResult.hdDataKeys.length > 0 && (
+                        <div className="hd-audit-section">
+                          <span className="hd-audit-section-title">
+                            Ключи внутри data / chart / bodygraph
+                          </span>
+                          <p className="hd-audit-keys">
+                            {hdAuditResult.hdDataKeys.join(", ")}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="hd-audit-section">
+                        <span className="hd-audit-section-title">Detected-флаги</span>
+                        <div className="hd-audit-flags">
+                          {(
+                            Object.entries(hdAuditResult.detected) as [string, boolean][]
+                          ).map(([key, val]) => (
+                            <span
+                              key={key}
+                              className={`hd-audit-flag${val ? " hd-audit-flag--yes" : " hd-audit-flag--no"}`}
+                            >
+                              {val ? "✓" : "✗"} {key}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="hd-audit-section">
+                        <span className="hd-audit-section-title">Полный JSON (hdRaw)</span>
+                        <pre className="hd-audit-json">
+                          {JSON.stringify(hdAuditResult.hdRaw, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {/* ── /HD Data Audit ────────────────────────────────── */}
               </>
             )}
           </div>

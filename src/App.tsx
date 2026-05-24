@@ -6,6 +6,8 @@ import {
   type AnalysisType,
   type Report,
 } from "./lib/supabase";
+import type { HdChartRecord as BgHdChartRecord } from "./components/BodyGraphViewer";
+import MyMapScreen from "./components/MyMapScreen";
 
 // ---------------------------------------------------------------------------
 // Auth helpers
@@ -197,7 +199,7 @@ const ANALYSIS_TYPE_LABEL: Record<AnalysisType, string> = {
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Обзор" },
-  { id: "career-map", label: "Моя карьерная карта" },
+  { id: "career-map", label: "Моя карта" },
   { id: "roles-vacancies", label: "Роли и вакансии" },
   { id: "ai-assistant", label: "ИИ-помощник" },
   { id: "new-report", label: "Новый разбор" },
@@ -208,45 +210,6 @@ const TABS: { id: Tab; label: string }[] = [
 // ---------------------------------------------------------------------------
 // Cabinet config
 // ---------------------------------------------------------------------------
-
-const CAREER_MAP_SECTIONS: {
-  icon: string;
-  title: string;
-  desc: string;
-  action?: { label: string; type: AnalysisType };
-  placeholder?: string;
-}[] = [
-  {
-    icon: "✨",
-    title: "Карта талантов",
-    desc: "Врождённые таланты, стратегия и авторитет по Human Design",
-    action: { label: "Запустить анализ", type: "talent_map" },
-  },
-  {
-    icon: "💪",
-    title: "Сильные стороны",
-    desc: "Определённые центры и их устойчивые качества",
-    placeholder: "Появится после анализа карты талантов",
-  },
-  {
-    icon: "🎯",
-    title: "Подходящие направления",
-    desc: "Карьерные треки, совместимые с вашим дизайном",
-    placeholder: "Появится после анализа карты талантов",
-  },
-  {
-    icon: "🏢",
-    title: "Рабочая среда",
-    desc: "Условия и формат работы, в которых вы раскрываетесь",
-    placeholder: "Появится после анализа карты талантов",
-  },
-  {
-    icon: "⚠️",
-    title: "Спорные направления",
-    desc: "Роли и среда, которые могут давать сопротивление",
-    placeholder: "Появится после анализа карты талантов",
-  },
-];
 
 const ROLES_SECTIONS: {
   icon: string;
@@ -296,30 +259,8 @@ type GeocodeSuggestion = {
   source: "nominatim";
 };
 
-type HdChartRecord = {
-  id: string;
-  user_id: string;
-  birth_date: string;
-  birth_time: string;
-  birth_time_accuracy: string | null;
-  birth_place_label: string;
-  birth_latitude: number;
-  birth_longitude: number;
-  type: string | null;
-  profile: string | null;
-  strategy: string | null;
-  authority: string | null;
-  incarnation_cross: string | null;
-  definition: string | null;
-  defined_centers: string[];
-  channels_short: string[];
-  can_render_bodygraph: boolean;
-  is_active: boolean;
-  calculated_at: string;
-  calculation_status: string;
-  calculation_error: string | null;
-  input_hash: string;
-};
+// Re-use the full HdChartRecord from BodyGraphViewer (includes normalized_chart_json etc.)
+type HdChartRecord = BgHdChartRecord;
 
 type HdChartStatus = "none" | "ok" | "outdated" | "no_coords" | "error";
 
@@ -1266,7 +1207,7 @@ export default function App() {
           </nav>
 
           {/* Main content */}
-          <main className="cabinet-content">
+          <main className={`cabinet-content${activeTab === "career-map" ? " cabinet-content--wide" : ""}`}>
 
         {/* ══════════════════════════════════════
             Tab: Обзор
@@ -1447,120 +1388,108 @@ export default function App() {
               <p className="dash-section-label">Human Design карта</p>
               {hdChartLoading ? (
                 <p className="dash-empty-text">Загрузка…</p>
-              ) : hdChart && hdChart.calculation_status === "calculated" ? (
-                <div className="hd-mini-card">
-                  <div className="hd-mini-rows">
-                    <div className="hd-mini-row">
-                      <span className="hd-mini-key">Тип</span>
-                      <span className="hd-mini-val">{hdChart.type ?? "—"}</span>
+              ) : (() => {
+                const hdStatus = getHdChartStatus(hdChart, userProfile);
+                if (hdChart && hdChart.calculation_status === "calculated") {
+                  return (
+                    <div className="hd-mini-card">
+                      <div className="hd-mini-rows">
+                        <div className="hd-mini-row">
+                          <span className="hd-mini-key">Тип</span>
+                          <span className="hd-mini-val">{hdChart.type ?? "—"}</span>
+                        </div>
+                        <div className="hd-mini-row">
+                          <span className="hd-mini-key">Профиль</span>
+                          <span className="hd-mini-val">{hdChart.profile ?? "—"}</span>
+                        </div>
+                        <div className="hd-mini-row">
+                          <span className="hd-mini-key">Стратегия</span>
+                          <span className="hd-mini-val">{hdChart.strategy ?? "—"}</span>
+                        </div>
+                        <div className="hd-mini-row">
+                          <span className="hd-mini-key">Авторитет</span>
+                          <span className="hd-mini-val">{hdChart.authority ?? "—"}</span>
+                        </div>
+                        <div className="hd-mini-row">
+                          <span className="hd-mini-key">Определённых центров</span>
+                          <span className="hd-mini-val">
+                            {Array.isArray(hdChart.defined_centers)
+                              ? hdChart.defined_centers.length
+                              : "—"}
+                          </span>
+                        </div>
+                        <div className="hd-mini-row">
+                          <span className="hd-mini-key">Каналов</span>
+                          <span className="hd-mini-val">
+                            {Array.isArray(hdChart.channels_short)
+                              ? hdChart.channels_short.length
+                              : "—"}
+                          </span>
+                        </div>
+                        <div className="hd-mini-row">
+                          <span className="hd-mini-key">Рассчитана</span>
+                          <span className="hd-mini-val">
+                            {new Date(hdChart.calculated_at).toLocaleString("ru-RU", {
+                              day: "2-digit",
+                              month: "long",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                      {hdStatus === "outdated" && (
+                        <p className="hd-mini-outdated">
+                          Данные рождения изменились — карту нужно пересчитать
+                        </p>
+                      )}
+                      <button
+                        className="dash-link-btn"
+                        onClick={() =>
+                          hdStatus === "ok"
+                            ? setActiveTab("career-map")
+                            : setActiveTab("data")
+                        }
+                      >
+                        {hdStatus === "ok"
+                          ? "Открыть карту →"
+                          : hdStatus === "outdated"
+                          ? "Пересчитать в Данных →"
+                          : "Открыть данные →"}
+                      </button>
                     </div>
-                    <div className="hd-mini-row">
-                      <span className="hd-mini-key">Профиль</span>
-                      <span className="hd-mini-val">{hdChart.profile ?? "—"}</span>
-                    </div>
-                    <div className="hd-mini-row">
-                      <span className="hd-mini-key">Стратегия</span>
-                      <span className="hd-mini-val">{hdChart.strategy ?? "—"}</span>
-                    </div>
-                    <div className="hd-mini-row">
-                      <span className="hd-mini-key">Авторитет</span>
-                      <span className="hd-mini-val">{hdChart.authority ?? "—"}</span>
-                    </div>
-                    <div className="hd-mini-row">
-                      <span className="hd-mini-key">Определённых центров</span>
-                      <span className="hd-mini-val">
-                        {Array.isArray(hdChart.defined_centers)
-                          ? hdChart.defined_centers.length
-                          : "—"}
-                      </span>
-                    </div>
-                    <div className="hd-mini-row">
-                      <span className="hd-mini-key">Каналов</span>
-                      <span className="hd-mini-val">
-                        {Array.isArray(hdChart.channels_short)
-                          ? hdChart.channels_short.length
-                          : "—"}
-                      </span>
-                    </div>
-                    <div className="hd-mini-row">
-                      <span className="hd-mini-key">Рассчитана</span>
-                      <span className="hd-mini-val">
-                        {new Date(hdChart.calculated_at).toLocaleString("ru-RU", {
-                          day: "2-digit",
-                          month: "long",
-                          year: "numeric",
-                        })}
-                      </span>
-                    </div>
+                  );
+                }
+                return (
+                  <div className="dash-empty">
+                    <p className="dash-empty-text">Карта не рассчитана</p>
+                    <button
+                      className="dash-link-btn"
+                      onClick={() => setActiveTab("data")}
+                    >
+                      Перейти в Данные →
+                    </button>
                   </div>
-                  {getHdChartStatus(hdChart, userProfile) === "outdated" && (
-                    <p className="hd-mini-outdated">
-                      Данные рождения изменились — перейдите в Данные и пересчитайте карту
-                    </p>
-                  )}
-                  <button
-                    className="dash-link-btn"
-                    onClick={() => setActiveTab("data")}
-                  >
-                    Открыть данные →
-                  </button>
-                </div>
-              ) : (
-                <div className="dash-empty">
-                  <p className="dash-empty-text">Карта не рассчитана</p>
-                  <button
-                    className="dash-link-btn"
-                    onClick={() => setActiveTab("data")}
-                  >
-                    Перейти в Данные →
-                  </button>
-                </div>
-              )}
+                );
+              })()}
             </section>
           </div>
         )}
 
         {/* ══════════════════════════════════════
-            Tab: Моя карьерная карта
+            Tab: Моя карта
         ══════════════════════════════════════ */}
         {activeTab === "career-map" && (
-          <div className="tab-screen">
-            <div className="screen-header">
-              <h1 className="screen-title">Моя карьерная карта</h1>
-              <p className="screen-subtitle">
-                Личный карьерный профиль на основе Human Design
-              </p>
-            </div>
-
-            <div className="profile-sections">
-              {CAREER_MAP_SECTIONS.map((sec) => (
-                <div key={sec.title} className="profile-section">
-                  <div className="profile-section-header">
-                    <span className="profile-section-icon" aria-hidden="true">
-                      {sec.icon}
-                    </span>
-                    <div className="profile-section-meta">
-                      <span className="profile-section-title">{sec.title}</span>
-                      <span className="profile-section-desc">{sec.desc}</span>
-                    </div>
-                    {sec.action ? (
-                      <button
-                        className="profile-action-btn"
-                        onClick={() => goToNewReport(sec.action!.type)}
-                      >
-                        {sec.action.label} →
-                      </button>
-                    ) : (
-                      <span className="profile-placeholder-badge">Нет данных</span>
-                    )}
-                  </div>
-                  {sec.placeholder && (
-                    <p className="profile-section-placeholder">{sec.placeholder}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+          <MyMapScreen
+            hdChart={hdChart}
+            hdChartStatus={getHdChartStatus(hdChart, userProfile)}
+            hdChartLoading={hdChartLoading}
+            hdChartCalculating={hdChartCalculating}
+            calculateHdChart={calculateHdChart}
+            profile={userProfile}
+            profileCompleteness={completeness}
+            onGoToData={() => setActiveTab("data")}
+            onGoToNewReport={goToNewReport}
+          />
         )}
 
         {/* ══════════════════════════════════════

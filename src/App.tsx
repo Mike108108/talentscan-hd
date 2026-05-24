@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState, type JSX } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState, type JSX } from "react";
 import "./App.css";
 import {
   supabase,
@@ -108,6 +108,12 @@ type UserProfile = {
   birthTime: string;
   birthPlace: string;
   birthTimeAccuracy: string;
+  // Geocoded birth place (coordinates)
+  birthPlaceInput: string;
+  birthPlaceLabel: string;
+  birthLatitude: number | null;
+  birthLongitude: number | null;
+  birthPlaceSource: string;
   currentCity: string;
   currentRoleTitle: string;
   currentCompanyOrSphere: string;
@@ -138,6 +144,11 @@ const EMPTY_PROFILE: UserProfile = {
   birthTime: "",
   birthPlace: "",
   birthTimeAccuracy: "",
+  birthPlaceInput: "",
+  birthPlaceLabel: "",
+  birthLatitude: null,
+  birthLongitude: null,
+  birthPlaceSource: "",
   currentCity: "",
   currentRoleTitle: "",
   currentCompanyOrSphere: "",
@@ -269,6 +280,89 @@ const ROLES_SECTIONS: {
     comingSoon: true,
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Geocode + HD chart types
+// ---------------------------------------------------------------------------
+
+type GeocodeSuggestion = {
+  id: string;
+  label: string;
+  city: string;
+  region: string;
+  country: string;
+  lat: number;
+  lng: number;
+  source: "nominatim";
+};
+
+type HdChartRecord = {
+  id: string;
+  user_id: string;
+  birth_date: string;
+  birth_time: string;
+  birth_time_accuracy: string | null;
+  birth_place_label: string;
+  birth_latitude: number;
+  birth_longitude: number;
+  type: string | null;
+  profile: string | null;
+  strategy: string | null;
+  authority: string | null;
+  incarnation_cross: string | null;
+  definition: string | null;
+  defined_centers: string[];
+  channels_short: string[];
+  can_render_bodygraph: boolean;
+  is_active: boolean;
+  calculated_at: string;
+  calculation_status: string;
+  calculation_error: string | null;
+  input_hash: string;
+};
+
+type HdChartStatus = "none" | "ok" | "outdated" | "no_coords" | "error";
+
+function getHdChartStatus(
+  chart: HdChartRecord | null,
+  profile: UserProfile,
+): HdChartStatus {
+  if (!chart) return "none";
+  if (chart.calculation_status === "error") return "error";
+  const coordsOk = !!profile.birthPlaceLabel && profile.birthLatitude !== null;
+  if (!coordsOk) return "no_coords";
+  const dateChanged = chart.birth_date !== profile.birthDate;
+  const timeChanged = chart.birth_time !== profile.birthTime;
+  const accChanged = (chart.birth_time_accuracy ?? "") !== profile.birthTimeAccuracy;
+  const labelChanged =
+    chart.birth_place_label.trim().toLowerCase() !==
+    profile.birthPlaceLabel.trim().toLowerCase();
+  const latChanged =
+    profile.birthLatitude !== null &&
+    Math.abs(chart.birth_latitude - profile.birthLatitude) > 0.0001;
+  const lngChanged =
+    profile.birthLongitude !== null &&
+    Math.abs(chart.birth_longitude - profile.birthLongitude) > 0.0001;
+  if (dateChanged || timeChanged || accChanged || labelChanged || latChanged || lngChanged) {
+    return "outdated";
+  }
+  return "ok";
+}
+
+async function searchBirthCities(q: string, token: string): Promise<GeocodeSuggestion[]> {
+  if (q.length < 2) return [];
+  try {
+    const resp = await fetch(
+      `/.netlify/functions/geocode-city?q=${encodeURIComponent(q)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!resp.ok) return [];
+    const data = (await resp.json()) as { suggestions?: GeocodeSuggestion[] };
+    return data.suggestions ?? [];
+  } catch {
+    return [];
+  }
+}
 
 // ---------------------------------------------------------------------------
 // API helper
@@ -518,6 +612,10 @@ export default function App() {
       setReports([]);
       setUserProfile(EMPTY_PROFILE);
       setProfileInitialLoaded(false);
+      setHdChart(null);
+      setHdChartError("");
+      setBirthSuggestions([]);
+      setBirthSuggestionsOpen(false);
     }
   }
 
@@ -561,6 +659,18 @@ export default function App() {
   >("idle");
   const [profileSaveError, setProfileSaveError] = useState("");
 
+  // ---- HD chart -------------------------------------------------------------
+  const [hdChart, setHdChart] = useState<HdChartRecord | null>(null);
+  const [hdChartLoading, setHdChartLoading] = useState(false);
+  const [hdChartCalculating, setHdChartCalculating] = useState(false);
+  const [hdChartError, setHdChartError] = useState("");
+
+  // ---- Birth city autocomplete (Данные tab) ---------------------------------
+  const [birthSuggestions, setBirthSuggestions] = useState<GeocodeSuggestion[]>([]);
+  const [birthSuggestionsOpen, setBirthSuggestionsOpen] = useState(false);
+  const [birthSuggestionsLoading, setBirthSuggestionsLoading] = useState(false);
+  const birthSuggestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ---- Load reports ---------------------------------------------------------
   const loadReports = useCallback(async () => {
     if (!supabase || !authUser) return;
@@ -599,12 +709,21 @@ export default function App() {
 
       if (data) {
         const pd = (data.profile_data as Record<string, string>) ?? {};
+        const rawLat = data.birth_latitude as number | null | undefined;
+        const rawLng = data.birth_longitude as number | null | undefined;
+        const storedLabel = (data.birth_place_label as string) ?? "";
         setUserProfile({
           displayName: (data.display_name as string) ?? "",
           birthDate: (data.birth_date as string) ?? "",
           birthTime: (data.birth_time as string) ?? "",
           birthPlace: (data.birth_place as string) ?? "",
           birthTimeAccuracy: (data.birth_time_accuracy as string) ?? "",
+          birthPlaceInput:
+            (data.birth_place_input as string) ?? storedLabel ?? (data.birth_place as string) ?? "",
+          birthPlaceLabel: storedLabel,
+          birthLatitude: typeof rawLat === "number" ? rawLat : null,
+          birthLongitude: typeof rawLng === "number" ? rawLng : null,
+          birthPlaceSource: (data.birth_place_source as string) ?? "",
           currentCity: pd.currentCity ?? "",
           currentRoleTitle: pd.currentRoleTitle ?? "",
           currentCompanyOrSphere: pd.currentCompanyOrSphere ?? "",
@@ -637,26 +756,53 @@ export default function App() {
     }
   }, [authUser]);
 
+  // ---- Load active HD chart -------------------------------------------------
+  const loadHdChart = useCallback(async () => {
+    if (!supabase || !authUser) return;
+    setHdChartLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("hd_charts")
+        .select("*")
+        .eq("user_id", authUser.id)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (error) {
+        console.warn("[TalentScan] Не удалось загрузить HD карту:", error.message);
+      } else {
+        setHdChart((data as HdChartRecord) ?? null);
+      }
+    } catch (e) {
+      console.warn("[TalentScan] Ошибка загрузки HD карты:", e);
+    } finally {
+      setHdChartLoading(false);
+    }
+  }, [authUser]);
+
   useEffect(() => {
     if (authUser) {
       loadReports();
       loadProfile();
+      loadHdChart();
     } else {
       setReports([]);
       setUserProfile(EMPTY_PROFILE);
       setProfileInitialLoaded(false);
+      setHdChart(null);
+      setHdChartError("");
     }
-  }, [authUser, loadReports, loadProfile]);
+  }, [authUser, loadReports, loadProfile, loadHdChart]);
 
   // Pre-fill birth fields in New Report form from profile (if form fields are empty)
   useEffect(() => {
     if (activeTab !== "new-report") return;
     if (!birthDate && userProfile.birthDate) setBirthDate(userProfile.birthDate);
     if (!birthTime && userProfile.birthTime) setBirthTime(userProfile.birthTime);
-    if (!birthCity && userProfile.birthPlace) setBirthCity(userProfile.birthPlace);
+    const preferredCity = userProfile.birthPlaceLabel || userProfile.birthPlace;
+    if (!birthCity && preferredCity) setBirthCity(preferredCity);
   // Only run when switching to the tab or when profile birth data loads
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, userProfile.birthDate, userProfile.birthTime, userProfile.birthPlace]);
+  }, [activeTab, userProfile.birthDate, userProfile.birthTime, userProfile.birthPlace, userProfile.birthPlaceLabel]);
 
   // ---- Validation -----------------------------------------------------------
   function validate(): boolean {
@@ -815,6 +961,11 @@ export default function App() {
           birth_time: userProfile.birthTime || null,
           birth_place: userProfile.birthPlace || null,
           birth_time_accuracy: userProfile.birthTimeAccuracy || null,
+          birth_place_input: userProfile.birthPlaceInput || null,
+          birth_place_label: userProfile.birthPlaceLabel || null,
+          birth_latitude: userProfile.birthLatitude,
+          birth_longitude: userProfile.birthLongitude,
+          birth_place_source: userProfile.birthPlaceSource || null,
           profile_data: profileData,
         },
         { onConflict: "user_id" },
@@ -836,6 +987,89 @@ export default function App() {
   // ---- Profile field helper --------------------------------------------------
   function setProfileField(field: keyof UserProfile, value: string) {
     setUserProfile((prev) => ({ ...prev, [field]: value }));
+  }
+
+  // ---- Calculate / recalculate HD chart ------------------------------------
+  async function calculateHdChart() {
+    if (!authUser) return;
+    setHdChartCalculating(true);
+    setHdChartError("");
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        setHdChartError("Сессия истекла. Войдите заново.");
+        return;
+      }
+      const resp = await fetch("/.netlify/functions/hd-chart-calculate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({}),
+      });
+      const data = (await resp.json().catch(() => null)) as {
+        chart?: HdChartRecord;
+        error?: string;
+        source?: string;
+      } | null;
+      if (!resp.ok) {
+        const msg = data?.error ?? `Ошибка сервера (${resp.status})`;
+        setHdChartError(msg);
+        return;
+      }
+      if (data?.chart) {
+        setHdChart(data.chart as HdChartRecord);
+      }
+    } catch {
+      setHdChartError("Ошибка сети. Попробуйте позже.");
+    } finally {
+      setHdChartCalculating(false);
+    }
+  }
+
+  // ---- Birth city autocomplete handlers (Данные tab) -----------------------
+  function handleBirthPlaceInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value;
+    // Invalidate confirmed coords when user edits the text
+    setUserProfile((prev) => ({
+      ...prev,
+      birthPlaceInput: val,
+      birthPlaceLabel: "",
+      birthLatitude: null,
+      birthLongitude: null,
+      birthPlaceSource: "",
+    }));
+    setBirthSuggestionsOpen(false);
+    setBirthSuggestions([]);
+
+    if (birthSuggestTimerRef.current) clearTimeout(birthSuggestTimerRef.current);
+    if (val.trim().length < 2) return;
+
+    birthSuggestTimerRef.current = setTimeout(async () => {
+      setBirthSuggestionsLoading(true);
+      const token = await getAccessToken();
+      if (!token) { setBirthSuggestionsLoading(false); return; }
+      const results = await searchBirthCities(val.trim(), token);
+      setBirthSuggestions(results);
+      setBirthSuggestionsOpen(results.length > 0);
+      setBirthSuggestionsLoading(false);
+    }, 400);
+  }
+
+  function handleBirthPlaceSelect(suggestion: GeocodeSuggestion) {
+    setUserProfile((prev) => ({
+      ...prev,
+      birthPlaceInput: suggestion.label,
+      birthPlaceLabel: suggestion.label,
+      birthLatitude: suggestion.lat,
+      birthLongitude: suggestion.lng,
+      birthPlaceSource: suggestion.source,
+      // keep birth_place in sync for legacy report pre-fill
+      birthPlace: suggestion.city || suggestion.label,
+    }));
+    setBirthSuggestions([]);
+    setBirthSuggestionsOpen(false);
   }
 
   // ---- Profile completeness --------------------------------------------------
@@ -1206,6 +1440,82 @@ export default function App() {
                   Заполнить данные →
                 </button>
               </div>
+            </section>
+
+            {/* HD mini-card */}
+            <section className="dash-card dash-card--hd-mini">
+              <p className="dash-section-label">Human Design карта</p>
+              {hdChartLoading ? (
+                <p className="dash-empty-text">Загрузка…</p>
+              ) : hdChart && hdChart.calculation_status === "calculated" ? (
+                <div className="hd-mini-card">
+                  <div className="hd-mini-rows">
+                    <div className="hd-mini-row">
+                      <span className="hd-mini-key">Тип</span>
+                      <span className="hd-mini-val">{hdChart.type ?? "—"}</span>
+                    </div>
+                    <div className="hd-mini-row">
+                      <span className="hd-mini-key">Профиль</span>
+                      <span className="hd-mini-val">{hdChart.profile ?? "—"}</span>
+                    </div>
+                    <div className="hd-mini-row">
+                      <span className="hd-mini-key">Стратегия</span>
+                      <span className="hd-mini-val">{hdChart.strategy ?? "—"}</span>
+                    </div>
+                    <div className="hd-mini-row">
+                      <span className="hd-mini-key">Авторитет</span>
+                      <span className="hd-mini-val">{hdChart.authority ?? "—"}</span>
+                    </div>
+                    <div className="hd-mini-row">
+                      <span className="hd-mini-key">Определённых центров</span>
+                      <span className="hd-mini-val">
+                        {Array.isArray(hdChart.defined_centers)
+                          ? hdChart.defined_centers.length
+                          : "—"}
+                      </span>
+                    </div>
+                    <div className="hd-mini-row">
+                      <span className="hd-mini-key">Каналов</span>
+                      <span className="hd-mini-val">
+                        {Array.isArray(hdChart.channels_short)
+                          ? hdChart.channels_short.length
+                          : "—"}
+                      </span>
+                    </div>
+                    <div className="hd-mini-row">
+                      <span className="hd-mini-key">Рассчитана</span>
+                      <span className="hd-mini-val">
+                        {new Date(hdChart.calculated_at).toLocaleString("ru-RU", {
+                          day: "2-digit",
+                          month: "long",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                  {getHdChartStatus(hdChart, userProfile) === "outdated" && (
+                    <p className="hd-mini-outdated">
+                      Данные рождения изменились — перейдите в Данные и пересчитайте карту
+                    </p>
+                  )}
+                  <button
+                    className="dash-link-btn"
+                    onClick={() => setActiveTab("data")}
+                  >
+                    Открыть данные →
+                  </button>
+                </div>
+              ) : (
+                <div className="dash-empty">
+                  <p className="dash-empty-text">Карта не рассчитана</p>
+                  <button
+                    className="dash-link-btn"
+                    onClick={() => setActiveTab("data")}
+                  >
+                    Перейти в Данные →
+                  </button>
+                </div>
+              )}
             </section>
           </div>
         )}
@@ -1813,13 +2123,52 @@ export default function App() {
                     </div>
                     <div className="field">
                       <label htmlFor="pf-birth-place">Город рождения</label>
-                      <input
-                        id="pf-birth-place"
-                        type="text"
-                        placeholder="Например, Москва"
-                        value={userProfile.birthPlace}
-                        onChange={(e) => setProfileField("birthPlace", e.target.value)}
-                      />
+                      <div className="autocomplete-wrap">
+                        <input
+                          id="pf-birth-place"
+                          type="text"
+                          placeholder="Начните вводить город…"
+                          value={userProfile.birthPlaceInput}
+                          onChange={handleBirthPlaceInput}
+                          onBlur={() =>
+                            setTimeout(() => setBirthSuggestionsOpen(false), 150)
+                          }
+                          autoComplete="off"
+                          aria-autocomplete="list"
+                          aria-expanded={birthSuggestionsOpen}
+                          aria-controls="birth-suggestions"
+                        />
+                        {birthSuggestionsLoading && (
+                          <span className="autocomplete-spinner" aria-hidden="true">⏳</span>
+                        )}
+                        {birthSuggestionsOpen && birthSuggestions.length > 0 && (
+                          <ul
+                            id="birth-suggestions"
+                            className="autocomplete-dropdown"
+                            role="listbox"
+                          >
+                            {birthSuggestions.map((s) => (
+                              <li
+                                key={s.id}
+                                role="option"
+                                className="autocomplete-option"
+                                onMouseDown={() => handleBirthPlaceSelect(s)}
+                              >
+                                {s.label}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      {userProfile.birthPlaceLabel ? (
+                        <p className="autocomplete-confirmed">
+                          ✓ {userProfile.birthLatitude?.toFixed(4)}, {userProfile.birthLongitude?.toFixed(4)}
+                        </p>
+                      ) : userProfile.birthPlaceInput.trim().length > 0 ? (
+                        <p className="autocomplete-warning">
+                          Выберите город из подсказки — только тогда доступен расчёт карты
+                        </p>
+                      ) : null}
                     </div>
                     <div className="field">
                       <label htmlFor="pf-birth-time-accuracy">Точность времени</label>
@@ -2112,6 +2461,71 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+
+                {/* HD chart status */}
+                {isSupabaseConfigured && (
+                  <div className="hd-chart-status-block">
+                    <div className="pf-section-title">
+                      <span aria-hidden="true">🔮</span> Human Design карта
+                    </div>
+                    {hdChartLoading ? (
+                      <p className="hd-chart-status hd-chart-status--loading">Загрузка карты…</p>
+                    ) : (() => {
+                      const status = getHdChartStatus(hdChart, userProfile);
+                      return (
+                        <>
+                          {status === "none" && (
+                            <p className="hd-chart-status hd-chart-status--none">
+                              Карта ещё не рассчитана
+                            </p>
+                          )}
+                          {status === "no_coords" && (
+                            <p className="hd-chart-status hd-chart-status--warning">
+                              Выберите город рождения из подсказки, чтобы рассчитать карту
+                            </p>
+                          )}
+                          {status === "ok" && hdChart && (
+                            <p className="hd-chart-status hd-chart-status--ok">
+                              ✓ Карта рассчитана:{" "}
+                              <strong>{hdChart.type}</strong>, профиль {hdChart.profile}
+                            </p>
+                          )}
+                          {status === "outdated" && (
+                            <p className="hd-chart-status hd-chart-status--outdated">
+                              Данные рождения изменились — карту нужно пересчитать
+                            </p>
+                          )}
+                          {status === "error" && hdChart && (
+                            <p className="hd-chart-status hd-chart-status--error">
+                              Ошибка расчёта карты:{" "}
+                              {hdChart.calculation_error ?? "неизвестная ошибка"}
+                            </p>
+                          )}
+                          {hdChartError && (
+                            <p className="hd-chart-status hd-chart-status--error" role="alert">
+                              {hdChartError}
+                            </p>
+                          )}
+                          {(status === "none" || status === "outdated" || status === "error") &&
+                            userProfile.birthPlaceLabel &&
+                            userProfile.birthLatitude !== null && (
+                              <button
+                                className="hd-chart-calc-btn"
+                                onClick={calculateHdChart}
+                                disabled={hdChartCalculating}
+                              >
+                                {hdChartCalculating
+                                  ? "Рассчитываем…"
+                                  : status === "outdated"
+                                  ? "Пересчитать карту"
+                                  : "Рассчитать мою карту"}
+                              </button>
+                            )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
 
                 {/* Save */}
                 {!isSupabaseConfigured ? (

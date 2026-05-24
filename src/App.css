@@ -2069,3 +2069,181 @@
   margin: 0 0 0.75rem;
   opacity: 0.7;
 }
+
+/* ── City Autocomplete ────────────────────────────────────────────────────── */
+
+.autocomplete-wrap {
+  position: relative;
+}
+
+.autocomplete-wrap input {
+  width: 100%;
+}
+
+.autocomplete-spinner {
+  position: absolute;
+  right: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.autocomplete-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  background: var(--bg-elevated, #1e2536);
+  border: 1px solid var(--border, #334155);
+  border-radius: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.autocomplete-option {
+  padding: 0.55rem 1rem;
+  font-size: 0.92rem;
+  color: var(--text, #e2e8f0);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.autocomplete-option:hover {
+  background: var(--accent-soft, rgba(99, 102, 241, 0.15));
+}
+
+.autocomplete-confirmed {
+  margin: 0.3rem 0 0;
+  font-size: 0.78rem;
+  color: #4ade80;
+}
+
+.autocomplete-warning {
+  margin: 0.3rem 0 0;
+  font-size: 0.78rem;
+  color: #facc15;
+}
+
+/* ── HD Chart Status Block ────────────────────────────────────────────────── */
+
+.hd-chart-status-block {
+  background: var(--bg-elevated, #1e2536);
+  border: 1px solid var(--border, #334155);
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.hd-chart-status {
+  font-size: 0.92rem;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.4rem;
+}
+
+.hd-chart-status--none,
+.hd-chart-status--loading {
+  color: var(--text-muted, #94a3b8);
+  background: transparent;
+}
+
+.hd-chart-status--ok {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.hd-chart-status--outdated {
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.08);
+}
+
+.hd-chart-status--warning {
+  color: #fb923c;
+  background: rgba(251, 146, 60, 0.08);
+}
+
+.hd-chart-status--error {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.hd-chart-calc-btn {
+  margin-top: 0.5rem;
+  padding: 0.55rem 1.25rem;
+  background: var(--accent, #6366f1);
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+}
+
+.hd-chart-calc-btn:hover:not(:disabled) {
+  opacity: 0.85;
+  transform: translateY(-1px);
+}
+
+.hd-chart-calc-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── HD Mini-Card (Overview tab) ──────────────────────────────────────────── */
+
+.dash-card--hd-mini {
+  /* inherits dash-card styles */
+}
+
+.hd-mini-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hd-mini-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.hd-mini-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--border, #334155);
+}
+
+.hd-mini-row:last-child {
+  border-bottom: none;
+}
+
+.hd-mini-key {
+  color: var(--text-muted, #94a3b8);
+  flex-shrink: 0;
+}
+
+.hd-mini-val {
+  color: var(--text, #e2e8f0);
+  font-weight: 500;
+  text-align: right;
+}
+
+.hd-mini-outdated {
+  font-size: 0.78rem;
+  color: #facc15;
+  margin: 0.25rem 0;
+  padding: 0.35rem 0.5rem;
+  background: rgba(250, 204, 21, 0.08);
+  border-radius: 0.35rem;
+}

@@ -359,9 +359,9 @@ function getProfileCompleteness(profile: UserProfile): {
 } {
   let score = 0;
 
-  // Group A — Личные данные (max 8 %)
+  // Group A — Личные данные (max 10 %)
   score += bin(profile.displayName, 5);
-  score += bin(profile.currentCity, 3);
+  score += bin(profile.currentCity, 5);
 
   // Group B — Данные рождения (max 20 %)
   score += bin(profile.birthDate, 5);

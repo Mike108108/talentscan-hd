@@ -517,6 +517,7 @@ export default function App() {
       setAuthMessage("");
       setReports([]);
       setUserProfile(EMPTY_PROFILE);
+      setProfileInitialLoaded(false);
     }
   }
 
@@ -548,7 +549,13 @@ export default function App() {
 
   // ---- User profile ---------------------------------------------------------
   const [userProfile, setUserProfile] = useState<UserProfile>(EMPTY_PROFILE);
+  // profileLoading = true during any fetch (initial or background refresh).
+  // profileInitialLoaded = true once the first fetch completes successfully.
+  // The "Данные" tab shows the spinner only on the very first load;
+  // subsequent background refreshes (e.g. on token refresh / tab focus) keep
+  // the form visible and show only a subtle "Синхронизация…" badge.
   const [profileLoading, setProfileLoading] = useState(false);
+  const [profileInitialLoaded, setProfileInitialLoaded] = useState(false);
   const [profileSaveStatus, setProfileSaveStatus] = useState<
     "idle" | "saving" | "success" | "error"
   >("idle");
@@ -626,6 +633,7 @@ export default function App() {
       console.warn("[TalentScan] Ошибка загрузки профиля:", e);
     } finally {
       setProfileLoading(false);
+      setProfileInitialLoaded(true);
     }
   }, [authUser]);
 
@@ -636,6 +644,7 @@ export default function App() {
     } else {
       setReports([]);
       setUserProfile(EMPTY_PROFILE);
+      setProfileInitialLoaded(false);
     }
   }, [authUser, loadReports, loadProfile]);
 
@@ -1715,10 +1724,13 @@ export default function App() {
               </p>
             </div>
 
-            {profileLoading ? (
+            {profileLoading && !profileInitialLoaded ? (
               <p className="history-hint">Загружаем профиль…</p>
             ) : (
               <>
+                {profileLoading && profileInitialLoaded && (
+                  <p className="pf-refresh-hint" aria-live="polite">Синхронизация…</p>
+                )}
                 {/* Profile completeness */}
                 <div className="profile-completeness-card">
                   <div className="profile-completeness-header">
@@ -2127,6 +2139,7 @@ export default function App() {
                     </button>
                   </div>
                 )}
+
               </>
             )}
           </div>

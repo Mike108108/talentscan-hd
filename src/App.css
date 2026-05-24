@@ -2254,3 +2254,165 @@
   white-space: pre;
   word-break: normal;
 }
+
+/* ── HD Audit autocomplete ─────────────────────────────────────────────── */
+
+.hd-audit-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.hd-audit-field-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+}
+
+.hd-audit-autocomplete-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.hd-audit-autocomplete-input-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.hd-audit-autocomplete-input {
+  width: 100%;
+  padding: 0.55rem 2rem 0.55rem 0.85rem;
+  background: #0d1117;
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 0.875rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.hd-audit-autocomplete-input:focus {
+  border-color: var(--accent, #c8a84b);
+}
+
+.hd-audit-autocomplete-input::placeholder {
+  color: #475569;
+}
+
+.hd-audit-autocomplete-spinner {
+  position: absolute;
+  right: 0.75rem;
+  color: #64748b;
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.hd-audit-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: #111827;
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  padding: 0.25rem 0;
+  margin: 0;
+  list-style: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.hd-audit-suggestion-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.hd-audit-suggestion-item:hover {
+  background: #1e2330;
+}
+
+.hd-audit-suggestion-label {
+  font-size: 0.84rem;
+  color: #e2e8f0;
+  line-height: 1.4;
+}
+
+.hd-audit-suggestion-coords {
+  font-size: 0.7rem;
+  color: #475569;
+  font-family: "Menlo", "Consolas", monospace;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.hd-audit-city-confirmed {
+  font-size: 0.78rem;
+  color: #4ade80;
+  margin: 0;
+  padding: 0.3rem 0 0;
+}
+
+.hd-audit-city-warn {
+  font-size: 0.78rem;
+  color: #f59e0b;
+  margin: 0;
+  padding: 0.3rem 0 0;
+}
+
+/* ── HD Audit kv extras ─────────────────────────────────────────────────── */
+
+.hd-audit-kv-ok {
+  color: #4ade80 !important;
+}
+
+.hd-audit-kv-warn {
+  color: #f59e0b !important;
+}
+
+/* ── HD Audit normalizedChart summary ──────────────────────────────────── */
+
+.hd-audit-nchart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  background: #0a0d14;
+  border: 1px solid #1e2330;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+}
+
+.hd-audit-nchart-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  font-size: 0.8rem;
+}
+
+.hd-audit-nchart-label {
+  color: #475569;
+  min-width: 14rem;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-family: "Menlo", "Consolas", monospace;
+}
+
+.hd-audit-nchart-val {
+  color: #cbd5e1;
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: 0.78rem;
+  word-break: break-word;
+}

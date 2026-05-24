@@ -2,32 +2,11 @@ import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
 import { createClient } from "@supabase/supabase-js";
 
 // ---------------------------------------------------------------------------
-// Shared helpers (minimal copy — does NOT import from talent-report to avoid
-// any risk of side-effects on the production function)
+// Shared helpers
 // ---------------------------------------------------------------------------
 
 const HD_CHARTS_COORDINATES_URL =
   "https://api.humandesignapi.nl/v2/charts/coordinates";
-
-const DEFAULT_COORDINATES = { lat: 55.7558, lng: 37.6173 };
-
-const CITY_COORDINATES: Record<string, { lat: number; lng: number }> = {
-  москва: { lat: 55.7558, lng: 37.6173 },
-  moscow: { lat: 55.7558, lng: 37.6173 },
-  "санкт-петербург": { lat: 59.9311, lng: 30.3609 },
-  "saint petersburg": { lat: 59.9311, lng: 30.3609 },
-  spb: { lat: 59.9311, lng: 30.3609 },
-  киев: { lat: 50.4501, lng: 30.5234 },
-  kyiv: { lat: 50.4501, lng: 30.5234 },
-  минск: { lat: 53.9006, lng: 27.559 },
-  алматы: { lat: 43.222, lng: 76.8512 },
-  астана: { lat: 51.1694, lng: 71.4491 },
-  ташкент: { lat: 41.2995, lng: 69.2401 },
-  екатеринбург: { lat: 56.8389, lng: 60.6057 },
-  новосибирск: { lat: 55.0084, lng: 82.9357 },
-  красноярск: { lat: 56.0153, lng: 92.8932 },
-  владивосток: { lat: 43.1155, lng: 131.8855 },
-};
 
 function jsonResponse(statusCode: number, body: unknown) {
   return {
@@ -56,14 +35,6 @@ function normalizeBirthTime(time: string): string {
   return `${match[1].padStart(2, "0")}:${match[2]}`;
 }
 
-function resolveCoordinates(city: string): { lat: number; lng: number } {
-  const normalized = city.trim().toLowerCase();
-  const coords = CITY_COORDINATES[normalized];
-  if (coords) return coords;
-  console.log(`[hd-chart-debug] city "${city}" not in map, using Moscow defaults`);
-  return DEFAULT_COORDINATES;
-}
-
 // ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
@@ -73,11 +44,9 @@ async function verifySupabaseToken(token: string): Promise<boolean> {
     process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
   const supabaseAnonKey =
     process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? "";
-
   if (!supabaseUrl.trim() || !supabaseAnonKey.trim()) {
     throw new Error("supabase_not_configured");
   }
-
   const client = createClient(supabaseUrl, supabaseAnonKey);
   const { data, error } = await client.auth.getUser(token);
   if (error || !data.user) return false;
@@ -85,7 +54,7 @@ async function verifySupabaseToken(token: string): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
-// Detection helpers
+// Detection helpers (audit flags)
 // ---------------------------------------------------------------------------
 
 function hasKey(obj: Record<string, unknown>, ...keys: string[]): boolean {
@@ -103,26 +72,26 @@ function hasNonEmptyArray(obj: Record<string, unknown>, ...keys: string[]): bool
   return false;
 }
 
-function detectFields(hdRaw: unknown): {
-  hasCenters: boolean;
-  hasGates: boolean;
-  hasChannels: boolean;
-  hasActivations: boolean;
-  hasVariables: boolean;
-  hasProfile: boolean;
-  hasType: boolean;
-  hasAuthority: boolean;
-  hasStrategy: boolean;
-  hasIncarnationCross: boolean;
-} {
+function detectFields(hdRaw: unknown) {
   const outer = asRecord(hdRaw);
   const root = asRecord(outer.data ?? outer.chart ?? outer.bodygraph ?? outer);
-
   return {
     hasCenters: hasKey(root, "centers", "Centers"),
     hasGates: hasNonEmptyArray(root, "gates", "Gates", "active_gates", "activeGates"),
-    hasChannels: hasNonEmptyArray(root, "channels", "Channels", "channels_short", "channelsShort"),
-    hasActivations: hasKey(root, "activations", "Activations", "design", "personality"),
+    hasChannels: hasNonEmptyArray(
+      root,
+      "channels",
+      "Channels",
+      "channels_short",
+      "channelsShort",
+    ),
+    hasActivations: hasKey(
+      root,
+      "activations",
+      "Activations",
+      "design",
+      "personality",
+    ),
     hasVariables: hasKey(root, "variables", "Variables", "variable"),
     hasProfile: hasKey(root, "profile", "Profile"),
     hasType: hasKey(root, "type", "Type"),
@@ -140,15 +109,326 @@ function detectFields(hdRaw: unknown): {
 
 function getNestedDataKeys(hdRaw: unknown): string[] {
   const outer = asRecord(hdRaw);
-
-  // Try common nested roots: data / chart / bodygraph / root
   for (const k of ["data", "chart", "bodygraph", "root"]) {
     if (outer[k] && typeof outer[k] === "object" && !Array.isArray(outer[k])) {
       return Object.keys(outer[k] as object);
     }
   }
-
   return [];
+}
+
+// ---------------------------------------------------------------------------
+// normalizeHdChart — converts raw HD API response to a clean, typed structure
+// ready for BodyGraphViewer and transit screens.
+// ---------------------------------------------------------------------------
+
+const ALL_CENTERS = [
+  "Head",
+  "Ajna",
+  "Throat",
+  "G",
+  "Heart",
+  "Ego",
+  "Sacral",
+  "Solar Plexus",
+  "Spleen",
+  "Root",
+];
+
+type NormalizedChart = {
+  type: string;
+  profile: string;
+  strategy: string;
+  authority: string;
+  incarnationCross: string;
+  definition?: string;
+  signature?: string;
+  notSelfTheme?: string;
+
+  definedCenters: string[];
+  openCenters: string[];
+
+  channelsShort: string[];
+  channelsLong: string[];
+
+  gatesAll: string[];
+  gatesPersonality: string[];
+  gatesDesign: string[];
+  gatesBoth: string[];
+
+  gateSources: Record<string, string[]>;
+
+  activations: {
+    design: Record<string, string>;
+    personality: Record<string, string>;
+  };
+
+  variables?: unknown;
+  cognition?: string;
+  determination?: string;
+  motivation?: string;
+  transference?: string;
+  perspective?: string;
+  distraction?: string;
+  environment?: string;
+  circuitries?: unknown;
+
+  birthDateUtc?: string;
+
+  canRenderBodygraph: boolean;
+  missingForBodygraph: string[];
+};
+
+// Converts an activation map value to a "gate.line" string.
+// Handles: "52.3" | 52 | {gate:52, line:3} | {value:"52.3"} | etc.
+function asActivationValue(v: unknown): string {
+  if (typeof v === "string") return v.trim();
+  if (typeof v === "number") return String(v);
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const obj = v as Record<string, unknown>;
+    // {gate, line} format
+    const gate = obj.gate ?? obj.Gate ?? obj.number ?? obj.Number;
+    const line = obj.line ?? obj.Line;
+    if (gate !== undefined) {
+      return line !== undefined ? `${gate}.${line}` : String(gate);
+    }
+    // {value: "52.3"} format
+    if (typeof obj.value === "string") return obj.value.trim();
+  }
+  return "";
+}
+
+function buildActivationMap(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const rec = raw as Record<string, unknown>;
+  const result: Record<string, string> = {};
+  for (const [planet, val] of Object.entries(rec)) {
+    const s = asActivationValue(val);
+    if (s) result[planet] = s;
+  }
+  return result;
+}
+
+function extractActivations(root: Record<string, unknown>) {
+  // Try activations.design / activations.personality (nested)
+  const actRaw = root.activations ?? root.Activations;
+  if (actRaw && typeof actRaw === "object" && !Array.isArray(actRaw)) {
+    const act = actRaw as Record<string, unknown>;
+    const design = buildActivationMap(act.design ?? act.Design);
+    const personality = buildActivationMap(act.personality ?? act.Personality);
+    if (Object.keys(design).length > 0 || Object.keys(personality).length > 0) {
+      return { design, personality };
+    }
+  }
+  // Try root-level design / personality
+  return {
+    design: buildActivationMap(root.design ?? root.Design),
+    personality: buildActivationMap(root.personality ?? root.Personality),
+  };
+}
+
+function gatesFromActivationMap(map: Record<string, string>): string[] {
+  const gates = new Set<string>();
+  for (const val of Object.values(map)) {
+    const gate = val.split(".")[0].trim();
+    if (gate && !isNaN(parseInt(gate))) gates.add(gate);
+  }
+  return Array.from(gates).sort((a, b) => parseInt(a) - parseInt(b));
+}
+
+function normalizeCenters(root: Record<string, unknown>): {
+  definedCenters: string[];
+  openCenters: string[];
+} {
+  const centers = root.centers ?? root.Centers;
+  let definedCenters: string[] = [];
+
+  if (Array.isArray(centers)) {
+    definedCenters = centers.map((c) => asString(c)).filter(Boolean);
+  } else {
+    const centersObj = asRecord(centers);
+    const definedRaw =
+      centersObj.defined ??
+      centersObj.definedCenters ??
+      centersObj.defined_centers ??
+      root.definedCenters ??
+      root.defined_centers;
+
+    if (Array.isArray(definedRaw)) {
+      definedCenters = definedRaw.map((c) => asString(c)).filter(Boolean);
+    } else if (Object.keys(centersObj).length > 0) {
+      // {Head: true/false} or {Head: {defined: true}}
+      for (const [name, val] of Object.entries(centersObj)) {
+        if (typeof val === "boolean" && val) {
+          definedCenters.push(name);
+        } else if (val && typeof val === "object") {
+          const cv = val as Record<string, unknown>;
+          if (cv.defined === true || cv.active === true || cv.is_defined === true) {
+            definedCenters.push(name);
+          }
+        }
+      }
+    }
+  }
+
+  const definedSet = new Set(definedCenters.map((c) => c.toLowerCase()));
+  const openCenters = ALL_CENTERS.filter((c) => !definedSet.has(c.toLowerCase()));
+  return { definedCenters, openCenters };
+}
+
+function normalizeChannels(root: Record<string, unknown>): {
+  channelsShort: string[];
+  channelsLong: string[];
+} {
+  const channelsRaw =
+    root.channels ??
+    root.Channels ??
+    root.channels_short ??
+    root.channelsShort ??
+    root.channel_list ??
+    root.channelList;
+
+  const channelsShort: string[] = [];
+  const channelsLong: string[] = [];
+
+  if (Array.isArray(channelsRaw)) {
+    for (const c of channelsRaw) {
+      if (typeof c === "string") {
+        channelsShort.push(c);
+      } else if (c && typeof c === "object") {
+        const cv = c as Record<string, unknown>;
+        const code = asString(cv.code ?? cv.id ?? cv.key ?? cv.channel);
+        const name = asString(cv.name ?? cv.Name ?? cv.label);
+        if (code) {
+          channelsShort.push(code);
+          if (name) channelsLong.push(`${code}: ${name}`);
+        }
+      }
+    }
+  } else if (channelsRaw && typeof channelsRaw === "object") {
+    for (const [key, val] of Object.entries(channelsRaw as Record<string, unknown>)) {
+      if (typeof val === "boolean") {
+        if (val) channelsShort.push(key);
+      } else if (val && typeof val === "object") {
+        const cv = val as Record<string, unknown>;
+        if (cv.defined !== false) {
+          channelsShort.push(key);
+          const name = asString(cv.name ?? cv.Name);
+          if (name) channelsLong.push(`${key}: ${name}`);
+        }
+      } else {
+        channelsShort.push(key);
+      }
+    }
+  }
+
+  return { channelsShort, channelsLong };
+}
+
+function normalizeHdChart(hdRaw: unknown): NormalizedChart {
+  const outer = asRecord(hdRaw);
+  const root = asRecord(outer.data ?? outer.chart ?? outer.bodygraph ?? outer);
+
+  const type = asString(root.type ?? root.Type, "—");
+  const profile = asString(root.profile ?? root.Profile, "—");
+  const strategy = asString(root.strategy ?? root.Strategy, "—");
+  const authority = asString(root.authority ?? root.Authority, "—");
+  const incarnationCross = asString(
+    root.incarnationCross ??
+      root.incarnation_cross ??
+      root.IncarnationCross ??
+      root.cross,
+    "—",
+  );
+  const definition = asString(root.definition ?? root.Definition) || undefined;
+  const signature = asString(root.signature ?? root.Signature) || undefined;
+  const notSelfTheme =
+    asString(root.notSelfTheme ?? root.not_self_theme ?? root.notSelf) || undefined;
+
+  const { definedCenters, openCenters } = normalizeCenters(root);
+  const { channelsShort, channelsLong } = normalizeChannels(root);
+  const activations = extractActivations(root);
+
+  const gatesPersonality = gatesFromActivationMap(activations.personality);
+  const gatesDesign = gatesFromActivationMap(activations.design);
+  const designSet = new Set(gatesDesign);
+  const personalitySet = new Set(gatesPersonality);
+  const gatesBoth = gatesPersonality.filter((g) => designSet.has(g));
+  const gatesAll = Array.from(new Set([...gatesPersonality, ...gatesDesign])).sort(
+    (a, b) => parseInt(a) - parseInt(b),
+  );
+
+  // Build gateSources
+  const gateSources: Record<string, string[]> = {};
+  for (const [planet, val] of Object.entries(activations.personality)) {
+    const gate = val.split(".")[0];
+    if (!gate || isNaN(parseInt(gate))) continue;
+    if (!gateSources[gate]) gateSources[gate] = [];
+    gateSources[gate].push(`personality.${planet}`);
+  }
+  for (const [planet, val] of Object.entries(activations.design)) {
+    const gate = val.split(".")[0];
+    if (!gate || isNaN(parseInt(gate))) continue;
+    if (!gateSources[gate]) gateSources[gate] = [];
+    gateSources[gate].push(`design.${planet}`);
+  }
+
+  const variables = root.variables ?? root.Variables ?? undefined;
+  const cognition = asString(root.cognition ?? root.Cognition) || undefined;
+  const determination =
+    asString(root.determination ?? root.Determination) || undefined;
+  const motivation = asString(root.motivation ?? root.Motivation) || undefined;
+  const transference = asString(root.transference ?? root.Transference) || undefined;
+  const perspective = asString(root.perspective ?? root.Perspective) || undefined;
+  const distraction = asString(root.distraction ?? root.Distraction) || undefined;
+  const environment = asString(root.environment ?? root.Environment) || undefined;
+  const circuitries = root.circuitries ?? root.Circuitries ?? undefined;
+  const birthDateUtc =
+    asString(root.birthDateUtc ?? root.birth_date_utc ?? root.birthdate_utc) ||
+    undefined;
+
+  // canRenderBodygraph check
+  const missing: string[] = [];
+  if (definedCenters.length === 0 && gatesAll.length === 0) missing.push("centers");
+  if (gatesAll.length === 0) missing.push("gates");
+  if (channelsShort.length === 0) missing.push("channels");
+  const hasActs =
+    Object.keys(activations.design).length > 0 ||
+    Object.keys(activations.personality).length > 0;
+  if (!hasActs) missing.push("activations");
+
+  return {
+    type,
+    profile,
+    strategy,
+    authority,
+    incarnationCross,
+    ...(definition !== undefined && { definition }),
+    ...(signature !== undefined && { signature }),
+    ...(notSelfTheme !== undefined && { notSelfTheme }),
+    definedCenters,
+    openCenters,
+    channelsShort,
+    channelsLong,
+    gatesAll,
+    gatesPersonality,
+    gatesDesign,
+    gatesBoth,
+    gateSources,
+    activations,
+    ...(variables !== undefined && { variables }),
+    ...(cognition !== undefined && { cognition }),
+    ...(determination !== undefined && { determination }),
+    ...(motivation !== undefined && { motivation }),
+    ...(transference !== undefined && { transference }),
+    ...(perspective !== undefined && { perspective }),
+    ...(distraction !== undefined && { distraction }),
+    ...(environment !== undefined && { environment }),
+    ...(circuitries !== undefined && { circuitries }),
+    ...(birthDateUtc !== undefined && { birthDateUtc }),
+    canRenderBodygraph: missing.length === 0,
+    missingForBodygraph: missing,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -163,14 +443,13 @@ export const handler: Handler = async (
     return jsonResponse(405, { error: "Разрешён только метод POST." });
   }
 
-  // ---- Auth -----------------------------------------------------------------
+  // ---- Auth ----------------------------------------------------------------
   const authHeader =
     event.headers["authorization"] ?? event.headers["Authorization"] ?? "";
   const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
   if (!bearerMatch) {
     return jsonResponse(401, { error: "Требуется вход в личный кабинет.", source: "auth" });
   }
-
   const token = bearerMatch[1];
   try {
     const valid = await verifySupabaseToken(token);
@@ -180,12 +459,12 @@ export const handler: Handler = async (
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     if (msg === "supabase_not_configured") {
-      return jsonResponse(500, { error: "Supabase не настроен на сервере.", source: "config" });
+      return jsonResponse(500, { error: "Supabase не настроен.", source: "config" });
     }
     return jsonResponse(401, { error: "Требуется вход в личный кабинет.", source: "auth" });
   }
 
-  // ---- HD API key check -----------------------------------------------------
+  // ---- HD API key check ----------------------------------------------------
   const hdApiKey = process.env.HD_API_KEY;
   if (!hdApiKey) {
     return jsonResponse(500, {
@@ -194,10 +473,12 @@ export const handler: Handler = async (
     });
   }
 
-  // ---- Parse body -----------------------------------------------------------
+  // ---- Parse body ----------------------------------------------------------
   let birthDate: string;
   let birthTime: string;
   let birthCity: string;
+  let birthLatitude: number | undefined;
+  let birthLongitude: number | undefined;
 
   try {
     const parsed: unknown = JSON.parse(event.body ?? "{}");
@@ -213,22 +494,50 @@ export const handler: Handler = async (
     if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
       throw new Error("Неверный формат даты. Ожидается YYYY-MM-DD.");
     }
-
     birthTime = normalizeBirthTime(birthTime);
+
+    const rawLat = rec.birthLatitude ?? rec.lat ?? rec.latitude;
+    const rawLng = rec.birthLongitude ?? rec.lng ?? rec.longitude;
+    if (rawLat !== undefined && rawLng !== undefined) {
+      birthLatitude = typeof rawLat === "number" ? rawLat : parseFloat(String(rawLat));
+      birthLongitude = typeof rawLng === "number" ? rawLng : parseFloat(String(rawLng));
+      if (isNaN(birthLatitude) || isNaN(birthLongitude)) {
+        birthLatitude = undefined;
+        birthLongitude = undefined;
+      }
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Некорректные данные.";
     return jsonResponse(400, { error: message, source: "validation" });
   }
 
-  // ---- Resolve coordinates --------------------------------------------------
-  const coordinates = resolveCoordinates(birthCity);
+  // ---- Coordinate resolution: NO silent fallback ---------------------------
+  // If coordinates were not provided via autocomplete, require them explicitly.
+  if (birthLatitude === undefined || birthLongitude === undefined) {
+    return jsonResponse(400, {
+      error:
+        "Birth coordinates are required. Select the birth city from the autocomplete to get an accurate calculation.",
+      source: "coordinates",
+      hint: "Выберите город рождения из выпадающего списка для точного расчёта.",
+    });
+  }
 
-  // ---- Call Human Design API ------------------------------------------------
+  const coordinateStatus = {
+    requestedCity: birthCity,
+    resolvedLabel: birthCity,
+    lat: birthLatitude,
+    lng: birthLongitude,
+    coordinateSource: "autocomplete",
+    isFallback: false,
+    warning: undefined as string | undefined,
+  };
+
+  // ---- Call Human Design API -----------------------------------------------
   const hdPayload = {
     birthdate: birthDate,
     birthtime: birthTime,
-    lat: coordinates.lat,
-    lng: coordinates.lng,
+    lat: birthLatitude,
+    lng: birthLongitude,
   };
 
   console.log("[hd-chart-debug] payload:", JSON.stringify(hdPayload));
@@ -271,17 +580,20 @@ export const handler: Handler = async (
     return jsonResponse(502, { error: message, source: "humandesign-api" });
   }
 
-  // ---- Build audit response -------------------------------------------------
+  // ---- Build audit response ------------------------------------------------
   const hdTopLevelKeys = Object.keys(asRecord(hdRaw));
   const hdDataKeys = getNestedDataKeys(hdRaw);
   const detected = detectFields(hdRaw);
+  const normalizedChart = normalizeHdChart(hdRaw);
 
   return jsonResponse(200, {
     input: { birthDate, birthTime, birthCity },
-    coordinates,
+    coordinates: { lat: birthLatitude, lng: birthLongitude },
+    coordinateStatus,
     hdRaw,
     hdTopLevelKeys,
     hdDataKeys,
     detected,
+    normalizedChart,
   });
 };

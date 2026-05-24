@@ -1207,7 +1207,7 @@ export default function App() {
           </nav>
 
           {/* Main content */}
-          <main className="cabinet-content">
+          <main className={`cabinet-content${activeTab === "career-map" ? " cabinet-content--wide" : ""}`}>
 
         {/* ══════════════════════════════════════
             Tab: Обзор

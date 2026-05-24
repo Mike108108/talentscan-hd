@@ -860,9 +860,19 @@
   box-sizing: border-box;
 }
 
+/* Wide variant for screens that need full viewport width (e.g. Моя карта) */
+.cabinet-content--wide {
+  max-width: 1680px;
+  padding: 0;
+}
+
 @media (max-width: 640px) {
   .cabinet-content {
     padding: 1.25rem 1rem 3rem;
+  }
+
+  .cabinet-content--wide {
+    padding: 0;
   }
 }
 
@@ -2760,11 +2770,13 @@
   flex-direction: column;
   gap: 0;
   min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Screen header */
 .my-map-screen-header {
-  padding: 1.5rem 1.5rem 1rem;
+  padding: 1.5rem clamp(1rem, 2vw, 2rem) 1rem;
   border-bottom: 1px solid var(--border, #334155);
 }
 
@@ -2805,6 +2817,8 @@
   position: sticky;
   top: 0;
   z-index: 10;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .my-map-mobile-tabs::-webkit-scrollbar {
@@ -2855,6 +2869,7 @@
   flex: 1;
   min-height: 0;
   align-items: flex-start;
+  width: 100%;
 }
 
 /* Desktop sidebar — hidden on mobile */
@@ -2868,6 +2883,8 @@
   max-height: calc(100vh - 120px);
   overflow-y: auto;
   scrollbar-width: thin;
+  /* Shrink sidebar slightly on mid-range widths */
+  min-width: 200px;
 }
 
 .my-map-sidebar-nav {
@@ -2917,11 +2934,11 @@
   line-height: 1.2;
 }
 
-/* Content area */
+/* Content area — fills remaining width after sidebar */
 .my-map-content {
   flex: 1;
   min-width: 0;
-  padding: 1.5rem;
+  padding: clamp(1rem, 2vw, 1.75rem) clamp(1rem, 2.5vw, 2rem);
 }
 
 /* Inner section */
@@ -3191,8 +3208,20 @@
    My Map Screen — Responsive
    ========================================================================== */
 
+/* Tablet: keep sidebar but narrow it */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .my-map-sidebar {
+    width: 200px;
+    min-width: 180px;
+  }
+
+  .my-map-section-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+}
+
+/* Mobile: switch to chip tabs, stack layout */
 @media (max-width: 768px) {
-  /* Show mobile tabs, hide sidebar */
   .my-map-mobile-tabs {
     display: flex;
   }

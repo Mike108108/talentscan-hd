@@ -8,6 +8,7 @@ import {
 } from "./lib/supabase";
 import type { HdChartRecord as BgHdChartRecord } from "./components/BodyGraphViewer";
 import MyMapScreen from "./components/MyMapScreen";
+import TodayScreen from "./components/TodayScreen";
 
 // ---------------------------------------------------------------------------
 // Auth helpers
@@ -198,7 +199,7 @@ const ANALYSIS_TYPE_LABEL: Record<AnalysisType, string> = {
 };
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "overview", label: "Обзор" },
+  { id: "overview", label: "Сегодня" },
   { id: "career-map", label: "Моя карта" },
   { id: "roles-vacancies", label: "Роли и вакансии" },
   { id: "ai-assistant", label: "ИИ-помощник" },
@@ -1207,272 +1208,32 @@ export default function App() {
           </nav>
 
           {/* Main content */}
-          <main className={`cabinet-content${activeTab === "career-map" ? " cabinet-content--wide" : ""}`}>
+          <main
+            className={`cabinet-content${
+              activeTab === "career-map" ? " cabinet-content--wide" : ""
+            }${
+              activeTab === "overview" ? " cabinet-content--today" : ""
+            }`}
+          >
 
         {/* ══════════════════════════════════════
-            Tab: Обзор
+            Tab: Сегодня
         ══════════════════════════════════════ */}
         {activeTab === "overview" && (
-          <div className="tab-screen">
-
-            {/* Welcome */}
-            <div className="dash-welcome">
-              <h1 className="dash-welcome-title">
-                {userProfile.displayName
-                  ? `Привет, ${userProfile.displayName}!`
-                  : "Кабинет соискателя"}
-              </h1>
-              <p className="dash-welcome-sub">
-                {authUser
-                  ? userProfile.displayName
-                    ? authUser.email ?? ""
-                    : `Добро пожаловать, ${authUser.email}`
-                  : "Human Design для осознанных карьерных решений"}
-              </p>
-            </div>
-
-            {/* Quick actions */}
-            <section className="dash-section">
-              <p className="dash-section-label">Быстрые действия</p>
-              <div className="quick-actions">
-                <button
-                  className="quick-action-btn"
-                  onClick={() => goToNewReport("talent_map")}
-                >
-                  <span className="quick-action-icon" aria-hidden="true">✨</span>
-                  <span className="quick-action-label">Карта талантов</span>
-                </button>
-                <button
-                  className="quick-action-btn"
-                  onClick={() => goToNewReport("current_role")}
-                >
-                  <span className="quick-action-icon" aria-hidden="true">🧭</span>
-                  <span className="quick-action-label">Текущая роль</span>
-                </button>
-                <button
-                  className="quick-action-btn"
-                  onClick={() => goToNewReport("vacancy_assessment")}
-                >
-                  <span className="quick-action-icon" aria-hidden="true">📄</span>
-                  <span className="quick-action-label">Оценить вакансию</span>
-                </button>
-              </div>
-            </section>
-
-            {/* Stats + last report */}
-            <div className="dash-cards-row">
-
-              {/* Last report */}
-              <section className="dash-card dash-card--last-report">
-                <p className="dash-section-label">Последний разбор</p>
-                {!isSupabaseConfigured || !authUser ? (
-                  <div className="dash-empty">
-                    <p className="dash-empty-text">
-                      Войдите, чтобы видеть историю разборов
-                    </p>
-                    <button
-                      className="dash-link-btn"
-                      onClick={() => setActiveTab("new-report")}
-                    >
-                      Сделать первый разбор →
-                    </button>
-                  </div>
-                ) : reportsLoading ? (
-                  <p className="dash-empty-text">Загружаем…</p>
-                ) : reports.length === 0 ? (
-                  <div className="dash-empty">
-                    <p className="dash-empty-text">Разборов пока нет</p>
-                    <button
-                      className="dash-link-btn"
-                      onClick={() => setActiveTab("new-report")}
-                    >
-                      Сделать первый разбор →
-                    </button>
-                  </div>
-                ) : (
-                  <div className="dash-last-report">
-                    <span className="dash-last-report-type">
-                      {ANALYSIS_TYPE_LABEL[reports[0].analysis_type]}
-                    </span>
-                    <span className="dash-last-report-place">
-                      {reports[0].birth_place}
-                      {reports[0].birth_date ? ` · ${reports[0].birth_date}` : ""}
-                    </span>
-                    <span className="dash-last-report-date">
-                      {new Date(reports[0].created_at).toLocaleString("ru-RU", {
-                        day: "2-digit",
-                        month: "long",
-                        year: "numeric",
-                      })}
-                    </span>
-                    <div className="dash-last-report-actions">
-                      <button
-                        className="history-btn history-btn--open"
-                        onClick={() => openReport(reports[0])}
-                      >
-                        Открыть
-                      </button>
-                      <button
-                        className="dash-link-btn"
-                        onClick={() => setActiveTab("my-reports")}
-                      >
-                        Все разборы →
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </section>
-
-              {/* Stats + next step */}
-              <div className="dash-card-stack">
-                <section className="dash-card dash-card--stat">
-                  <p className="dash-section-label">Сохранено разборов</p>
-                  <span className="dash-stat-number">
-                    {!authUser ? "—" : reportsLoading ? "…" : reports.length}
-                  </span>
-                </section>
-
-                <section className="dash-card dash-card--next-step">
-                  <p className="dash-section-label">Следующий шаг</p>
-                  {!authUser || reports.length === 0 ? (
-                    <p className="dash-next-step-text">
-                      Запустите анализ <strong>Карты талантов</strong> — это
-                      основа вашего карьерного профиля
-                    </p>
-                  ) : reports.some((r) => r.analysis_type === "talent_map") ? (
-                    <p className="dash-next-step-text">
-                      Оцените конкретную <strong>вакансию</strong> или
-                      проверьте, как меняется разбор с новыми данными
-                    </p>
-                  ) : (
-                    <p className="dash-next-step-text">
-                      Запустите анализ <strong>Карты талантов</strong> — она
-                      поможет точнее оценить роли и вакансии
-                    </p>
-                  )}
-                </section>
-              </div>
-            </div>
-
-            {/* Profile completeness card */}
-            <section className="dash-card dash-card--profile-completeness">
-              <p className="dash-section-label">Профиль</p>
-              <div className="profile-completeness-row">
-                <div className="profile-completeness-info">
-                  <span className="profile-completeness-label">{completeness.label}</span>
-                  <span className="profile-completeness-count">
-                    {completeness.percent}% заполнено
-                  </span>
-                </div>
-                <div className="profile-completeness-bar-wrap">
-                  <div
-                    className="profile-completeness-bar"
-                    style={{ width: `${completeness.percent}%` }}
-                    role="progressbar"
-                    aria-valuenow={completeness.percent}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                  />
-                </div>
-                <button
-                  className="profile-completeness-btn"
-                  onClick={() => setActiveTab("data")}
-                >
-                  Заполнить данные →
-                </button>
-              </div>
-            </section>
-
-            {/* HD mini-card */}
-            <section className="dash-card dash-card--hd-mini">
-              <p className="dash-section-label">Human Design карта</p>
-              {hdChartLoading ? (
-                <p className="dash-empty-text">Загрузка…</p>
-              ) : (() => {
-                const hdStatus = getHdChartStatus(hdChart, userProfile);
-                if (hdChart && hdChart.calculation_status === "calculated") {
-                  return (
-                    <div className="hd-mini-card">
-                      <div className="hd-mini-rows">
-                        <div className="hd-mini-row">
-                          <span className="hd-mini-key">Тип</span>
-                          <span className="hd-mini-val">{hdChart.type ?? "—"}</span>
-                        </div>
-                        <div className="hd-mini-row">
-                          <span className="hd-mini-key">Профиль</span>
-                          <span className="hd-mini-val">{hdChart.profile ?? "—"}</span>
-                        </div>
-                        <div className="hd-mini-row">
-                          <span className="hd-mini-key">Стратегия</span>
-                          <span className="hd-mini-val">{hdChart.strategy ?? "—"}</span>
-                        </div>
-                        <div className="hd-mini-row">
-                          <span className="hd-mini-key">Авторитет</span>
-                          <span className="hd-mini-val">{hdChart.authority ?? "—"}</span>
-                        </div>
-                        <div className="hd-mini-row">
-                          <span className="hd-mini-key">Определённых центров</span>
-                          <span className="hd-mini-val">
-                            {Array.isArray(hdChart.defined_centers)
-                              ? hdChart.defined_centers.length
-                              : "—"}
-                          </span>
-                        </div>
-                        <div className="hd-mini-row">
-                          <span className="hd-mini-key">Каналов</span>
-                          <span className="hd-mini-val">
-                            {Array.isArray(hdChart.channels_short)
-                              ? hdChart.channels_short.length
-                              : "—"}
-                          </span>
-                        </div>
-                        <div className="hd-mini-row">
-                          <span className="hd-mini-key">Рассчитана</span>
-                          <span className="hd-mini-val">
-                            {new Date(hdChart.calculated_at).toLocaleString("ru-RU", {
-                              day: "2-digit",
-                              month: "long",
-                              year: "numeric",
-                            })}
-                          </span>
-                        </div>
-                      </div>
-                      {hdStatus === "outdated" && (
-                        <p className="hd-mini-outdated">
-                          Данные рождения изменились — карту нужно пересчитать
-                        </p>
-                      )}
-                      <button
-                        className="dash-link-btn"
-                        onClick={() =>
-                          hdStatus === "ok"
-                            ? setActiveTab("career-map")
-                            : setActiveTab("data")
-                        }
-                      >
-                        {hdStatus === "ok"
-                          ? "Открыть карту →"
-                          : hdStatus === "outdated"
-                          ? "Пересчитать в Данных →"
-                          : "Открыть данные →"}
-                      </button>
-                    </div>
-                  );
-                }
-                return (
-                  <div className="dash-empty">
-                    <p className="dash-empty-text">Карта не рассчитана</p>
-                    <button
-                      className="dash-link-btn"
-                      onClick={() => setActiveTab("data")}
-                    >
-                      Перейти в Данные →
-                    </button>
-                  </div>
-                );
-              })()}
-            </section>
-          </div>
+          <TodayScreen
+            profile={userProfile}
+            profileCompleteness={completeness}
+            hdChart={hdChart}
+            hdChartStatus={getHdChartStatus(hdChart, userProfile)}
+            hdChartLoading={hdChartLoading}
+            hdChartCalculating={hdChartCalculating}
+            reportsCount={reports.length}
+            onGoToCareerMap={() => setActiveTab("career-map")}
+            onGoToData={() => setActiveTab("data")}
+            onGoToNewReport={goToNewReport}
+            onGoToAiAssistant={() => setActiveTab("ai-assistant")}
+            calculateHdChart={calculateHdChart}
+          />
         )}
 
         {/* ══════════════════════════════════════

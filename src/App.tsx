@@ -333,34 +333,81 @@ async function generateTalentReport(formData: BirthFormData): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// Profile completeness helper
+// Profile completeness helper — weighted scoring
 // ---------------------------------------------------------------------------
 
+/** Binary: full weight if non-empty, 0 otherwise. */
+function bin(value: string, weight: number): number {
+  return value.trim() ? weight : 0;
+}
+
+/**
+ * Graduated text score: rewards length/detail.
+ * empty → 0 · <20 chars → 30% · 20–79 chars → 70% · 80+ chars → 100%
+ */
+function txt(value: string, weight: number): number {
+  const len = value.trim().length;
+  if (len === 0) return 0;
+  if (len < 20) return weight * 0.3;
+  if (len < 80) return weight * 0.7;
+  return weight;
+}
+
 function getProfileCompleteness(profile: UserProfile): {
-  count: number;
-  total: number;
-  label: string;
   percent: number;
+  label: string;
 } {
-  const keyFields = [
-    profile.displayName,
-    profile.birthDate,
-    profile.birthTime,
-    profile.birthPlace,
-    profile.currentRoleTitle,
-    profile.desiredRoles,
-    profile.skills,
-    profile.careerGoals,
-  ];
-  const filled = keyFields.filter((f) => f.trim()).length;
-  const total = keyFields.length;
-  const percent = Math.round((filled / total) * 100);
+  let score = 0;
+
+  // Group A — Личные данные (max 8 %)
+  score += bin(profile.displayName, 5);
+  score += bin(profile.currentCity, 3);
+
+  // Group B — Данные рождения (max 20 %)
+  score += bin(profile.birthDate, 5);
+  score += bin(profile.birthTime, 5);
+  score += bin(profile.birthPlace, 5);
+  score += bin(profile.birthTimeAccuracy, 5);
+
+  // Group C — Текущая роль (max 20 %)
+  score += bin(profile.currentRoleTitle, 4);
+  score += bin(profile.currentCompanyOrSphere, 3);
+  score += bin(profile.workFormat, 3);
+  score += bin(profile.schedule, 2);
+  score += txt(profile.currentTasks, 4);
+  score += txt(profile.likesAtWork, 2);
+  score += txt(profile.drainsAtWork, 2);
+
+  // Group D — Опыт и навыки (max 20 %)
+  score += txt(profile.experience, 5);
+  score += txt(profile.skills, 6);
+  score += bin(profile.education, 3);
+  score += bin(profile.languages, 2);
+  score += bin(profile.portfolioLinks, 2);
+  score += txt(profile.resumeText, 2);
+
+  // Group E — Цели и желаемые роли (max 20 %)
+  score += txt(profile.desiredRoles, 6);
+  score += bin(profile.desiredWorkFormat, 4);
+  score += bin(profile.salaryExpectations, 2);
+  score += txt(profile.careerGoals, 6);
+  score += txt(profile.vacancyNotes, 2);
+
+  // Group F — Рабочая среда (max 10 %)
+  score += txt(profile.preferredManagerStyle, 3);
+  score += txt(profile.workRestrictions, 3);
+  score += txt(profile.redFlags, 4);
+
+  const percent = Math.round(score);
+
   let label: string;
-  if (filled <= 2) label = "Профиль почти пустой";
-  else if (filled <= 4) label = "Базовые данные заполнены";
-  else if (filled <= 6) label = "Профиль достаточно точный";
+  if (percent <= 15) label = "Профиль почти пустой";
+  else if (percent <= 35) label = "Есть базовые данные";
+  else if (percent <= 60) label = "Профиль частично заполнен";
+  else if (percent <= 80) label = "Профиль достаточно точный";
   else label = "Профиль хорошо заполнен";
-  return { count: filled, total, label, percent };
+
+  return { percent, label };
 }
 
 // ---------------------------------------------------------------------------
@@ -1130,7 +1177,7 @@ export default function App() {
                 <div className="profile-completeness-info">
                   <span className="profile-completeness-label">{completeness.label}</span>
                   <span className="profile-completeness-count">
-                    {completeness.count} из {completeness.total} ключевых полей
+                    {completeness.percent}% заполнено
                   </span>
                 </div>
                 <div className="profile-completeness-bar-wrap">
@@ -1685,7 +1732,7 @@ export default function App() {
                     />
                   </div>
                   <p className="profile-completeness-hint">
-                    Заполнено {completeness.count} из {completeness.total} ключевых полей
+                    Показывает, насколько данных достаточно для точных карьерных рекомендаций
                   </p>
                 </div>
 

@@ -57,6 +57,39 @@ function getNc(hdChart: HdChartRecord | null): NormalizedChart | null {
 }
 
 // ---------------------------------------------------------------------------
+// Planet strip (preview)
+// ---------------------------------------------------------------------------
+
+const PLANETS = [
+  { symbol: "☉", name: "Солнце" },
+  { symbol: "⊕", name: "Земля" },
+  { symbol: "☽", name: "Луна" },
+  { symbol: "☿", name: "Меркурий" },
+  { symbol: "♀", name: "Венера" },
+  { symbol: "♂", name: "Марс" },
+];
+
+function PlanetStrip(): JSX.Element {
+  return (
+    <div className="today-planet-strip">
+      <span className="today-planet-strip-heading">Планеты сегодня</span>
+      <div className="today-planet-pills">
+        {PLANETS.map((p) => (
+          <div key={p.name} className="today-planet-pill">
+            <span className="today-planet-symbol">{p.symbol}</span>
+            <span className="today-planet-name">{p.name}</span>
+            <span className="today-planet-badge">скоро</span>
+          </div>
+        ))}
+      </div>
+      <p className="today-planet-note">
+        Реальные положения планет будут подключены следующим этапом.
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // A. Compact Hero
 // ---------------------------------------------------------------------------
 
@@ -85,27 +118,30 @@ function CompactHero({
 
   return (
     <div className="today-compact-hero">
-      <div className="today-compact-hero-left">
-        <div className="today-compact-hero-eyebrow">
-          <span className="today-hero-tag">Сегодня</span>
-          <span className="today-hero-date">{todayDateCompact()}</span>
+      <div className="today-compact-hero-top">
+        <div className="today-compact-hero-left">
+          <div className="today-compact-hero-eyebrow">
+            <span className="today-hero-tag">Сегодня</span>
+            <span className="today-hero-date">{todayDateCompact()}</span>
+          </div>
+          {name && <p className="today-compact-hero-greeting">Привет, {name}</p>}
+          <h1 className="today-compact-hero-title">Главный фокус дня</h1>
+          <p className="today-compact-hero-text">{focusText}</p>
         </div>
-        {name && <p className="today-compact-hero-greeting">Привет, {name}</p>}
-        <h1 className="today-compact-hero-title">Главный фокус дня</h1>
-        <p className="today-compact-hero-text">{focusText}</p>
+        <div className="today-compact-hero-actions">
+          <button className="today-btn today-btn--primary today-btn--sm" onClick={onGoToCareerMap}>
+            Моя карта
+          </button>
+          <button className="today-btn today-btn--ghost today-btn--sm" onClick={onGoToData}>
+            {hdChartStatus === "outdated"
+              ? "Обновить карту"
+              : hdChartStatus === "none"
+              ? "Рассчитать карту"
+              : "Данные"}
+          </button>
+        </div>
       </div>
-      <div className="today-compact-hero-actions">
-        <button className="today-btn today-btn--primary today-btn--sm" onClick={onGoToCareerMap}>
-          Моя карта
-        </button>
-        <button className="today-btn today-btn--ghost today-btn--sm" onClick={onGoToData}>
-          {hdChartStatus === "outdated"
-            ? "Обновить карту"
-            : hdChartStatus === "none"
-            ? "Рассчитать карту"
-            : "Данные"}
-        </button>
-      </div>
+      <PlanetStrip />
     </div>
   );
 }

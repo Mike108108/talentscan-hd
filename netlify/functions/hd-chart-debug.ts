@@ -122,18 +122,50 @@ function getNestedDataKeys(hdRaw: unknown): string[] {
 // ready for BodyGraphViewer and transit screens.
 // ---------------------------------------------------------------------------
 
+// Canonical 9-center list. "Ego" is the authoritative name used by the HD API.
+// "Heart" is an alias — see normalizeCenterName below.
 const ALL_CENTERS = [
   "Head",
   "Ajna",
   "Throat",
   "G",
-  "Heart",
   "Ego",
   "Sacral",
   "Solar Plexus",
   "Spleen",
   "Root",
 ];
+
+// Map known aliases to the canonical center name.
+function normalizeCenterName(raw: string): string {
+  const n = raw.trim();
+  const lower = n.toLowerCase();
+  switch (lower) {
+    case "heart":
+    case "heart/ego":
+    case "will":
+    case "will center":
+      return "Ego";
+    case "g center":
+    case "g-center":
+    case "self":
+    case "identity":
+      return "G";
+    case "solar plexus":
+    case "emotional":
+    case "sp":
+      return "Solar Plexus";
+    case "head":       return "Head";
+    case "ajna":       return "Ajna";
+    case "throat":     return "Throat";
+    case "g":          return "G";
+    case "ego":        return "Ego";
+    case "sacral":     return "Sacral";
+    case "spleen":     return "Spleen";
+    case "root":       return "Root";
+    default:           return n;
+  }
+}
 
 type NormalizedChart = {
   type: string;
@@ -244,7 +276,9 @@ function normalizeCenters(root: Record<string, unknown>): {
   let definedCenters: string[] = [];
 
   if (Array.isArray(centers)) {
-    definedCenters = centers.map((c) => asString(c)).filter(Boolean);
+    definedCenters = centers
+      .map((c) => normalizeCenterName(asString(c)))
+      .filter(Boolean);
   } else {
     const centersObj = asRecord(centers);
     const definedRaw =
@@ -255,21 +289,26 @@ function normalizeCenters(root: Record<string, unknown>): {
       root.defined_centers;
 
     if (Array.isArray(definedRaw)) {
-      definedCenters = definedRaw.map((c) => asString(c)).filter(Boolean);
+      definedCenters = definedRaw
+        .map((c) => normalizeCenterName(asString(c)))
+        .filter(Boolean);
     } else if (Object.keys(centersObj).length > 0) {
       // {Head: true/false} or {Head: {defined: true}}
       for (const [name, val] of Object.entries(centersObj)) {
         if (typeof val === "boolean" && val) {
-          definedCenters.push(name);
+          definedCenters.push(normalizeCenterName(name));
         } else if (val && typeof val === "object") {
           const cv = val as Record<string, unknown>;
           if (cv.defined === true || cv.active === true || cv.is_defined === true) {
-            definedCenters.push(name);
+            definedCenters.push(normalizeCenterName(name));
           }
         }
       }
     }
   }
+
+  // Deduplicate after normalization (e.g. API sent both "Heart" and "Ego")
+  definedCenters = Array.from(new Set(definedCenters));
 
   const definedSet = new Set(definedCenters.map((c) => c.toLowerCase()));
   const openCenters = ALL_CENTERS.filter((c) => !definedSet.has(c.toLowerCase()));
@@ -280,6 +319,14 @@ function normalizeChannels(root: Record<string, unknown>): {
   channelsShort: string[];
   channelsLong: string[];
 } {
+  // The HD API returns channelsLong as a separate array field alongside channels.
+  // Read it first so we can use it as the authoritative long-name source.
+  const channelsLongRaw =
+    root.channelsLong ?? root.channels_long ?? root.ChannelsLong;
+  const apiLong: string[] = Array.isArray(channelsLongRaw)
+    ? channelsLongRaw.map((c) => asString(c)).filter(Boolean)
+    : [];
+
   const channelsRaw =
     root.channels ??
     root.Channels ??
@@ -289,7 +336,8 @@ function normalizeChannels(root: Record<string, unknown>): {
     root.channelList;
 
   const channelsShort: string[] = [];
-  const channelsLong: string[] = [];
+  // Start with the API-provided long names; augment from object-format if absent.
+  const channelsLong: string[] = apiLong.length > 0 ? [...apiLong] : [];
 
   if (Array.isArray(channelsRaw)) {
     for (const c of channelsRaw) {
@@ -301,7 +349,8 @@ function normalizeChannels(root: Record<string, unknown>): {
         const name = asString(cv.name ?? cv.Name ?? cv.label);
         if (code) {
           channelsShort.push(code);
-          if (name) channelsLong.push(`${code}: ${name}`);
+          // Only augment channelsLong if not already populated from apiLong
+          if (name && apiLong.length === 0) channelsLong.push(`${code}: ${name}`);
         }
       }
     }
@@ -314,7 +363,7 @@ function normalizeChannels(root: Record<string, unknown>): {
         if (cv.defined !== false) {
           channelsShort.push(key);
           const name = asString(cv.name ?? cv.Name);
-          if (name) channelsLong.push(`${key}: ${name}`);
+          if (name && apiLong.length === 0) channelsLong.push(`${key}: ${name}`);
         }
       } else {
         channelsShort.push(key);

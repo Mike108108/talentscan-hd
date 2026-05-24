@@ -1634,3 +1634,430 @@
   border-top: 1px solid var(--border);
   padding-top: 1rem;
 }
+
+/* ===========================================================================
+   AI Assistant tab
+   =========================================================================== */
+
+.ai-hero {
+  text-align: center;
+  padding: 1rem 0 0.25rem;
+}
+
+.ai-hero-icon {
+  font-size: 2.75rem;
+  line-height: 1;
+  margin-bottom: 0.65rem;
+}
+
+.ai-hero-title {
+  margin: 0 0 0.45rem;
+  font-size: clamp(1.25rem, 3.5vw, 1.65rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.ai-hero-subtitle {
+  margin: 0 auto;
+  font-size: 0.93rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 480px;
+}
+
+/* Quick action cards grid */
+.ai-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.ai-action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 1rem 0.6rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  box-shadow: var(--shadow);
+}
+
+.ai-action-card:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: 0 4px 16px rgba(201, 162, 39, 0.15);
+  transform: translateY(-2px);
+}
+
+.ai-action-card:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.ai-action-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ai-action-card--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: var(--bg-elevated);
+}
+
+.ai-action-icon {
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.ai-action-label {
+  font-size: 0.77rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.ai-action-card--disabled .ai-action-label {
+  color: var(--text-muted);
+}
+
+.ai-action-soon {
+  font-size: 0.67rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--result-section-bg);
+  border: 1px dashed var(--border);
+  border-radius: 100px;
+  padding: 0.12rem 0.45rem;
+  white-space: nowrap;
+}
+
+/* What assistant knows */
+.ai-knows {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.4rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ai-knows-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.ai-knows-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--result-section-bg);
+  border-radius: 8px;
+  border: 1px solid var(--result-section-border);
+}
+
+.ai-knows-item-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.ai-knows-item-value {
+  font-size: 0.87rem;
+  color: var(--text);
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.ai-knows-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.ai-knows-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Chat placeholder */
+.ai-chat-placeholder {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.4rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.ai-chat-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ai-chat-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  resize: none;
+  box-sizing: border-box;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.ai-chat-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.9;
+}
+
+.ai-chat-send {
+  align-self: flex-end;
+  padding: 0.45rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (max-width: 560px) {
+  .ai-actions-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .ai-knows-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 360px) {
+  .ai-actions-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===========================================================================
+   Profile form sections (Data tab)
+   =========================================================================== */
+
+.pf-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.4rem 1.5rem 1.1rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.pf-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.pf-fields {
+  display: flex;
+  flex-direction: column;
+}
+
+.pf-fields--grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1rem;
+}
+
+.field--full {
+  grid-column: 1 / -1;
+}
+
+.pf-accuracy-note {
+  margin-bottom: 0;
+}
+
+.pf-save-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.pf-save-success {
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 8px;
+  color: #22c55e;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+@media (max-width: 520px) {
+  .pf-section {
+    padding: 1.15rem 1rem 1rem;
+  }
+
+  .pf-fields--grid {
+    grid-template-columns: 1fr;
+  }
+
+  .field--full {
+    grid-column: auto;
+  }
+}
+
+/* ===========================================================================
+   Profile completeness (Data tab + Overview)
+   =========================================================================== */
+
+/* Data tab full card */
+.profile-completeness-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.15rem 1.4rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.profile-completeness-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.profile-completeness-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.profile-completeness-pct {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.profile-completeness-track {
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.profile-completeness-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #a8861f);
+  border-radius: 100px;
+  transition: width 0.4s ease;
+  min-width: 4px;
+}
+
+.profile-completeness-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Overview dash card completeness */
+.dash-card--profile-completeness {
+  background: var(--bg-card);
+}
+
+.profile-completeness-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.profile-completeness-info {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.profile-completeness-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.profile-completeness-count {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.profile-completeness-bar-wrap {
+  height: 5px;
+  background: var(--bg-elevated);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.profile-completeness-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #a8861f);
+  border-radius: 100px;
+  transition: width 0.4s ease;
+  min-width: 3px;
+}
+
+.profile-completeness-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+  transition: opacity 0.2s;
+  align-self: flex-start;
+}
+
+.profile-completeness-btn:hover {
+  opacity: 0.75;
+}
+
+.profile-completeness-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

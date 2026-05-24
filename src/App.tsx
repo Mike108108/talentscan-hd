@@ -90,6 +90,79 @@ function renderSectionBody(body: string): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type Tab =
+  | "overview"
+  | "career-map"
+  | "roles-vacancies"
+  | "ai-assistant"
+  | "new-report"
+  | "my-reports"
+  | "data";
+
+type UserProfile = {
+  displayName: string;
+  birthDate: string;
+  birthTime: string;
+  birthPlace: string;
+  birthTimeAccuracy: string;
+  currentCity: string;
+  currentRoleTitle: string;
+  currentCompanyOrSphere: string;
+  workFormat: string;
+  schedule: string;
+  currentTasks: string;
+  likesAtWork: string;
+  drainsAtWork: string;
+  experience: string;
+  skills: string;
+  education: string;
+  languages: string;
+  portfolioLinks: string;
+  resumeText: string;
+  desiredRoles: string;
+  desiredWorkFormat: string;
+  salaryExpectations: string;
+  careerGoals: string;
+  preferredManagerStyle: string;
+  workRestrictions: string;
+  redFlags: string;
+  vacancyNotes: string;
+};
+
+const EMPTY_PROFILE: UserProfile = {
+  displayName: "",
+  birthDate: "",
+  birthTime: "",
+  birthPlace: "",
+  birthTimeAccuracy: "",
+  currentCity: "",
+  currentRoleTitle: "",
+  currentCompanyOrSphere: "",
+  workFormat: "",
+  schedule: "",
+  currentTasks: "",
+  likesAtWork: "",
+  drainsAtWork: "",
+  experience: "",
+  skills: "",
+  education: "",
+  languages: "",
+  portfolioLinks: "",
+  resumeText: "",
+  desiredRoles: "",
+  desiredWorkFormat: "",
+  salaryExpectations: "",
+  careerGoals: "",
+  preferredManagerStyle: "",
+  workRestrictions: "",
+  redFlags: "",
+  vacancyNotes: "",
+};
+
+// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
@@ -111,88 +184,19 @@ const ANALYSIS_TYPE_LABEL: Record<AnalysisType, string> = {
   vacancy_assessment: "📄 Вакансия",
 };
 
-// ---------------------------------------------------------------------------
-// API helper
-// ---------------------------------------------------------------------------
-
-type BirthFormData = {
-  birthDate: string;
-  birthTime: string;
-  birthCity: string;
-  analysisType: AnalysisType;
-  currentRoleDescription?: string;
-  vacancyDescription?: string;
-};
-
-type TalentReportResponse = {
-  report?: string;
-  error?: string;
-  source?: string;
-};
-
-async function generateTalentReport(formData: BirthFormData): Promise<string> {
-  const token = await getAccessToken();
-  if (!token) {
-    return "AUTH_ERROR:Войдите в кабинет, чтобы запустить разбор.";
-  }
-
-  try {
-    const response = await fetch("/.netlify/functions/talent-report", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(formData),
-    });
-
-    const data = (await response
-      .json()
-      .catch(() => null)) as TalentReportResponse | null;
-
-    if (!response.ok) {
-      if (response.status === 401 || data?.source === "auth") {
-        return "AUTH_ERROR:Сессия истекла. Войдите заново.";
-      }
-      if (data?.error) {
-        if (data.source === "humandesign-api")
-          return `Ошибка Human Design API: ${data.error}`;
-        if (data.source === "validation") return data.error;
-        if (data.source === "config") return `Настройка сервера: ${data.error}`;
-        return data.error;
-      }
-      if (response.status === 404)
-        return "Сервер функций недоступен. Перезапустите проект командой npm run dev.";
-      return `Не удалось получить отчёт (код ${response.status}). Попробуйте позже.`;
-    }
-
-    if (!data?.report) return "Сервер вернул неожиданный ответ. Попробуйте позже.";
-    return data.report;
-  } catch {
-    return "Ошибка сети. Проверьте подключение и убедитесь, что dev-сервер запущен (npm run dev).";
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Cabinet config
-// ---------------------------------------------------------------------------
-
-type Tab =
-  | "overview"
-  | "career-map"
-  | "roles-vacancies"
-  | "new-report"
-  | "my-reports"
-  | "data";
-
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Обзор" },
   { id: "career-map", label: "Моя карьерная карта" },
   { id: "roles-vacancies", label: "Роли и вакансии" },
+  { id: "ai-assistant", label: "ИИ-помощник" },
   { id: "new-report", label: "Новый разбор" },
   { id: "my-reports", label: "Мои разборы" },
   { id: "data", label: "Данные" },
 ];
+
+// ---------------------------------------------------------------------------
+// Cabinet config
+// ---------------------------------------------------------------------------
 
 const CAREER_MAP_SECTIONS: {
   icon: string;
@@ -265,6 +269,99 @@ const ROLES_SECTIONS: {
     comingSoon: true,
   },
 ];
+
+// ---------------------------------------------------------------------------
+// API helper
+// ---------------------------------------------------------------------------
+
+type BirthFormData = {
+  birthDate: string;
+  birthTime: string;
+  birthCity: string;
+  analysisType: AnalysisType;
+  currentRoleDescription?: string;
+  vacancyDescription?: string;
+};
+
+type TalentReportResponse = {
+  report?: string;
+  error?: string;
+  source?: string;
+};
+
+async function generateTalentReport(formData: BirthFormData): Promise<string> {
+  const token = await getAccessToken();
+  if (!token) {
+    return "AUTH_ERROR:Войдите в кабинет, чтобы запустить разбор.";
+  }
+
+  try {
+    const response = await fetch("/.netlify/functions/talent-report", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(formData),
+    });
+
+    const data = (await response
+      .json()
+      .catch(() => null)) as TalentReportResponse | null;
+
+    if (!response.ok) {
+      if (response.status === 401 || data?.source === "auth") {
+        return "AUTH_ERROR:Сессия истекла. Войдите заново.";
+      }
+      if (data?.error) {
+        if (data.source === "humandesign-api")
+          return `Ошибка Human Design API: ${data.error}`;
+        if (data.source === "validation") return data.error;
+        if (data.source === "config") return `Настройка сервера: ${data.error}`;
+        return data.error;
+      }
+      if (response.status === 404)
+        return "Сервер функций недоступен. Перезапустите проект командой npm run dev.";
+      return `Не удалось получить отчёт (код ${response.status}). Попробуйте позже.`;
+    }
+
+    if (!data?.report) return "Сервер вернул неожиданный ответ. Попробуйте позже.";
+    return data.report;
+  } catch {
+    return "Ошибка сети. Проверьте подключение и убедитесь, что dev-сервер запущен (npm run dev).";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Profile completeness helper
+// ---------------------------------------------------------------------------
+
+function getProfileCompleteness(profile: UserProfile): {
+  count: number;
+  total: number;
+  label: string;
+  percent: number;
+} {
+  const keyFields = [
+    profile.displayName,
+    profile.birthDate,
+    profile.birthTime,
+    profile.birthPlace,
+    profile.currentRoleTitle,
+    profile.desiredRoles,
+    profile.skills,
+    profile.careerGoals,
+  ];
+  const filled = keyFields.filter((f) => f.trim()).length;
+  const total = keyFields.length;
+  const percent = Math.round((filled / total) * 100);
+  let label: string;
+  if (filled <= 2) label = "Профиль почти пустой";
+  else if (filled <= 4) label = "Базовые данные заполнены";
+  else if (filled <= 6) label = "Профиль достаточно точный";
+  else label = "Профиль хорошо заполнен";
+  return { count: filled, total, label, percent };
+}
 
 // ---------------------------------------------------------------------------
 // App
@@ -372,6 +469,7 @@ export default function App() {
       setAuthPassword("");
       setAuthMessage("");
       setReports([]);
+      setUserProfile(EMPTY_PROFILE);
     }
   }
 
@@ -401,6 +499,15 @@ export default function App() {
   const [reportsError, setReportsError] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // ---- User profile ---------------------------------------------------------
+  const [userProfile, setUserProfile] = useState<UserProfile>(EMPTY_PROFILE);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaveStatus, setProfileSaveStatus] = useState<
+    "idle" | "saving" | "success" | "error"
+  >("idle");
+  const [profileSaveError, setProfileSaveError] = useState("");
+
+  // ---- Load reports ---------------------------------------------------------
   const loadReports = useCallback(async () => {
     if (!supabase || !authUser) return;
     setReportsLoading(true);
@@ -420,10 +527,80 @@ export default function App() {
     }
   }, [authUser]);
 
+  // ---- Load profile ---------------------------------------------------------
+  const loadProfile = useCallback(async () => {
+    if (!supabase || !authUser) return;
+    setProfileLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("user_id", authUser.id)
+        .maybeSingle();
+
+      if (error) {
+        console.warn("[TalentScan] Не удалось загрузить профиль:", error.message);
+        return;
+      }
+
+      if (data) {
+        const pd = (data.profile_data as Record<string, string>) ?? {};
+        setUserProfile({
+          displayName: (data.display_name as string) ?? "",
+          birthDate: (data.birth_date as string) ?? "",
+          birthTime: (data.birth_time as string) ?? "",
+          birthPlace: (data.birth_place as string) ?? "",
+          birthTimeAccuracy: (data.birth_time_accuracy as string) ?? "",
+          currentCity: pd.currentCity ?? "",
+          currentRoleTitle: pd.currentRoleTitle ?? "",
+          currentCompanyOrSphere: pd.currentCompanyOrSphere ?? "",
+          workFormat: pd.workFormat ?? "",
+          schedule: pd.schedule ?? "",
+          currentTasks: pd.currentTasks ?? "",
+          likesAtWork: pd.likesAtWork ?? "",
+          drainsAtWork: pd.drainsAtWork ?? "",
+          experience: pd.experience ?? "",
+          skills: pd.skills ?? "",
+          education: pd.education ?? "",
+          languages: pd.languages ?? "",
+          portfolioLinks: pd.portfolioLinks ?? "",
+          resumeText: pd.resumeText ?? "",
+          desiredRoles: pd.desiredRoles ?? "",
+          desiredWorkFormat: pd.desiredWorkFormat ?? "",
+          salaryExpectations: pd.salaryExpectations ?? "",
+          careerGoals: pd.careerGoals ?? "",
+          preferredManagerStyle: pd.preferredManagerStyle ?? "",
+          workRestrictions: pd.workRestrictions ?? "",
+          redFlags: pd.redFlags ?? "",
+          vacancyNotes: pd.vacancyNotes ?? "",
+        });
+      }
+    } catch (e) {
+      console.warn("[TalentScan] Ошибка загрузки профиля:", e);
+    } finally {
+      setProfileLoading(false);
+    }
+  }, [authUser]);
+
   useEffect(() => {
-    if (authUser) loadReports();
-    else setReports([]);
-  }, [authUser, loadReports]);
+    if (authUser) {
+      loadReports();
+      loadProfile();
+    } else {
+      setReports([]);
+      setUserProfile(EMPTY_PROFILE);
+    }
+  }, [authUser, loadReports, loadProfile]);
+
+  // Pre-fill birth fields in New Report form from profile (if form fields are empty)
+  useEffect(() => {
+    if (activeTab !== "new-report") return;
+    if (!birthDate && userProfile.birthDate) setBirthDate(userProfile.birthDate);
+    if (!birthTime && userProfile.birthTime) setBirthTime(userProfile.birthTime);
+    if (!birthCity && userProfile.birthPlace) setBirthCity(userProfile.birthPlace);
+  // Only run when switching to the tab or when profile birth data loads
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, userProfile.birthDate, userProfile.birthTime, userProfile.birthPlace]);
 
   // ---- Validation -----------------------------------------------------------
   function validate(): boolean {
@@ -541,6 +718,72 @@ export default function App() {
     setActiveTab("new-report");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+
+  // ---- Profile save ----------------------------------------------------------
+  async function saveProfile() {
+    if (!supabase || !authUser) return;
+    setProfileSaveStatus("saving");
+    setProfileSaveError("");
+
+    try {
+      const profileData: Record<string, string> = {
+        currentCity: userProfile.currentCity,
+        currentRoleTitle: userProfile.currentRoleTitle,
+        currentCompanyOrSphere: userProfile.currentCompanyOrSphere,
+        workFormat: userProfile.workFormat,
+        schedule: userProfile.schedule,
+        currentTasks: userProfile.currentTasks,
+        likesAtWork: userProfile.likesAtWork,
+        drainsAtWork: userProfile.drainsAtWork,
+        experience: userProfile.experience,
+        skills: userProfile.skills,
+        education: userProfile.education,
+        languages: userProfile.languages,
+        portfolioLinks: userProfile.portfolioLinks,
+        resumeText: userProfile.resumeText,
+        desiredRoles: userProfile.desiredRoles,
+        desiredWorkFormat: userProfile.desiredWorkFormat,
+        salaryExpectations: userProfile.salaryExpectations,
+        careerGoals: userProfile.careerGoals,
+        preferredManagerStyle: userProfile.preferredManagerStyle,
+        workRestrictions: userProfile.workRestrictions,
+        redFlags: userProfile.redFlags,
+        vacancyNotes: userProfile.vacancyNotes,
+      };
+
+      const { error } = await supabase.from("user_profiles").upsert(
+        {
+          user_id: authUser.id,
+          display_name: userProfile.displayName || null,
+          birth_date: userProfile.birthDate || null,
+          birth_time: userProfile.birthTime || null,
+          birth_place: userProfile.birthPlace || null,
+          birth_time_accuracy: userProfile.birthTimeAccuracy || null,
+          profile_data: profileData,
+        },
+        { onConflict: "user_id" },
+      );
+
+      if (error) {
+        setProfileSaveStatus("error");
+        setProfileSaveError(`Не удалось сохранить профиль: ${error.message}`);
+      } else {
+        setProfileSaveStatus("success");
+        setTimeout(() => setProfileSaveStatus("idle"), 3500);
+      }
+    } catch {
+      setProfileSaveStatus("error");
+      setProfileSaveError("Ошибка при сохранении профиля.");
+    }
+  }
+
+  // ---- Profile field helper --------------------------------------------------
+  function setProfileField(field: keyof UserProfile, value: string) {
+    setUserProfile((prev) => ({ ...prev, [field]: value }));
+  }
+
+  // ---- Profile completeness --------------------------------------------------
+  const completeness = getProfileCompleteness(userProfile);
 
   // ---- Render ---------------------------------------------------------------
   return (
@@ -704,7 +947,11 @@ export default function App() {
           {/* Account bar */}
           <div className="account-bar">
             <div className="account-logged-in">
-              <span className="account-email">{authUser.email}</span>
+              <span className="account-email">
+                {userProfile.displayName
+                  ? `${userProfile.displayName} · ${authUser.email}`
+                  : authUser.email}
+              </span>
               <button
                 className="account-btn account-btn--secondary"
                 onClick={handleSignOut}
@@ -732,17 +979,23 @@ export default function App() {
           <main className="cabinet-content">
 
         {/* ══════════════════════════════════════
-            Tab: Обзор — карьерный дашборд
+            Tab: Обзор
         ══════════════════════════════════════ */}
         {activeTab === "overview" && (
           <div className="tab-screen">
 
             {/* Welcome */}
             <div className="dash-welcome">
-              <h1 className="dash-welcome-title">Кабинет соискателя</h1>
+              <h1 className="dash-welcome-title">
+                {userProfile.displayName
+                  ? `Привет, ${userProfile.displayName}!`
+                  : "Кабинет соискателя"}
+              </h1>
               <p className="dash-welcome-sub">
                 {authUser
-                  ? `Добро пожаловать, ${authUser.email}`
+                  ? userProfile.displayName
+                    ? authUser.email ?? ""
+                    : `Добро пожаловать, ${authUser.email}`
                   : "Human Design для осознанных карьерных решений"}
               </p>
             </div>
@@ -869,6 +1122,35 @@ export default function App() {
                 </section>
               </div>
             </div>
+
+            {/* Profile completeness card */}
+            <section className="dash-card dash-card--profile-completeness">
+              <p className="dash-section-label">Профиль</p>
+              <div className="profile-completeness-row">
+                <div className="profile-completeness-info">
+                  <span className="profile-completeness-label">{completeness.label}</span>
+                  <span className="profile-completeness-count">
+                    {completeness.count} из {completeness.total} ключевых полей
+                  </span>
+                </div>
+                <div className="profile-completeness-bar-wrap">
+                  <div
+                    className="profile-completeness-bar"
+                    style={{ width: `${completeness.percent}%` }}
+                    role="progressbar"
+                    aria-valuenow={completeness.percent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  />
+                </div>
+                <button
+                  className="profile-completeness-btn"
+                  onClick={() => setActiveTab("data")}
+                >
+                  Заполнить данные →
+                </button>
+              </div>
+            </section>
           </div>
         )}
 
@@ -952,6 +1234,162 @@ export default function App() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════
+            Tab: ИИ-помощник
+        ══════════════════════════════════════ */}
+        {activeTab === "ai-assistant" && (
+          <div className="tab-screen">
+
+            {/* Hero */}
+            <div className="ai-hero">
+              <div className="ai-hero-icon" aria-hidden="true">🤖</div>
+              <h1 className="ai-hero-title">ИИ-помощник TalentScan</h1>
+              <p className="ai-hero-subtitle">
+                Поможет разобраться с карьерной картой, текущей ролью, вакансиями,
+                резюме и собеседованиями.
+              </p>
+            </div>
+
+            {/* Quick actions */}
+            <section>
+              <p className="dash-section-label">Быстрые действия</p>
+              <div className="ai-actions-grid">
+                <button
+                  className="ai-action-card"
+                  onClick={() => goToNewReport("vacancy_assessment")}
+                >
+                  <span className="ai-action-icon" aria-hidden="true">📄</span>
+                  <span className="ai-action-label">Оценить вакансию</span>
+                </button>
+                <button
+                  className="ai-action-card"
+                  onClick={() => goToNewReport("current_role")}
+                >
+                  <span className="ai-action-icon" aria-hidden="true">🧭</span>
+                  <span className="ai-action-label">Разобрать текущую роль</span>
+                </button>
+                <button
+                  className="ai-action-card"
+                  onClick={() => goToNewReport("talent_map")}
+                >
+                  <span className="ai-action-icon" aria-hidden="true">✨</span>
+                  <span className="ai-action-label">Собрать карьерную карту</span>
+                </button>
+                <button className="ai-action-card ai-action-card--disabled" disabled>
+                  <span className="ai-action-icon" aria-hidden="true">📝</span>
+                  <span className="ai-action-label">Помочь с резюме</span>
+                  <span className="ai-action-soon">Скоро</span>
+                </button>
+                <button className="ai-action-card ai-action-card--disabled" disabled>
+                  <span className="ai-action-icon" aria-hidden="true">🎤</span>
+                  <span className="ai-action-label">Подготовиться к собеседованию</span>
+                  <span className="ai-action-soon">Скоро</span>
+                </button>
+                <button className="ai-action-card ai-action-card--disabled" disabled>
+                  <span className="ai-action-icon" aria-hidden="true">🔍</span>
+                  <span className="ai-action-label">Найти подходящие роли</span>
+                  <span className="ai-action-soon">Скоро</span>
+                </button>
+              </div>
+            </section>
+
+            {/* What assistant knows */}
+            <section className="ai-knows">
+              <p className="dash-section-label">Что помощник уже знает обо мне</p>
+              <div className="ai-knows-grid">
+                <div className="ai-knows-item">
+                  <span className="ai-knows-item-label">Имя</span>
+                  <span className="ai-knows-item-value">
+                    {userProfile.displayName || (
+                      <span className="ai-knows-empty">Не указано</span>
+                    )}
+                  </span>
+                </div>
+                <div className="ai-knows-item">
+                  <span className="ai-knows-item-label">Дата рождения</span>
+                  <span className="ai-knows-item-value">
+                    {userProfile.birthDate || (
+                      <span className="ai-knows-empty">Не указана</span>
+                    )}
+                  </span>
+                </div>
+                <div className="ai-knows-item">
+                  <span className="ai-knows-item-label">Время рождения</span>
+                  <span className="ai-knows-item-value">
+                    {userProfile.birthTime || (
+                      <span className="ai-knows-empty">Не указано</span>
+                    )}
+                  </span>
+                </div>
+                <div className="ai-knows-item">
+                  <span className="ai-knows-item-label">Место рождения</span>
+                  <span className="ai-knows-item-value">
+                    {userProfile.birthPlace || (
+                      <span className="ai-knows-empty">Не указано</span>
+                    )}
+                  </span>
+                </div>
+                <div className="ai-knows-item">
+                  <span className="ai-knows-item-label">Текущая роль</span>
+                  <span className="ai-knows-item-value">
+                    {userProfile.currentRoleTitle || (
+                      <span className="ai-knows-empty">Не указана</span>
+                    )}
+                  </span>
+                </div>
+                <div className="ai-knows-item">
+                  <span className="ai-knows-item-label">Желаемые роли</span>
+                  <span className="ai-knows-item-value">
+                    {userProfile.desiredRoles || (
+                      <span className="ai-knows-empty">Не указаны</span>
+                    )}
+                  </span>
+                </div>
+                <div className="ai-knows-item">
+                  <span className="ai-knows-item-label">Сохранено разборов</span>
+                  <span className="ai-knows-item-value">
+                    {reportsLoading ? "…" : reports.length}
+                  </span>
+                </div>
+                <div className="ai-knows-item">
+                  <span className="ai-knows-item-label">Заполненность</span>
+                  <span className="ai-knows-item-value">
+                    {completeness.percent}% — {completeness.label}
+                  </span>
+                </div>
+              </div>
+              {completeness.percent < 50 && (
+                <p className="ai-knows-hint">
+                  Заполните вкладку{" "}
+                  <button
+                    className="dash-link-btn"
+                    onClick={() => setActiveTab("data")}
+                  >
+                    Данные
+                  </button>
+                  , чтобы помощник знал о вас больше.
+                </p>
+              )}
+            </section>
+
+            {/* Chat placeholder */}
+            <section className="ai-chat-placeholder">
+              <p className="dash-section-label">Чат с ИИ-помощником</p>
+              <div className="ai-chat-box">
+                <textarea
+                  className="ai-chat-input"
+                  disabled
+                  placeholder="Чат с ИИ-помощником появится на следующем этапе. Сейчас можно использовать быстрые действия."
+                  rows={3}
+                />
+                <button className="ai-chat-send" disabled>
+                  Отправить
+                </button>
+              </div>
+            </section>
           </div>
         )}
 
@@ -1219,74 +1657,431 @@ export default function App() {
         )}
 
         {/* ══════════════════════════════════════
-            Tab: Данные — центр точности профиля
+            Tab: Данные — профиль пользователя
         ══════════════════════════════════════ */}
         {activeTab === "data" && (
           <div className="tab-screen">
             <div className="screen-header">
               <h1 className="screen-title">Данные профиля</h1>
               <p className="screen-subtitle">
-                Точные данные рождения — основа корректного Human Design анализа
+                Заполните анкету — ИИ-помощник и разборы станут точнее
               </p>
             </div>
 
-            <div className="data-screen">
-              <div className="data-accuracy-note">
-                <span className="data-accuracy-icon" aria-hidden="true">🎯</span>
-                <div>
-                  <p className="data-accuracy-title">Почему точность важна</p>
-                  <p className="data-accuracy-text">
-                    Разница в 1–2 часа меняет тип, авторитет и профиль.
-                    Используйте данные из свидетельства о рождении.
+            {profileLoading ? (
+              <p className="history-hint">Загружаем профиль…</p>
+            ) : (
+              <>
+                {/* Profile completeness */}
+                <div className="profile-completeness-card">
+                  <div className="profile-completeness-header">
+                    <span className="profile-completeness-title">{completeness.label}</span>
+                    <span className="profile-completeness-pct">{completeness.percent}%</span>
+                  </div>
+                  <div className="profile-completeness-track">
+                    <div
+                      className="profile-completeness-fill"
+                      style={{ width: `${completeness.percent}%` }}
+                    />
+                  </div>
+                  <p className="profile-completeness-hint">
+                    Заполнено {completeness.count} из {completeness.total} ключевых полей
                   </p>
                 </div>
-              </div>
 
-              <p className="data-section-label">Анкетные данные</p>
-              <div className="data-fields-grid">
-                <div className="field">
-                  <label htmlFor="data-birth-date">Дата рождения</label>
-                  <input
-                    id="data-birth-date"
-                    type="date"
-                    defaultValue=""
-                    disabled
-                  />
+                {/* Section 1: Личные данные */}
+                <div className="pf-section">
+                  <div className="pf-section-title">
+                    <span aria-hidden="true">👤</span> Личные данные
+                  </div>
+                  <div className="pf-fields pf-fields--grid">
+                    <div className="field">
+                      <label htmlFor="pf-display-name">Имя (как вас называть)</label>
+                      <input
+                        id="pf-display-name"
+                        type="text"
+                        placeholder="Например, Александра"
+                        value={userProfile.displayName}
+                        onChange={(e) => setProfileField("displayName", e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="pf-current-city">Текущий город</label>
+                      <input
+                        id="pf-current-city"
+                        type="text"
+                        placeholder="Например, Москва"
+                        value={userProfile.currentCity}
+                        onChange={(e) => setProfileField("currentCity", e.target.value)}
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="field">
-                  <label htmlFor="data-birth-time">Время рождения</label>
-                  <input
-                    id="data-birth-time"
-                    type="time"
-                    defaultValue=""
-                    disabled
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="data-birth-city">Город рождения</label>
-                  <input
-                    id="data-birth-city"
-                    type="text"
-                    placeholder="—"
-                    disabled
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="data-user-type">Тип пользователя</label>
-                  <select id="data-user-type" disabled>
-                    <option value="">—</option>
-                    <option value="specialist">Специалист</option>
-                    <option value="manager">Руководитель</option>
-                    <option value="founder">Предприниматель</option>
-                    <option value="student">Студент / в поиске</option>
-                  </select>
-                </div>
-              </div>
 
-              <p className="data-coming-soon">
-                🚧 Сохранение данных профиля будет доступно в следующей версии
-              </p>
-            </div>
+                {/* Section 2: Данные рождения */}
+                <div className="pf-section">
+                  <div className="pf-section-title">
+                    <span aria-hidden="true">🌟</span> Данные рождения
+                  </div>
+                  <div className="data-accuracy-note pf-accuracy-note">
+                    <span className="data-accuracy-icon" aria-hidden="true">🎯</span>
+                    <div>
+                      <p className="data-accuracy-title">Почему точность важна</p>
+                      <p className="data-accuracy-text">
+                        Разница в 1–2 часа меняет тип, авторитет и профиль.
+                        Используйте данные из свидетельства о рождении.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pf-fields pf-fields--grid">
+                    <div className="field">
+                      <label htmlFor="pf-birth-date">Дата рождения</label>
+                      <input
+                        id="pf-birth-date"
+                        type="date"
+                        value={userProfile.birthDate}
+                        onChange={(e) => setProfileField("birthDate", e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="pf-birth-time">Время рождения</label>
+                      <input
+                        id="pf-birth-time"
+                        type="time"
+                        value={userProfile.birthTime}
+                        onChange={(e) => setProfileField("birthTime", e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="pf-birth-place">Город рождения</label>
+                      <input
+                        id="pf-birth-place"
+                        type="text"
+                        placeholder="Например, Москва"
+                        value={userProfile.birthPlace}
+                        onChange={(e) => setProfileField("birthPlace", e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="pf-birth-time-accuracy">Точность времени</label>
+                      <select
+                        id="pf-birth-time-accuracy"
+                        value={userProfile.birthTimeAccuracy}
+                        onChange={(e) => setProfileField("birthTimeAccuracy", e.target.value)}
+                      >
+                        <option value="">Выберите…</option>
+                        <option value="exact">Точное (из документа)</option>
+                        <option value="approximate">Примерное (±1–2 ч)</option>
+                        <option value="unknown">Неизвестно</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Профессиональная анкета */}
+                <div className="pf-section">
+                  <div className="pf-section-title">
+                    <span aria-hidden="true">💼</span> Профессиональная анкета
+                  </div>
+                  <div className="pf-fields pf-fields--grid">
+                    <div className="field">
+                      <label htmlFor="pf-role-title">Текущая должность / роль</label>
+                      <input
+                        id="pf-role-title"
+                        type="text"
+                        placeholder="Например, Product Manager"
+                        value={userProfile.currentRoleTitle}
+                        onChange={(e) => setProfileField("currentRoleTitle", e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="pf-company">Компания / сфера</label>
+                      <input
+                        id="pf-company"
+                        type="text"
+                        placeholder="Например, IT, финансы, образование"
+                        value={userProfile.currentCompanyOrSphere}
+                        onChange={(e) =>
+                          setProfileField("currentCompanyOrSphere", e.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="pf-work-format">Формат работы</label>
+                      <select
+                        id="pf-work-format"
+                        value={userProfile.workFormat}
+                        onChange={(e) => setProfileField("workFormat", e.target.value)}
+                      >
+                        <option value="">Выберите…</option>
+                        <option value="office">Офис</option>
+                        <option value="remote">Удалённо</option>
+                        <option value="hybrid">Гибрид</option>
+                        <option value="field">На выезде</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="pf-schedule">График</label>
+                      <select
+                        id="pf-schedule"
+                        value={userProfile.schedule}
+                        onChange={(e) => setProfileField("schedule", e.target.value)}
+                      >
+                        <option value="">Выберите…</option>
+                        <option value="5-2">5/2 стандартный</option>
+                        <option value="flexible">Гибкий</option>
+                        <option value="shift">Сменный</option>
+                        <option value="freelance">Проектный / фриланс</option>
+                      </select>
+                    </div>
+                    <div className="field field--full">
+                      <label htmlFor="pf-current-tasks">Основные задачи и обязанности</label>
+                      <textarea
+                        id="pf-current-tasks"
+                        className="field-textarea"
+                        rows={3}
+                        placeholder="Кратко опишите, чем занимаетесь на текущей роли"
+                        value={userProfile.currentTasks}
+                        onChange={(e) => setProfileField("currentTasks", e.target.value)}
+                      />
+                    </div>
+                    <div className="field field--full">
+                      <label htmlFor="pf-likes">Что нравится в работе</label>
+                      <textarea
+                        id="pf-likes"
+                        className="field-textarea"
+                        rows={2}
+                        placeholder="Что даёт энергию и удовольствие"
+                        value={userProfile.likesAtWork}
+                        onChange={(e) => setProfileField("likesAtWork", e.target.value)}
+                      />
+                    </div>
+                    <div className="field field--full">
+                      <label htmlFor="pf-drains">Что забирает энергию</label>
+                      <textarea
+                        id="pf-drains"
+                        className="field-textarea"
+                        rows={2}
+                        placeholder="Что утомляет или вызывает сопротивление"
+                        value={userProfile.drainsAtWork}
+                        onChange={(e) => setProfileField("drainsAtWork", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 4: Опыт и навыки */}
+                <div className="pf-section">
+                  <div className="pf-section-title">
+                    <span aria-hidden="true">🧠</span> Опыт и навыки
+                  </div>
+                  <div className="pf-fields pf-fields--grid">
+                    <div className="field field--full">
+                      <label htmlFor="pf-experience">Опыт работы (кратко)</label>
+                      <textarea
+                        id="pf-experience"
+                        className="field-textarea"
+                        rows={3}
+                        placeholder="Сколько лет опыта, в каких сферах, ключевые компании/проекты"
+                        value={userProfile.experience}
+                        onChange={(e) => setProfileField("experience", e.target.value)}
+                      />
+                    </div>
+                    <div className="field field--full">
+                      <label htmlFor="pf-skills">Ключевые навыки</label>
+                      <textarea
+                        id="pf-skills"
+                        className="field-textarea"
+                        rows={2}
+                        placeholder="Через запятую или по строкам: Python, управление командой, переговоры…"
+                        value={userProfile.skills}
+                        onChange={(e) => setProfileField("skills", e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="pf-education">Образование</label>
+                      <input
+                        id="pf-education"
+                        type="text"
+                        placeholder="Специальность, ВУЗ, год"
+                        value={userProfile.education}
+                        onChange={(e) => setProfileField("education", e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="pf-languages">Языки</label>
+                      <input
+                        id="pf-languages"
+                        type="text"
+                        placeholder="Русский (родной), English B2"
+                        value={userProfile.languages}
+                        onChange={(e) => setProfileField("languages", e.target.value)}
+                      />
+                    </div>
+                    <div className="field field--full">
+                      <label htmlFor="pf-portfolio">Портфолио / ссылки</label>
+                      <input
+                        id="pf-portfolio"
+                        type="text"
+                        placeholder="GitHub, LinkedIn, личный сайт…"
+                        value={userProfile.portfolioLinks}
+                        onChange={(e) => setProfileField("portfolioLinks", e.target.value)}
+                      />
+                    </div>
+                    <div className="field field--full">
+                      <label htmlFor="pf-resume">Краткое резюме / о себе</label>
+                      <textarea
+                        id="pf-resume"
+                        className="field-textarea"
+                        rows={4}
+                        placeholder="Короткий текст о себе — как будто для резюме или LinkedIn"
+                        value={userProfile.resumeText}
+                        onChange={(e) => setProfileField("resumeText", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 5: Цели и желаемые роли */}
+                <div className="pf-section">
+                  <div className="pf-section-title">
+                    <span aria-hidden="true">🎯</span> Цели и желаемые роли
+                  </div>
+                  <div className="pf-fields pf-fields--grid">
+                    <div className="field field--full">
+                      <label htmlFor="pf-desired-roles">Желаемые роли и направления</label>
+                      <textarea
+                        id="pf-desired-roles"
+                        className="field-textarea"
+                        rows={2}
+                        placeholder="Например: Head of Product, инди-разработчик, карьерный консультант"
+                        value={userProfile.desiredRoles}
+                        onChange={(e) => setProfileField("desiredRoles", e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="pf-desired-format">Желаемый формат</label>
+                      <select
+                        id="pf-desired-format"
+                        value={userProfile.desiredWorkFormat}
+                        onChange={(e) => setProfileField("desiredWorkFormat", e.target.value)}
+                      >
+                        <option value="">Выберите…</option>
+                        <option value="office">Офис</option>
+                        <option value="remote">Удалённо</option>
+                        <option value="hybrid">Гибрид</option>
+                        <option value="any">Не важно</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="pf-salary">Ожидания по зарплате</label>
+                      <input
+                        id="pf-salary"
+                        type="text"
+                        placeholder="Например: от 200к ₽ gross"
+                        value={userProfile.salaryExpectations}
+                        onChange={(e) => setProfileField("salaryExpectations", e.target.value)}
+                      />
+                    </div>
+                    <div className="field field--full">
+                      <label htmlFor="pf-career-goals">Карьерные цели</label>
+                      <textarea
+                        id="pf-career-goals"
+                        className="field-textarea"
+                        rows={3}
+                        placeholder="Что хотите достичь в профессии через 1–3 года"
+                        value={userProfile.careerGoals}
+                        onChange={(e) => setProfileField("careerGoals", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 6: Рабочая среда и ограничения */}
+                <div className="pf-section">
+                  <div className="pf-section-title">
+                    <span aria-hidden="true">🏡</span> Рабочая среда и ограничения
+                  </div>
+                  <div className="pf-fields">
+                    <div className="field">
+                      <label htmlFor="pf-manager-style">
+                        Предпочтительный стиль руководителя
+                      </label>
+                      <textarea
+                        id="pf-manager-style"
+                        className="field-textarea"
+                        rows={2}
+                        placeholder="Например: автономия с чёткими целями, менторство, без микроменеджмента"
+                        value={userProfile.preferredManagerStyle}
+                        onChange={(e) =>
+                          setProfileField("preferredManagerStyle", e.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="pf-restrictions">Ограничения и условия</label>
+                      <textarea
+                        id="pf-restrictions"
+                        className="field-textarea"
+                        rows={2}
+                        placeholder="Нет командировок, нет ночных смен, только удалёнка и т.п."
+                        value={userProfile.workRestrictions}
+                        onChange={(e) => setProfileField("workRestrictions", e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="pf-red-flags">Красные флаги в вакансиях</label>
+                      <textarea
+                        id="pf-red-flags"
+                        className="field-textarea"
+                        rows={2}
+                        placeholder="Что сразу настораживает в описании вакансии или компании"
+                        value={userProfile.redFlags}
+                        onChange={(e) => setProfileField("redFlags", e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="pf-vacancy-notes">Заметки по вакансиям</label>
+                      <textarea
+                        id="pf-vacancy-notes"
+                        className="field-textarea"
+                        rows={2}
+                        placeholder="Что важно учитывать при оценке вакансий"
+                        value={userProfile.vacancyNotes}
+                        onChange={(e) => setProfileField("vacancyNotes", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Save */}
+                {!isSupabaseConfigured ? (
+                  <p className="data-coming-soon">
+                    ⚠️ Сохранение недоступно: Supabase не настроен
+                  </p>
+                ) : (
+                  <div className="pf-save-row">
+                    {profileSaveStatus === "success" && (
+                      <p className="pf-save-success" role="status">
+                        ✓ Профиль сохранён
+                      </p>
+                    )}
+                    {profileSaveStatus === "error" && (
+                      <p className="account-error" role="alert">
+                        {profileSaveError}
+                      </p>
+                    )}
+                    <button
+                      className="submit-btn"
+                      onClick={saveProfile}
+                      disabled={profileSaveStatus === "saving"}
+                    >
+                      {profileSaveStatus === "saving" ? "Сохраняем…" : "Сохранить данные"}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
           </main>

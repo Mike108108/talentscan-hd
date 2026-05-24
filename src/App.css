@@ -2247,3 +2247,506 @@
   background: rgba(250, 204, 21, 0.08);
   border-radius: 0.35rem;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   BodyGraphViewer v0
+══════════════════════════════════════════════════════════════════════════════ */
+
+.bodygraph-viewer {
+  margin-bottom: 2rem;
+}
+
+/* ── Empty / fallback states ─────────────────────────────────────────────── */
+
+.bodygraph-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2.5rem 1.5rem;
+  background: var(--bg-elevated, #1e2536);
+  border: 1px solid var(--border, #334155);
+  border-radius: 1rem;
+  text-align: center;
+}
+
+.bodygraph-empty--error {
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.bodygraph-empty-icon {
+  font-size: 2.2rem;
+  line-height: 1;
+}
+
+.bodygraph-empty-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text, #e2e8f0);
+}
+
+.bodygraph-empty-sub {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-muted, #94a3b8);
+  max-width: 360px;
+}
+
+/* ── Warning banner (outdated) ───────────────────────────────────────────── */
+
+.bodygraph-warning {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding: 0.75rem 1rem;
+  background: rgba(250, 204, 21, 0.07);
+  border: 1px solid rgba(250, 204, 21, 0.3);
+  border-radius: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.bodygraph-warning-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.bodygraph-warning-text {
+  flex: 1;
+  font-size: 0.88rem;
+  color: #facc15;
+  min-width: 0;
+}
+
+.bodygraph-warning-actions {
+  flex-shrink: 0;
+}
+
+/* ── Action buttons ──────────────────────────────────────────────────────── */
+
+.bodygraph-action-btn {
+  padding: 0.55rem 1.25rem;
+  background: var(--accent, #6366f1);
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+}
+
+.bodygraph-action-btn:hover:not(:disabled) {
+  opacity: 0.85;
+  transform: translateY(-1px);
+}
+
+.bodygraph-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bodygraph-action-btn--sm {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.82rem;
+}
+
+/* ── Chart header ────────────────────────────────────────────────────────── */
+
+.bodygraph-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.bodygraph-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.bodygraph-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text, #e2e8f0);
+  line-height: 1.3;
+}
+
+.bodygraph-calc-date {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+.bodygraph-stale-badge {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  background: rgba(250, 204, 21, 0.12);
+  color: #facc15;
+  border: 1px solid rgba(250, 204, 21, 0.3);
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+/* ── Main layout: SVG + summary cards ───────────────────────────────────── */
+
+.bodygraph-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .bodygraph-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Visual card (SVG container) ─────────────────────────────────────────── */
+
+.bodygraph-visual-card {
+  background: var(--bg-elevated, #1e2536);
+  border: 1px solid var(--border, #334155);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.bodygraph-svg {
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  display: block;
+}
+
+/* ── SVG center styles ───────────────────────────────────────────────────── */
+
+.bodygraph-center {
+  stroke-width: 2;
+  transition: filter 0.2s;
+}
+
+.bodygraph-center--defined {
+  fill: var(--accent, #6366f1);
+  fill-opacity: 0.85;
+  stroke: var(--accent, #6366f1);
+}
+
+.bodygraph-center--open {
+  fill: var(--bg-card, #0f172a);
+  fill-opacity: 0.6;
+  stroke: var(--border, #334155);
+  stroke-dasharray: 5 3;
+}
+
+.bodygraph-center-name {
+  font-size: 7px;
+  font-weight: 700;
+  fill: var(--text, #e2e8f0);
+  pointer-events: none;
+  user-select: none;
+}
+
+.bodygraph-center-sublabel {
+  font-size: 5.5px;
+  fill: rgba(226, 232, 240, 0.6);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ── SVG channel lines ───────────────────────────────────────────────────── */
+
+.bodygraph-channel {
+  stroke: var(--border, #334155);
+  stroke-width: 1.5;
+  stroke-opacity: 0.4;
+}
+
+.bodygraph-channel--active {
+  stroke: var(--accent, #6366f1);
+  stroke-width: 3;
+  stroke-opacity: 0.9;
+}
+
+/* ── SVG legend ──────────────────────────────────────────────────────────── */
+
+.bodygraph-svg-legend {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.bodygraph-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+.bodygraph-legend-item::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.bodygraph-legend-item--defined::before {
+  background: var(--accent, #6366f1);
+  opacity: 0.85;
+}
+
+.bodygraph-legend-item--open::before {
+  background: transparent;
+  border: 2px dashed var(--border, #334155);
+}
+
+/* ── Summary cards grid ──────────────────────────────────────────────────── */
+
+.bodygraph-summary-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.bodygraph-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.6rem;
+}
+
+.bodygraph-summary-card {
+  background: var(--bg-elevated, #1e2536);
+  border: 1px solid var(--border, #334155);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.bodygraph-summary-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bodygraph-summary-value {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text, #e2e8f0);
+  line-height: 1.35;
+}
+
+/* ── Section titles ──────────────────────────────────────────────────────── */
+
+.bodygraph-section-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text, #e2e8f0);
+}
+
+/* ── Mobile sections ─────────────────────────────────────────────────────── */
+
+.bodygraph-mobile-section {
+  background: var(--bg-elevated, #1e2536);
+  border: 1px solid var(--border, #334155);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+/* ── Centers ─────────────────────────────────────────────────────────────── */
+
+.bodygraph-centers-group {
+  margin-bottom: 0.75rem;
+}
+
+.bodygraph-centers-group:last-child {
+  margin-bottom: 0;
+}
+
+.bodygraph-centers-sublabel {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-muted, #94a3b8);
+  font-weight: 500;
+}
+
+/* ── Chip lists ──────────────────────────────────────────────────────────── */
+
+.bodygraph-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.bodygraph-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.bodygraph-chip--defined {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.35);
+  color: #a5b4fc;
+}
+
+.bodygraph-chip--open {
+  background: var(--bg-card, rgba(15, 23, 42, 0.6));
+  border-color: var(--border, #334155);
+  color: var(--text-muted, #94a3b8);
+}
+
+.bodygraph-chip--gate {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+}
+
+.bodygraph-chip--gate-personality {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.35);
+  color: #a5b4fc;
+}
+
+.bodygraph-chip--gate-design {
+  background: rgba(251, 146, 60, 0.1);
+  border-color: rgba(251, 146, 60, 0.3);
+  color: #fdba74;
+}
+
+.bodygraph-chip--gate-both {
+  background: rgba(74, 222, 128, 0.1);
+  border-color: rgba(74, 222, 128, 0.3);
+  color: #86efac;
+}
+
+/* ── Gates legend ────────────────────────────────────────────────────────── */
+
+.bodygraph-gates-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.bodygraph-gates-group {
+  /* inherits */
+}
+
+.bodygraph-gates-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border, #334155);
+}
+
+/* ── Channels ────────────────────────────────────────────────────────────── */
+
+.bodygraph-channel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.bodygraph-channel-item {
+  font-size: 0.88rem;
+  color: var(--text, #e2e8f0);
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.35rem;
+  background: rgba(99, 102, 241, 0.06);
+  border-left: 3px solid var(--accent, #6366f1);
+  line-height: 1.4;
+}
+
+/* ── Activations ─────────────────────────────────────────────────────────── */
+
+.bodygraph-activations-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 600px) {
+  .bodygraph-activations-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bodygraph-activation-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bodygraph-activation-heading {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bodygraph-activation-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.bodygraph-activation-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.83rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid var(--border, #334155);
+}
+
+.bodygraph-activation-row:last-child {
+  border-bottom: none;
+}
+
+.bodygraph-activation-planet {
+  color: var(--text-muted, #94a3b8);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.78rem;
+}
+
+.bodygraph-activation-value {
+  color: var(--text, #e2e8f0);
+  font-weight: 600;
+  font-size: 0.83rem;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}

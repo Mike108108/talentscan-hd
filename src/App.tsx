@@ -6,8 +6,8 @@ import {
   type AnalysisType,
   type Report,
 } from "./lib/supabase";
-import BodyGraphViewer from "./components/BodyGraphViewer";
 import type { HdChartRecord as BgHdChartRecord } from "./components/BodyGraphViewer";
+import MyMapScreen from "./components/MyMapScreen";
 
 // ---------------------------------------------------------------------------
 // Auth helpers
@@ -199,7 +199,7 @@ const ANALYSIS_TYPE_LABEL: Record<AnalysisType, string> = {
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Обзор" },
-  { id: "career-map", label: "Моя карьерная карта" },
+  { id: "career-map", label: "Моя карта" },
   { id: "roles-vacancies", label: "Роли и вакансии" },
   { id: "ai-assistant", label: "ИИ-помощник" },
   { id: "new-report", label: "Новый разбор" },
@@ -210,45 +210,6 @@ const TABS: { id: Tab; label: string }[] = [
 // ---------------------------------------------------------------------------
 // Cabinet config
 // ---------------------------------------------------------------------------
-
-const CAREER_MAP_SECTIONS: {
-  icon: string;
-  title: string;
-  desc: string;
-  action?: { label: string; type: AnalysisType };
-  placeholder?: string;
-}[] = [
-  {
-    icon: "✨",
-    title: "Карта талантов",
-    desc: "Врождённые таланты, стратегия и авторитет по Human Design",
-    action: { label: "Запустить анализ", type: "talent_map" },
-  },
-  {
-    icon: "💪",
-    title: "Сильные стороны",
-    desc: "Определённые центры и их устойчивые качества",
-    placeholder: "Появится после анализа карты талантов",
-  },
-  {
-    icon: "🎯",
-    title: "Подходящие направления",
-    desc: "Карьерные треки, совместимые с вашим дизайном",
-    placeholder: "Появится после анализа карты талантов",
-  },
-  {
-    icon: "🏢",
-    title: "Рабочая среда",
-    desc: "Условия и формат работы, в которых вы раскрываетесь",
-    placeholder: "Появится после анализа карты талантов",
-  },
-  {
-    icon: "⚠️",
-    title: "Спорные направления",
-    desc: "Роли и среда, которые могут давать сопротивление",
-    placeholder: "Появится после анализа карты талантов",
-  },
-];
 
 const ROLES_SECTIONS: {
   icon: string;
@@ -1515,56 +1476,20 @@ export default function App() {
         )}
 
         {/* ══════════════════════════════════════
-            Tab: Моя карьерная карта
+            Tab: Моя карта
         ══════════════════════════════════════ */}
         {activeTab === "career-map" && (
-          <div className="tab-screen">
-            <div className="screen-header">
-              <h1 className="screen-title">Моя карьерная карта</h1>
-              <p className="screen-subtitle">
-                Личный карьерный профиль на основе Human Design
-              </p>
-            </div>
-
-            {/* BodyGraph Viewer v0 */}
-            <BodyGraphViewer
-              chart={hdChart}
-              status={getHdChartStatus(hdChart, userProfile)}
-              loading={hdChartLoading}
-              onGoToData={() => setActiveTab("data")}
-              onRecalculate={calculateHdChart}
-              recalculating={hdChartCalculating}
-            />
-
-            <div className="profile-sections">
-              {CAREER_MAP_SECTIONS.map((sec) => (
-                <div key={sec.title} className="profile-section">
-                  <div className="profile-section-header">
-                    <span className="profile-section-icon" aria-hidden="true">
-                      {sec.icon}
-                    </span>
-                    <div className="profile-section-meta">
-                      <span className="profile-section-title">{sec.title}</span>
-                      <span className="profile-section-desc">{sec.desc}</span>
-                    </div>
-                    {sec.action ? (
-                      <button
-                        className="profile-action-btn"
-                        onClick={() => goToNewReport(sec.action!.type)}
-                      >
-                        {sec.action.label} →
-                      </button>
-                    ) : (
-                      <span className="profile-placeholder-badge">Нет данных</span>
-                    )}
-                  </div>
-                  {sec.placeholder && (
-                    <p className="profile-section-placeholder">{sec.placeholder}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+          <MyMapScreen
+            hdChart={hdChart}
+            hdChartStatus={getHdChartStatus(hdChart, userProfile)}
+            hdChartLoading={hdChartLoading}
+            hdChartCalculating={hdChartCalculating}
+            calculateHdChart={calculateHdChart}
+            profile={userProfile}
+            profileCompleteness={completeness}
+            onGoToData={() => setActiveTab("data")}
+            onGoToNewReport={goToNewReport}
+          />
         )}
 
         {/* ══════════════════════════════════════

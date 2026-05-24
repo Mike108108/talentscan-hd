@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { JSX } from "react";
-import BodyGraphViewer from "./BodyGraphViewer";
+import TodayGraphCard from "./TodayGraphCard";
 import type { HdChartRecord, HdChartStatus, NormalizedChart } from "./BodyGraphViewer";
 import type { AnalysisType } from "../lib/supabase";
 
@@ -44,13 +44,11 @@ type TodayScreenProps = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function todayDate(): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(new Date());
+function todayDateCompact(): string {
+  const d = new Date();
+  const weekday = new Intl.DateTimeFormat("ru-RU", { weekday: "long" }).format(d);
+  const dayMonth = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" }).format(d);
+  return `${weekday.charAt(0).toUpperCase() + weekday.slice(1)}, ${dayMonth}`;
 }
 
 function getNc(hdChart: HdChartRecord | null): NormalizedChart | null {
@@ -59,10 +57,10 @@ function getNc(hdChart: HdChartRecord | null): NormalizedChart | null {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-components
+// A. Compact Hero
 // ---------------------------------------------------------------------------
 
-function HeroBlock({
+function CompactHero({
   profile,
   hdChartStatus,
   onGoToCareerMap,
@@ -78,143 +76,34 @@ function HeroBlock({
   let focusText: string;
   if (hdChartStatus === "ok") {
     focusText =
-      "Сегодня лучше не распыляться. Выберите 1–2 действия, где ваша энергия даст максимальный эффект, и проверяйте решения через свой внутренний способ выбора.";
+      "Выберите 1–2 действия, где ваша энергия даст максимальный эффект, и проверяйте решения через свой внутренний способ выбора.";
   } else if (hdChartStatus === "outdated") {
-    focusText =
-      "Данные рождения изменились. Обновите карту, чтобы рекомендации были точнее.";
+    focusText = "Данные рождения изменились. Обновите карту, чтобы рекомендации стали точнее.";
   } else {
-    focusText =
-      "Чтобы собрать персональный фокус дня точнее, сначала рассчитайте карту во вкладке «Данные».";
+    focusText = "Рассчитайте карту во вкладке «Данные» — и фокус дня станет персональным.";
   }
 
   return (
-    <div className="today-hero">
-      <div className="today-hero-eyebrow">
-        <span className="today-hero-tag">Сегодня</span>
-        <span className="today-hero-date">{todayDate()}</span>
+    <div className="today-compact-hero">
+      <div className="today-compact-hero-left">
+        <div className="today-compact-hero-eyebrow">
+          <span className="today-hero-tag">Сегодня</span>
+          <span className="today-hero-date">{todayDateCompact()}</span>
+        </div>
+        {name && <p className="today-compact-hero-greeting">Привет, {name}</p>}
+        <h1 className="today-compact-hero-title">Главный фокус дня</h1>
+        <p className="today-compact-hero-text">{focusText}</p>
       </div>
-      {name && (
-        <p className="today-hero-greeting">Привет, {name} 👋</p>
-      )}
-      <h1 className="today-hero-title">Главный фокус дня</h1>
-      <p className="today-hero-focus">{focusText}</p>
-      <div className="today-hero-actions">
-        <button className="today-btn today-btn--primary" onClick={onGoToCareerMap}>
-          Открыть Мою карту
+      <div className="today-compact-hero-actions">
+        <button className="today-btn today-btn--primary today-btn--sm" onClick={onGoToCareerMap}>
+          Моя карта
         </button>
-        {hdChartStatus === "none" || hdChartStatus === "outdated" ? (
-          <button className="today-btn today-btn--secondary" onClick={onGoToData}>
-            {hdChartStatus === "outdated" ? "Обновить карту" : "Рассчитать карту"}
-          </button>
-        ) : (
-          <button className="today-btn today-btn--secondary" onClick={onGoToData}>
-            Уточнить данные
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Transit preview chips
-const TRANSIT_CHIPS = [
-  "Солнце дня",
-  "Земля дня",
-  "Луна",
-  "Текущие ворота",
-  "Временные каналы",
-  "Подсветка центров",
-];
-
-function BodyGraphBlock({
-  hdChart,
-  hdChartStatus,
-  hdChartLoading,
-  hdChartCalculating,
-  onGoToData,
-  calculateHdChart,
-}: {
-  hdChart: HdChartRecord | null;
-  hdChartStatus: HdChartStatus;
-  hdChartLoading: boolean;
-  hdChartCalculating: boolean;
-  onGoToData: () => void;
-  calculateHdChart: () => void;
-}): JSX.Element {
-  const [mode, setMode] = useState<"transit" | "my-chart">("my-chart");
-
-  return (
-    <div className="today-section today-bodygraph-block">
-      <div className="today-section-header">
-        <div>
-          <h2 className="today-section-title">Бодиграф дня</h2>
-          <p className="today-section-subtitle">Натальная карта + будущий транзитный слой</p>
-        </div>
-        <div className="today-segmented">
-          <button
-            className={`today-segmented-btn${mode === "transit" ? " today-segmented-btn--active" : ""}`}
-            onClick={() => setMode("transit")}
-          >
-            Сегодня с транзитом
-          </button>
-          <button
-            className={`today-segmented-btn${mode === "my-chart" ? " today-segmented-btn--active" : ""}`}
-            onClick={() => setMode("my-chart")}
-          >
-            Моя карта
-          </button>
-        </div>
-      </div>
-
-      {mode === "transit" ? (
-        <TransitPreview onSwitchToMyChart={() => setMode("my-chart")} />
-      ) : (
-        <div className="today-bodygraph-viewer">
-          <BodyGraphViewer
-            chart={hdChart}
-            status={hdChartStatus}
-            loading={hdChartLoading}
-            onGoToData={onGoToData}
-            onRecalculate={calculateHdChart}
-            recalculating={hdChartCalculating}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TransitPreview({ onSwitchToMyChart }: { onSwitchToMyChart: () => void }): JSX.Element {
-  return (
-    <div className="today-transit-preview">
-      <div className="today-transit-mock">
-        <div className="today-transit-mock-bg">
-          <div className="today-transit-mock-orb today-transit-mock-orb--1" />
-          <div className="today-transit-mock-orb today-transit-mock-orb--2" />
-          <div className="today-transit-mock-orb today-transit-mock-orb--3" />
-          <div className="today-transit-mock-icon">✦</div>
-          <div className="today-transit-mock-label">Транзитный слой</div>
-          <div className="today-transit-mock-sublabel">готовится к подключению</div>
-        </div>
-      </div>
-
-      <div className="today-transit-info">
-        <p className="today-transit-coming">
-          На следующем этапе здесь появится реальная карта текущего момента и её наложение на вашу натальную карту.
-        </p>
-
-        <div className="today-transit-chips">
-          {TRANSIT_CHIPS.map((chip) => (
-            <span key={chip} className="today-transit-chip">{chip}</span>
-          ))}
-        </div>
-
-        <p className="today-transit-note">
-          Сейчас экран показывает персональные рекомендации на базе вашей сохранённой карты и профиля. Реальные транзиты будут подключены следующим этапом.
-        </p>
-
-        <button className="today-btn today-btn--secondary" onClick={onSwitchToMyChart}>
-          Посмотреть мою карту
+        <button className="today-btn today-btn--ghost today-btn--sm" onClick={onGoToData}>
+          {hdChartStatus === "outdated"
+            ? "Обновить карту"
+            : hdChartStatus === "none"
+            ? "Рассчитать карту"
+            : "Данные"}
         </button>
       </div>
     </div>
@@ -222,7 +111,125 @@ function TransitPreview({ onSwitchToMyChart }: { onSwitchToMyChart: () => void }
 }
 
 // ---------------------------------------------------------------------------
-// Compass cards
+// Quick rail (left side)
+// ---------------------------------------------------------------------------
+
+const QUICK_NAV = [
+  { icon: "🗺️", label: "Моя карта", key: "career-map" as const },
+  { icon: "📋", label: "Данные", key: "data" as const },
+  { icon: "✨", label: "Новый разбор", key: "new-report" as const },
+  { icon: "🤖", label: "ИИ-помощник", key: "ai-assistant" as const },
+];
+
+type NavKey = "career-map" | "data" | "new-report" | "ai-assistant";
+
+function QuickRail({
+  onGoToCareerMap,
+  onGoToData,
+  onGoToNewReport,
+  onGoToAiAssistant,
+}: {
+  onGoToCareerMap: () => void;
+  onGoToData: () => void;
+  onGoToNewReport: (type: AnalysisType) => void;
+  onGoToAiAssistant: () => void;
+}): JSX.Element {
+  function handleNav(key: NavKey) {
+    switch (key) {
+      case "career-map": onGoToCareerMap(); break;
+      case "data": onGoToData(); break;
+      case "new-report": onGoToNewReport("talent_map"); break;
+      case "ai-assistant": onGoToAiAssistant(); break;
+    }
+  }
+  return (
+    <div className="today-quick-rail">
+      {QUICK_NAV.map((item) => (
+        <button
+          key={item.key}
+          className="today-quick-rail-btn"
+          onClick={() => handleNav(item.key)}
+        >
+          <span className="today-quick-rail-icon" aria-hidden="true">{item.icon}</span>
+          <span className="today-quick-rail-label">{item.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mini accuracy status (left side, bottom)
+// ---------------------------------------------------------------------------
+
+function MiniAccuracy({
+  profileCompleteness,
+  hdChartStatus,
+  onGoToData,
+}: {
+  profileCompleteness: ProfileCompleteness;
+  hdChartStatus: HdChartStatus;
+  onGoToData: () => void;
+}): JSX.Element {
+  const chartOk = hdChartStatus === "ok";
+  const profileOk = profileCompleteness.percent >= 50;
+
+  return (
+    <div className="today-mini-accuracy">
+      <p className="today-mini-accuracy-title">Точность подсказок</p>
+      <div className="today-mini-accuracy-row">
+        <span className={`today-mini-dot${chartOk ? " today-mini-dot--ok" : ""}`} />
+        <span className="today-mini-accuracy-text">
+          {chartOk ? "Карта рассчитана" : hdChartStatus === "outdated" ? "Карта устарела" : "Карта не рассчитана"}
+        </span>
+      </div>
+      <div className="today-mini-accuracy-row">
+        <span className={`today-mini-dot${profileOk ? " today-mini-dot--ok" : ""}`} />
+        <span className="today-mini-accuracy-text">Профиль {profileCompleteness.percent}%</span>
+      </div>
+      {!chartOk && (
+        <button className="today-mini-accuracy-cta" onClick={onGoToData}>
+          Уточнить данные →
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// B. AI mini-card (right side, top)
+// ---------------------------------------------------------------------------
+
+const AI_QUICK_QUESTIONS = [
+  "На чём мне сегодня сфокусироваться?",
+  "Это моё состояние или фон дня?",
+  "Как мне принять решение?",
+  "Где я могу перегореть?",
+];
+
+function AiMiniCard({ onGoToAiAssistant }: { onGoToAiAssistant: () => void }): JSX.Element {
+  return (
+    <div className="today-ai-card">
+      <div className="today-ai-card-header">
+        <span className="today-ai-card-icon">🤖</span>
+        <div>
+          <h3 className="today-ai-card-title">ИИ-помощник</h3>
+          <p className="today-ai-card-sub">Спросите, как прожить день точнее</p>
+        </div>
+      </div>
+      <div className="today-ai-chips">
+        {AI_QUICK_QUESTIONS.map((q) => (
+          <button key={q} className="today-ai-chip" onClick={onGoToAiAssistant}>
+            {q}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// C. Compass day (right side, compact 2x2)
 // ---------------------------------------------------------------------------
 
 type CompassCard = {
@@ -234,57 +241,49 @@ type CompassCard = {
 
 function buildCompassCards(nc: NormalizedChart | null): CompassCard[] {
   const hasChart = !!nc;
-
-  const energy: CompassCard = {
-    icon: "⚡",
-    title: "Энергия",
-    color: "amber",
-    text: hasChart
-      ? "Сегодня не обязательно брать всё силой. Лучше выбрать действия, где вы действительно чувствуете внутреннее «да», интерес или ясный импульс."
-      : "После расчёта карты здесь появится подсказка, как лучше распределять энергию в течение дня.",
-  };
-
-  const decisions: CompassCard = {
-    icon: "🧭",
-    title: "Решения",
-    color: "blue",
-    text:
-      nc?.authority
-        ? "Проверяйте важные решения через свой способ выбора, а не через срочность, давление или желание всем быстро ответить."
-        : "После расчёта карты здесь появится подсказка по вашему авторитету принятия решений.",
-  };
-
-  const communication: CompassCard = {
-    icon: "💬",
-    title: "Коммуникация",
-    color: "violet",
-    text: "Сегодня лучше говорить точнее, а не больше. Один ясный запрос может быть сильнее длинного объяснения.",
-  };
-
-  const focus: CompassCard = {
-    icon: "🎯",
-    title: "Фокус",
-    color: "green",
-    text: "Выберите один главный результат дня. Не превращайте день в бесконечную гонку задач.",
-  };
-
-  return [energy, decisions, communication, focus];
+  return [
+    {
+      icon: "⚡",
+      title: "Энергия",
+      color: "amber",
+      text: hasChart
+        ? "Выбирайте действия, где чувствуете внутреннее «да» или ясный импульс."
+        : "Рассчитайте карту — здесь появится подсказка по энергии.",
+    },
+    {
+      icon: "🧭",
+      title: "Решения",
+      color: "blue",
+      text: nc?.authority
+        ? "Проверяйте решения через свой авторитет, а не через срочность."
+        : "После расчёта карты — подсказка по авторитету решений.",
+    },
+    {
+      icon: "💬",
+      title: "Коммуникация",
+      color: "violet",
+      text: "Говорите точнее, а не больше. Один ясный запрос сильнее длинного объяснения.",
+    },
+    {
+      icon: "🎯",
+      title: "Фокус",
+      color: "green",
+      text: "Один главный результат дня. Не превращайте его в гонку задач.",
+    },
+  ];
 }
 
-function CompassSection({ hdChart }: { hdChart: HdChartRecord | null }): JSX.Element {
-  const nc = getNc(hdChart);
-  const cards = buildCompassCards(nc);
-
+function CompassBlock({ hdChart }: { hdChart: HdChartRecord | null }): JSX.Element {
+  const cards = buildCompassCards(getNc(hdChart));
   return (
     <div className="today-section">
       <h2 className="today-section-title">Компас дня</h2>
-      <p className="today-section-subtitle">Четыре измерения вашего дня</p>
       <div className="today-compass-grid">
         {cards.map((card) => (
           <div key={card.title} className={`today-compass-card today-compass-card--${card.color}`}>
-            <div className="today-compass-card-icon">{card.icon}</div>
-            <h3 className="today-compass-card-title">{card.title}</h3>
-            <p className="today-compass-card-text">{card.text}</p>
+            <span className="today-compass-icon">{card.icon}</span>
+            <strong className="today-compass-label">{card.title}</strong>
+            <p className="today-compass-text">{card.text}</p>
           </div>
         ))}
       </div>
@@ -293,68 +292,26 @@ function CompassSection({ hdChart }: { hdChart: HdChartRecord | null }): JSX.Ele
 }
 
 // ---------------------------------------------------------------------------
-// Quick questions
+// D. Day plan (compact)
 // ---------------------------------------------------------------------------
 
-const QUICK_QUESTIONS = [
-  "На чём мне сегодня сфокусироваться?",
-  "Где я могу слить энергию?",
-  "Как мне сегодня принимать решения?",
-  "Что лучше сделать по работе?",
-  "Как экологично общаться сегодня?",
-  "Какой один шаг приблизит меня к моей роли?",
-];
-
-function QuickQuestionsBlock({ onGoToAiAssistant }: { onGoToAiAssistant: () => void }): JSX.Element {
-  return (
-    <div className="today-section">
-      <h2 className="today-section-title">Спросить ИИ-помощника</h2>
-      <p className="today-section-subtitle">Выберите вопрос — откроется чат с помощником</p>
-      <div className="today-questions-chips">
-        {QUICK_QUESTIONS.map((q) => (
-          <button key={q} className="today-question-chip" onClick={onGoToAiAssistant}>
-            {q}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Day plan
-// ---------------------------------------------------------------------------
-
-const DAY_PLAN_STEPS = [
-  {
-    num: "1",
-    title: "Собрать фокус",
-    text: "Выберите одну главную задачу дня.",
-  },
-  {
-    num: "2",
-    title: "Проверить решение",
-    text: "Не принимайте важное решение из давления или спешки.",
-  },
-  {
-    num: "3",
-    title: "Закрыть день наблюдением",
-    text: "Отметьте, где вы действовали в согласии с собой, а где пытались себя дожать.",
-  },
+const DAY_PLAN = [
+  { num: "1", title: "Собрать фокус", text: "Выберите одну главную задачу дня." },
+  { num: "2", title: "Проверить решение", text: "Не принимайте важное решение из давления или спешки." },
+  { num: "3", title: "Закрыть день наблюдением", text: "Где вы действовали в согласии с собой, а где дожимали себя?" },
 ];
 
 function DayPlanBlock(): JSX.Element {
   return (
     <div className="today-section">
       <h2 className="today-section-title">3 шага на сегодня</h2>
-      <p className="today-section-subtitle">Минимальная практика для осознанного дня</p>
-      <div className="today-plan-steps">
-        {DAY_PLAN_STEPS.map((step) => (
-          <div key={step.num} className="today-plan-step">
-            <div className="today-plan-step-num">{step.num}</div>
-            <div className="today-plan-step-body">
-              <h3 className="today-plan-step-title">{step.title}</h3>
-              <p className="today-plan-step-text">{step.text}</p>
+      <div className="today-plan">
+        {DAY_PLAN.map((step) => (
+          <div key={step.num} className="today-plan-row">
+            <div className="today-plan-num">{step.num}</div>
+            <div>
+              <strong className="today-plan-title">{step.title}</strong>
+              <p className="today-plan-text">{step.text}</p>
             </div>
           </div>
         ))}
@@ -364,7 +321,7 @@ function DayPlanBlock(): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// Accuracy block
+// E. Accuracy block (right side, full)
 // ---------------------------------------------------------------------------
 
 function AccuracyBlock({
@@ -385,54 +342,46 @@ function AccuracyBlock({
   const hasBirthData = !!(profile.birthDate && profile.birthTime);
   const hasCoords = !!profile.birthLatitude;
 
-  const chartStatusLabel = (() => {
+  const chartRow = (() => {
     switch (hdChartStatus) {
       case "ok": return { text: "Карта рассчитана", ok: true };
-      case "outdated": return { text: "Карта устарела — нужен пересчёт", ok: false };
-      case "error": return { text: "Ошибка расчёта карты", ok: false };
+      case "outdated": return { text: "Карта устарела", ok: false };
+      case "error": return { text: "Ошибка расчёта", ok: false };
       case "none": return { text: "Карта не рассчитана", ok: false };
-      case "no_coords": return { text: "Нет координат для расчёта карты", ok: false };
+      case "no_coords": return { text: "Нет координат для карты", ok: false };
     }
   })();
 
+  const rows = [
+    chartRow,
+    { text: `Профиль ${profileCompleteness.percent}% — ${profileCompleteness.label}`, ok: profileCompleteness.percent >= 50 },
+    { text: hasBirthData ? "Данные рождения указаны" : "Данные рождения не указаны", ok: hasBirthData },
+    { text: hasCoords ? "Координаты есть" : "Координаты не указаны", ok: hasCoords },
+  ];
+
   return (
-    <div className="today-section today-accuracy-block">
-      <h2 className="today-section-title">Точность сегодняшних подсказок</h2>
+    <div className="today-section">
+      <h2 className="today-section-title">Точность подсказок</h2>
       <p className="today-accuracy-intro">
-        Чем точнее заполнены данные рождения, профиль и карьерные цели, тем точнее TalentScan сможет объяснять ваш день, роли, энергию и решения.
+        Чем точнее данные рождения, профиль и цели — тем точнее TalentScan объясняет ваш день, роли и решения.
       </p>
-
-      <div className="today-accuracy-items">
-        <div className={`today-accuracy-item${chartStatusLabel.ok ? " today-accuracy-item--ok" : " today-accuracy-item--warn"}`}>
-          <span className="today-accuracy-item-icon">{chartStatusLabel.ok ? "✓" : "○"}</span>
-          <span>{chartStatusLabel.text}</span>
-        </div>
-
-        <div className={`today-accuracy-item${profileCompleteness.percent >= 50 ? " today-accuracy-item--ok" : " today-accuracy-item--warn"}`}>
-          <span className="today-accuracy-item-icon">{profileCompleteness.percent >= 50 ? "✓" : "○"}</span>
-          <span>Профиль заполнен на {profileCompleteness.percent}% — {profileCompleteness.label}</span>
-        </div>
-
-        <div className={`today-accuracy-item${hasBirthData ? " today-accuracy-item--ok" : " today-accuracy-item--warn"}`}>
-          <span className="today-accuracy-item-icon">{hasBirthData ? "✓" : "○"}</span>
-          <span>{hasBirthData ? "Данные рождения указаны" : "Данные рождения не указаны"}</span>
-        </div>
-
-        <div className={`today-accuracy-item${hasCoords ? " today-accuracy-item--ok" : " today-accuracy-item--warn"}`}>
-          <span className="today-accuracy-item-icon">{hasCoords ? "✓" : "○"}</span>
-          <span>{hasCoords ? "Координаты места рождения есть" : "Координаты места рождения не указаны"}</span>
-        </div>
+      <div className="today-accuracy-rows">
+        {rows.map((row, i) => (
+          <div key={i} className={`today-accuracy-row${row.ok ? " today-accuracy-row--ok" : ""}`}>
+            <span className="today-accuracy-dot">{row.ok ? "✓" : "○"}</span>
+            <span>{row.text}</span>
+          </div>
+        ))}
       </div>
-
       <div className="today-accuracy-actions">
         <button className="today-btn today-btn--secondary today-btn--sm" onClick={onGoToData}>
           Уточнить данные
         </button>
         <button className="today-btn today-btn--ghost today-btn--sm" onClick={onGoToCareerMap}>
-          Открыть Мою карту
+          Моя карта
         </button>
         <button className="today-btn today-btn--ghost today-btn--sm" onClick={() => onGoToNewReport("talent_map")}>
-          Сделать новый разбор
+          Новый разбор
         </button>
       </div>
     </div>
@@ -440,54 +389,82 @@ function AccuracyBlock({
 }
 
 // ---------------------------------------------------------------------------
-// Quick nav
+// Floating AI button + drawer
 // ---------------------------------------------------------------------------
 
-const QUICK_NAV = [
-  { icon: "🗺️", label: "Моя карта", key: "career-map" as const },
-  { icon: "📋", label: "Данные", key: "data" as const },
-  { icon: "✨", label: "Новый разбор", key: "new-report" as const },
-  { icon: "🤖", label: "ИИ-помощник", key: "ai-assistant" as const },
+const DRAWER_QUESTIONS = [
+  "На чём мне сегодня сфокусироваться?",
+  "Где я могу слить энергию?",
+  "Как принять решение?",
+  "Что сегодня важно по работе?",
 ];
 
-type NavKey = "career-map" | "data" | "new-report" | "ai-assistant";
-
-function QuickNavBlock({
-  onGoToCareerMap,
-  onGoToData,
-  onGoToNewReport,
-  onGoToAiAssistant,
-}: {
-  onGoToCareerMap: () => void;
-  onGoToData: () => void;
-  onGoToNewReport: (type: AnalysisType) => void;
-  onGoToAiAssistant: () => void;
-}): JSX.Element {
-  function handleNav(key: NavKey) {
-    switch (key) {
-      case "career-map": onGoToCareerMap(); break;
-      case "data": onGoToData(); break;
-      case "new-report": onGoToNewReport("talent_map"); break;
-      case "ai-assistant": onGoToAiAssistant(); break;
-    }
-  }
+function FloatingAi({ onGoToAiAssistant }: { onGoToAiAssistant: () => void }): JSX.Element {
+  const [open, setOpen] = useState(false);
 
   return (
-    <div className="today-section">
-      <h2 className="today-section-title">Быстрые переходы</h2>
-      <div className="today-quicknav">
-        {QUICK_NAV.map((item) => (
+    <>
+      {/* Backdrop */}
+      {open && (
+        <div
+          className="today-ai-backdrop"
+          onClick={() => setOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Drawer */}
+      {open && (
+        <div className="today-ai-drawer" role="dialog" aria-label="ИИ-помощник">
+          <div className="today-ai-drawer-header">
+            <span className="today-ai-drawer-title">ИИ-помощник TalentScan</span>
+            <button
+              className="today-ai-drawer-close"
+              onClick={() => setOpen(false)}
+              aria-label="Закрыть"
+            >
+              ×
+            </button>
+          </div>
+          <p className="today-ai-drawer-note">
+            Полноценный чат будет подключён следующим этапом.
+          </p>
+          <div className="today-ai-drawer-chips">
+            {DRAWER_QUESTIONS.map((q) => (
+              <button
+                key={q}
+                className="today-ai-chip"
+                onClick={() => {
+                  setOpen(false);
+                  onGoToAiAssistant();
+                }}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
           <button
-            key={item.key}
-            className="today-quicknav-card"
-            onClick={() => handleNav(item.key)}
+            className="today-btn today-btn--primary"
+            style={{ width: "100%", marginTop: "0.75rem" }}
+            onClick={() => {
+              setOpen(false);
+              onGoToAiAssistant();
+            }}
           >
-            <span className="today-quicknav-icon" aria-hidden="true">{item.icon}</span>
-            <span className="today-quicknav-label">{item.label}</span>
+            Открыть ИИ-помощника
           </button>
-        ))}
-      </div>
-    </div>
+        </div>
+      )}
+
+      {/* Float button */}
+      <button
+        className={`today-ai-float${open ? " today-ai-float--open" : ""}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-label="ИИ-помощник"
+      >
+        <span className="today-ai-float-icon">{open ? "×" : "💬"}</span>
+      </button>
+    </>
   );
 }
 
@@ -506,47 +483,66 @@ export default function TodayScreen({
   onGoToData,
   onGoToNewReport,
   onGoToAiAssistant,
-  calculateHdChart,
+  calculateHdChart: _calculateHdChart,
 }: TodayScreenProps): JSX.Element {
   return (
     <div className="today-screen">
-      <HeroBlock
+      {/* Compact header */}
+      <CompactHero
         profile={profile}
         hdChartStatus={hdChartStatus}
         onGoToCareerMap={onGoToCareerMap}
         onGoToData={onGoToData}
       />
 
-      <BodyGraphBlock
-        hdChart={hdChart}
-        hdChartStatus={hdChartStatus}
-        hdChartLoading={hdChartLoading}
-        hdChartCalculating={hdChartCalculating}
-        onGoToData={onGoToData}
-        calculateHdChart={calculateHdChart}
-      />
+      {/* Cockpit grid */}
+      <div className="today-cockpit">
+        {/* LEFT RAIL — sticky on desktop */}
+        <div className="today-left-rail">
+          <TodayGraphCard
+            hdChart={hdChart}
+            hdChartStatus={hdChartStatus}
+            hdChartLoading={hdChartLoading}
+            hdChartCalculating={hdChartCalculating}
+            onGoToMyMap={onGoToCareerMap}
+            onGoToData={onGoToData}
+          />
 
-      <CompassSection hdChart={hdChart} />
+          <QuickRail
+            onGoToCareerMap={onGoToCareerMap}
+            onGoToData={onGoToData}
+            onGoToNewReport={onGoToNewReport}
+            onGoToAiAssistant={onGoToAiAssistant}
+          />
 
-      <QuickQuestionsBlock onGoToAiAssistant={onGoToAiAssistant} />
+          <MiniAccuracy
+            profileCompleteness={profileCompleteness}
+            hdChartStatus={hdChartStatus}
+            onGoToData={onGoToData}
+          />
+        </div>
 
-      <DayPlanBlock />
+        {/* RIGHT FLOW — scrollable */}
+        <div className="today-right-flow">
+          <AiMiniCard onGoToAiAssistant={onGoToAiAssistant} />
 
-      <AccuracyBlock
-        profile={profile}
-        profileCompleteness={profileCompleteness}
-        hdChartStatus={hdChartStatus}
-        onGoToData={onGoToData}
-        onGoToCareerMap={onGoToCareerMap}
-        onGoToNewReport={onGoToNewReport}
-      />
+          <CompassBlock hdChart={hdChart} />
 
-      <QuickNavBlock
-        onGoToCareerMap={onGoToCareerMap}
-        onGoToData={onGoToData}
-        onGoToNewReport={onGoToNewReport}
-        onGoToAiAssistant={onGoToAiAssistant}
-      />
+          <DayPlanBlock />
+
+          <AccuracyBlock
+            profile={profile}
+            profileCompleteness={profileCompleteness}
+            hdChartStatus={hdChartStatus}
+            onGoToData={onGoToData}
+            onGoToCareerMap={onGoToCareerMap}
+            onGoToNewReport={onGoToNewReport}
+          />
+        </div>
+      </div>
+
+      {/* Floating AI */}
+      <FloatingAi onGoToAiAssistant={onGoToAiAssistant} />
     </div>
   );
 }

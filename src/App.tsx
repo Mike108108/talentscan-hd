@@ -265,6 +265,51 @@ type HdChartRecord = BgHdChartRecord;
 
 type HdChartStatus = "none" | "ok" | "outdated" | "no_coords" | "error";
 
+// ---------------------------------------------------------------------------
+// Transit Debug types (temporary QA tool)
+// ---------------------------------------------------------------------------
+
+type TransitDebugResult = {
+  diagnosticsSummary: {
+    currentMomentLikelyAccurate: boolean;
+    reason: string;
+  };
+  debug: {
+    timeDiagnostics: {
+      nowUtcIso: string;
+      inputDate: string;
+      inputTime: string;
+      inputTimeBasis: string;
+      coordinatesSource: string;
+      lat: number;
+      lng: number;
+      apiReturnedBirthDateUtc: string | null;
+      differenceMinutesBetweenNowUtcAndApiBirthDateUtc: number | null;
+      possibleTimezoneShiftDetected: boolean;
+    };
+  };
+  currentMoment: {
+    type?: string;
+    profile?: string;
+    authority?: string;
+    strategy?: string;
+    gatesAll: string[];
+    channelsShort: string[];
+    definedCenters: string[];
+    activations?: Record<string, unknown>;
+  };
+  overlay: {
+    addedGates: string[];
+    addedChannels: string[];
+    addedDefinedCenters: string[];
+    sharedGates: string[];
+    sharedChannels: string[];
+    sharedDefinedCenters: string[];
+  };
+};
+
+type TransitDebugError = { status: number; message: string; source?: string };
+
 function getHdChartStatus(
   chart: HdChartRecord | null,
   profile: UserProfile,
@@ -606,6 +651,12 @@ export default function App() {
   const [hdChartLoading, setHdChartLoading] = useState(false);
   const [hdChartCalculating, setHdChartCalculating] = useState(false);
   const [hdChartError, setHdChartError] = useState("");
+
+  // ---- Transit debug (temporary QA) ----------------------------------------
+  const [transitDebugLoading, setTransitDebugLoading] = useState(false);
+  const [transitDebugResult, setTransitDebugResult] = useState<TransitDebugResult | null>(null);
+  const [transitDebugError, setTransitDebugError] = useState<TransitDebugError | null>(null);
+  const [transitCopyStatus, setTransitCopyStatus] = useState<"idle" | "copied">("idle");
 
   // ---- Birth city autocomplete (Данные tab) ---------------------------------
   const [birthSuggestions, setBirthSuggestions] = useState<GeocodeSuggestion[]>([]);
@@ -967,6 +1018,81 @@ export default function App() {
       setHdChartError("Ошибка сети. Попробуйте позже.");
     } finally {
       setHdChartCalculating(false);
+    }
+  }
+
+  // ---- Transit debug (temporary QA tool) ------------------------------------
+  async function checkTransitDebug() {
+    const token = await getAccessToken();
+    if (!token) {
+      setTransitDebugError({ status: 401, message: "Сессия истекла. Войдите заново." });
+      return;
+    }
+    setTransitDebugLoading(true);
+    setTransitDebugResult(null);
+    setTransitDebugError(null);
+    try {
+      const resp = await fetch("/.netlify/functions/hd-transit-debug", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({}),
+      });
+      const data = (await resp.json().catch(() => null)) as TransitDebugResult & {
+        error?: string;
+        source?: string;
+      } | null;
+      if (!resp.ok) {
+        setTransitDebugError({
+          status: resp.status,
+          message: data?.error ?? `Ошибка сервера (${resp.status})`,
+          source: data?.source,
+        });
+      } else {
+        setTransitDebugResult(data as TransitDebugResult);
+      }
+    } catch {
+      setTransitDebugError({ status: 0, message: "Ошибка сети. Проверьте подключение." });
+    } finally {
+      setTransitDebugLoading(false);
+    }
+  }
+
+  async function copyTransitDebugForChatGPT() {
+    if (!transitDebugResult) return;
+    const { diagnosticsSummary, debug, currentMoment, overlay } = transitDebugResult;
+    const payload = {
+      diagnosticsSummary,
+      timeDiagnostics: debug.timeDiagnostics,
+      currentMomentSummary: {
+        type: currentMoment.type,
+        profile: currentMoment.profile,
+        authority: currentMoment.authority,
+        strategy: currentMoment.strategy,
+        gatesCount: currentMoment.gatesAll.length,
+        channelsCount: currentMoment.channelsShort.length,
+        definedCentersCount: currentMoment.definedCenters.length,
+        hasActivations:
+          !!currentMoment.activations &&
+          Object.keys(currentMoment.activations).length > 0,
+      },
+      overlaySummary: {
+        addedGatesCount: overlay.addedGates.length,
+        addedChannelsCount: overlay.addedChannels.length,
+        addedDefinedCentersCount: overlay.addedDefinedCenters.length,
+        addedGates: overlay.addedGates,
+        addedChannels: overlay.addedChannels,
+        addedDefinedCenters: overlay.addedDefinedCenters,
+      },
+    };
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      setTransitCopyStatus("copied");
+      setTimeout(() => setTransitCopyStatus("idle"), 2500);
+    } catch {
+      setTransitCopyStatus("idle");
     }
   }
 
@@ -2214,6 +2340,160 @@ export default function App() {
                         </>
                       );
                     })()}
+                  </div>
+                )}
+
+                {/* Transit Debug (temporary QA tool) */}
+                {isSupabaseConfigured && (
+                  <div className="transit-debug-card">
+                    <div className="transit-debug-header">
+                      <span className="transit-debug-badge">DEBUG</span>
+                      <span className="transit-debug-title">Транзит debug</span>
+                    </div>
+                    <p className="transit-debug-desc">
+                      Временная проверка: можно ли использовать текущий Human Design API как карту
+                      текущего момента. Ничего не сохраняется.
+                    </p>
+                    <button
+                      className="transit-debug-btn"
+                      onClick={checkTransitDebug}
+                      disabled={transitDebugLoading}
+                    >
+                      {transitDebugLoading ? "Проверяем транзит…" : "Проверить транзит"}
+                    </button>
+
+                    {transitDebugError && (
+                      <div className="transit-debug-error">
+                        {transitDebugError.status > 0 && (
+                          <span className="transit-debug-error-status">
+                            HTTP {transitDebugError.status}
+                          </span>
+                        )}
+                        <span className="transit-debug-error-msg">
+                          {transitDebugError.message}
+                        </span>
+                        {transitDebugError.source && (
+                          <span className="transit-debug-error-source">
+                            source: {transitDebugError.source}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {transitDebugResult && (
+                      <div className="transit-debug-result">
+                        <div
+                          className={`transit-debug-summary${
+                            transitDebugResult.diagnosticsSummary.currentMomentLikelyAccurate
+                              ? " transit-debug-summary--ok"
+                              : " transit-debug-summary--warn"
+                          }`}
+                        >
+                          <span aria-hidden="true">
+                            {transitDebugResult.diagnosticsSummary.currentMomentLikelyAccurate
+                              ? "✓"
+                              : "⚠"}
+                          </span>
+                          <span>{transitDebugResult.diagnosticsSummary.reason}</span>
+                        </div>
+
+                        <div className="transit-debug-grid">
+                          <div className="transit-debug-row">
+                            <span className="transit-debug-label">Сейчас UTC</span>
+                            <span className="transit-debug-value">
+                              {transitDebugResult.debug.timeDiagnostics.nowUtcIso}
+                            </span>
+                          </div>
+                          <div className="transit-debug-row">
+                            <span className="transit-debug-label">Дата запроса</span>
+                            <span className="transit-debug-value">
+                              {transitDebugResult.debug.timeDiagnostics.inputDate}
+                            </span>
+                          </div>
+                          <div className="transit-debug-row">
+                            <span className="transit-debug-label">Время запроса (UTC)</span>
+                            <span className="transit-debug-value">
+                              {transitDebugResult.debug.timeDiagnostics.inputTime}
+                            </span>
+                          </div>
+                          <div className="transit-debug-row">
+                            <span className="transit-debug-label">API birthDateUtc</span>
+                            <span className="transit-debug-value">
+                              {transitDebugResult.debug.timeDiagnostics.apiReturnedBirthDateUtc ??
+                                "—"}
+                            </span>
+                          </div>
+                          <div className="transit-debug-row">
+                            <span className="transit-debug-label">Разница (мин)</span>
+                            <span className="transit-debug-value">
+                              {transitDebugResult.debug.timeDiagnostics
+                                .differenceMinutesBetweenNowUtcAndApiBirthDateUtc ?? "—"}
+                            </span>
+                          </div>
+                          <div className="transit-debug-row">
+                            <span className="transit-debug-label">Сдвиг TZ</span>
+                            <span
+                              className={`transit-debug-value${
+                                transitDebugResult.debug.timeDiagnostics
+                                  .possibleTimezoneShiftDetected
+                                  ? " transit-debug-value--warn"
+                                  : " transit-debug-value--ok"
+                              }`}
+                            >
+                              {transitDebugResult.debug.timeDiagnostics
+                                .possibleTimezoneShiftDetected
+                                ? "ДА"
+                                : "НЕТ"}
+                            </span>
+                          </div>
+                          <div className="transit-debug-row">
+                            <span className="transit-debug-label">Ворот (тек. момент)</span>
+                            <span className="transit-debug-value">
+                              {transitDebugResult.currentMoment.gatesAll.length}
+                            </span>
+                          </div>
+                          <div className="transit-debug-row">
+                            <span className="transit-debug-label">Каналов (тек. момент)</span>
+                            <span className="transit-debug-value">
+                              {transitDebugResult.currentMoment.channelsShort.length}
+                            </span>
+                          </div>
+                          <div className="transit-debug-row">
+                            <span className="transit-debug-label">Центров (тек. момент)</span>
+                            <span className="transit-debug-value">
+                              {transitDebugResult.currentMoment.definedCenters.length}
+                            </span>
+                          </div>
+                          <div className="transit-debug-row">
+                            <span className="transit-debug-label">Добавлено ворот</span>
+                            <span className="transit-debug-value">
+                              {transitDebugResult.overlay.addedGates.length}
+                            </span>
+                          </div>
+                          <div className="transit-debug-row">
+                            <span className="transit-debug-label">Добавлено каналов</span>
+                            <span className="transit-debug-value">
+                              {transitDebugResult.overlay.addedChannels.length}
+                            </span>
+                          </div>
+                          <div className="transit-debug-row">
+                            <span className="transit-debug-label">Добавлено центров</span>
+                            <span className="transit-debug-value">
+                              {transitDebugResult.overlay.addedDefinedCenters.length}
+                            </span>
+                          </div>
+                        </div>
+
+                        <button
+                          className="transit-debug-copy-btn"
+                          onClick={copyTransitDebugForChatGPT}
+                        >
+                          {transitCopyStatus === "copied"
+                            ? "✓ Скопировано"
+                            : "Скопировать результат для ChatGPT"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 

@@ -23,12 +23,13 @@
 
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
 import { createClient } from "@supabase/supabase-js";
-import { createRequire } from "node:module";
 import { normalizeHdChart } from "./hd-normalize";
-
-// tz-lookup is a CJS module without type declarations; loaded via createRequire
-const _require = createRequire(import.meta.url);
-const tzlookup = _require("tz-lookup") as (lat: number, lng: number) => string;
+// Static import so esbuild bundles tz-lookup into the Lambda output.
+// tz-lookup uses `module.exports = fn`; esbuild maps that to the default export.
+// No @types package exists — cast after import.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+import tzlookupRaw from "tz-lookup";
+const tzlookup = tzlookupRaw as unknown as (lat: number, lng: number) => string;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -187,6 +188,23 @@ export const handler: Handler = async (
   event: HandlerEvent,
   _context: HandlerContext,
 ) => {
+  try {
+    return await transitDebugHandler(event);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error("[hd-transit-debug] unhandled exception:", message);
+    if (stack) console.error("[hd-transit-debug] stack:", stack);
+    return jsonResponse(500, {
+      error: "Transit debug failed",
+      source: "hd-transit-debug",
+      details: message,
+      stage: "unhandled",
+    });
+  }
+};
+
+async function transitDebugHandler(event: HandlerEvent) {
   if (event.httpMethod !== "POST") {
     return jsonResponse(405, { error: "Разрешён только метод POST." });
   }
@@ -305,13 +323,30 @@ export const handler: Handler = async (
   const now = new Date();
   const nowUtcIso = now.toISOString();
 
-  const localDT = resolveLocalDateTime(now, lat, lng);
+  let localDT: ReturnType<typeof resolveLocalDateTime>;
+  try {
+    localDT = resolveLocalDateTime(now, lat, lng);
+  } catch (tzErr) {
+    const msg = tzErr instanceof Error ? tzErr.message : String(tzErr);
+    console.error("[hd-transit-debug] timezone lookup threw:", msg);
+    if (tzErr instanceof Error && tzErr.stack) {
+      console.error("[hd-transit-debug] tz stack:", tzErr.stack);
+    }
+    return jsonResponse(500, {
+      error: "Transit debug failed",
+      source: "hd-transit-debug",
+      details: msg,
+      stage: "timezone_lookup",
+    });
+  }
+
   if (!localDT) {
     return jsonResponse(500, {
-      error:
-        "Could not resolve timezone for timezone anchor coordinates. " +
-        `lat=${lat}, lng=${lng}`,
-      source: "timezone-lookup",
+      error: "Transit debug failed",
+      source: "hd-transit-debug",
+      details:
+        `Could not resolve timezone for timezone anchor coordinates (lat=${lat}, lng=${lng})`,
+      stage: "timezone_lookup",
     });
   }
 
@@ -335,10 +370,13 @@ export const handler: Handler = async (
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Ошибка Human Design API.";
+    console.error("[hd-transit-debug] hd_api_call error:", message);
     const isConfig = message.includes("не настроен");
     return jsonResponse(isConfig ? 500 : 502, {
-      error: message,
-      source: "humandesign-api",
+      error: "Transit debug failed",
+      source: "hd-transit-debug",
+      details: message,
+      stage: "hd_api_call",
     });
   }
 
@@ -481,4 +519,4 @@ export const handler: Handler = async (
     rawCurrentMomentChart,
     normalizedCurrentMomentChart,
   });
-};
+}

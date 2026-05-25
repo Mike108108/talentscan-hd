@@ -206,6 +206,7 @@ export const handler: Handler = async (
     typeof chartRow.birth_latitude === "number" ? chartRow.birth_latitude : null;
   let lng =
     typeof chartRow.birth_longitude === "number" ? chartRow.birth_longitude : null;
+  let coordinatesSource: "hd_charts" | "user_profiles" = "hd_charts";
 
   // Fallback: user_profiles if coordinates are missing from hd_charts
   if (lat === null || lng === null) {
@@ -225,9 +226,11 @@ export const handler: Handler = async (
     if (profileRow) {
       if (lat === null && typeof profileRow.birth_latitude === "number") {
         lat = profileRow.birth_latitude;
+        coordinatesSource = "user_profiles";
       }
       if (lng === null && typeof profileRow.birth_longitude === "number") {
         lng = profileRow.birth_longitude;
+        coordinatesSource = "user_profiles";
       }
     }
   }
@@ -328,6 +331,33 @@ export const handler: Handler = async (
     cmCenters,
   );
 
+  // ── Time diagnostics ──────────────────────────────────────────────────────
+  const nowUtcIso = now.toISOString();
+
+  // birthDateUtc is extracted by normalizeHdChart from the API response
+  const apiReturnedBirthDateUtc: string | null =
+    typeof normalizedCurrentMomentChart.birthDateUtc === "string" &&
+    normalizedCurrentMomentChart.birthDateUtc.trim()
+      ? normalizedCurrentMomentChart.birthDateUtc.trim()
+      : null;
+
+  let differenceMinutes: number | null = null;
+  let possibleTimezoneShiftDetected = false;
+
+  if (apiReturnedBirthDateUtc !== null) {
+    const apiBirthMs = new Date(apiReturnedBirthDateUtc).getTime();
+    const nowMs = new Date(nowUtcIso).getTime();
+    if (!isNaN(apiBirthMs)) {
+      differenceMinutes = Math.round((apiBirthMs - nowMs) / 60_000);
+      possibleTimezoneShiftDetected = Math.abs(differenceMinutes) > 10;
+    }
+  }
+
+  console.log(
+    `[hd-transit-debug] timeDiagnostics: apiReturnedBirthDateUtc=${apiReturnedBirthDateUtc}, ` +
+      `differenceMinutes=${differenceMinutes}, possibleTimezoneShiftDetected=${possibleTimezoneShiftDetected}`,
+  );
+
   // ── Debug metadata ────────────────────────────────────────────────────────
   const debug = {
     source: "humandesignapi_v2_charts_coordinates_as_current_moment_test" as const,
@@ -335,13 +365,48 @@ export const handler: Handler = async (
       "This is not confirmed transit API. This endpoint is being tested as a current-moment chart source." as const,
     savedToDatabase: false as const,
     openAiUsed: false as const,
+    timeDiagnostics: {
+      nowUtcIso,
+      inputDate: currentDate,
+      inputTime: currentTime,
+      inputTimeBasis: "utc" as const,
+      coordinatesSource,
+      lat,
+      lng,
+      apiReturnedBirthDateUtc,
+      differenceMinutesBetweenNowUtcAndApiBirthDateUtc: differenceMinutes,
+      possibleTimezoneShiftDetected,
+    },
   };
+
+  // ── Diagnostics summary ───────────────────────────────────────────────────
+  let diagnosticsSummary: { currentMomentLikelyAccurate: boolean; reason: string };
+
+  if (apiReturnedBirthDateUtc === null) {
+    diagnosticsSummary = {
+      currentMomentLikelyAccurate: false,
+      reason:
+        "API did not return birthDateUtc — cannot verify whether input time was treated as UTC or local time.",
+    };
+  } else if (possibleTimezoneShiftDetected) {
+    diagnosticsSummary = {
+      currentMomentLikelyAccurate: false,
+      reason: `birthDateUtc returned by API differs from now by ${differenceMinutes} min (>10 min threshold). ` +
+        "API may be interpreting inputTime as local time for the given coordinates.",
+    };
+  } else {
+    diagnosticsSummary = {
+      currentMomentLikelyAccurate: true,
+      reason: `birthDateUtc returned by API is within ${differenceMinutes} min of now UTC — input time likely treated as UTC.`,
+    };
+  }
 
   return jsonResponse(200, {
     natal,
     currentMoment,
     overlay,
     debug,
+    diagnosticsSummary,
     rawCurrentMomentChart,
     normalizedCurrentMomentChart,
   });

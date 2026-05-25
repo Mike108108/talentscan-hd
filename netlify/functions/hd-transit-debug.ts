@@ -1,17 +1,19 @@
 /**
  * hd-transit-debug.ts
  *
- * Transit Debug v0 — Research endpoint only.
+ * Transit Debug v0.2 — Research endpoint only. Transit-only semantics.
  *
- * Tests whether /v2/charts/coordinates can serve as a "current moment" chart
- * source for future transit logic. The HD API interprets birthdate/birthtime
- * as LOCAL time at the given coordinates, so we resolve the IANA timezone
- * from the "timezone anchor coordinates" (natal birth coords) and convert the
- * current UTC moment to local time before calling the API.
+ * KEY INSIGHT: The HD API interprets birthdate/birthtime as LOCAL time at the
+ * given coordinates. We resolve the IANA timezone from the "timezone anchor
+ * coordinates" (natal birth coords) and convert the current UTC moment to
+ * local time before calling the API.
  *
- * NOTE: The coordinates are used ONLY as a timezone anchor to correctly
- * represent the current UTC moment as local time. They do NOT represent the
- * user's current physical location.
+ * KEY CHANGE (v0.2): Transit gates are now derived from
+ * currentMoment.activations.PERSONALITY only — not from gatesAll.
+ * In Human Design, transits are planetary activations (personality layer).
+ *
+ * NOTE: Coordinates are used ONLY as a timezone anchor. They do NOT represent
+ * the user's current physical location.
  *
  * This is NOT a production transit feature, does NOT call OpenAI, and does
  * NOT write to Supabase.
@@ -26,10 +28,27 @@ import { createClient } from "@supabase/supabase-js";
 import { normalizeHdChart } from "./hd-normalize";
 // Static import so esbuild bundles tz-lookup into the Lambda output.
 // tz-lookup uses `module.exports = fn`; esbuild maps that to the default export.
-// No @types package exists — cast after import.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import tzlookupRaw from "tz-lookup";
 const tzlookup = tzlookupRaw as unknown as (lat: number, lng: number) => string;
+
+// ---------------------------------------------------------------------------
+// Human Design channel map (approximate — used only for debug transit analysis)
+// Each pair [g1, g2] represents one channel between two HD centers.
+// Gate 20 appears in three channels (Throat connects to G, Sacral, Spleen).
+// ---------------------------------------------------------------------------
+
+const HD_CHANNELS: Array<[string, string]> = [
+  ["1", "8"],   ["2", "14"],  ["3", "60"],  ["4", "63"],
+  ["5", "15"],  ["6", "59"],  ["7", "31"],  ["9", "52"],
+  ["10", "20"], ["11", "56"], ["12", "22"], ["13", "33"],
+  ["16", "48"], ["17", "62"], ["18", "58"], ["19", "49"],
+  ["20", "34"], ["20", "57"], ["21", "45"], ["23", "43"],
+  ["24", "61"], ["25", "51"], ["26", "44"], ["27", "50"],
+  ["28", "38"], ["29", "46"], ["30", "41"], ["32", "54"],
+  ["34", "57"], ["35", "36"], ["37", "40"], ["39", "55"],
+  ["42", "53"], ["47", "64"],
+];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -61,15 +80,93 @@ function extractApiError(data: unknown, status: number): string {
   return `HTTP ${status}`;
 }
 
+function toStringSet(arr: unknown): Set<string> {
+  if (!Array.isArray(arr)) return new Set();
+  return new Set(arr.map((v) => asString(v)).filter(Boolean));
+}
+
+// ---------------------------------------------------------------------------
+// Transit extraction — personality layer only
+// ---------------------------------------------------------------------------
+
+type PlanetaryActivation = {
+  planet: string;
+  value: string;
+  gate: string;
+  line?: string;
+};
+
+function extractPlanetaryActivations(
+  personalityMap: Record<string, string>,
+): PlanetaryActivation[] {
+  return Object.entries(personalityMap).map(([planet, value]) => {
+    const [gate, line] = value.split(".");
+    return { planet, value, gate: gate ?? value, ...(line ? { line } : {}) };
+  });
+}
+
+function gatesFromActivations(activations: PlanetaryActivation[]): string[] {
+  return Array.from(new Set(activations.map((a) => a.gate)))
+    .filter((g) => g && !isNaN(parseInt(g)))
+    .sort((a, b) => parseInt(a) - parseInt(b));
+}
+
+// ---------------------------------------------------------------------------
+// Channel analysis
+// ---------------------------------------------------------------------------
+
+function computeTransitChannelAnalysis(
+  transitGates: Set<string>,
+  natalGates: Set<string>,
+  natalChannelCodes: Set<string>,
+) {
+  const combinedGates = new Set([...transitGates, ...natalGates]);
+
+  const transitOnlyChannels: string[] = [];
+  const completedByTransitChannels: string[] = [];
+  const natalChannelsTouchedByTransit: string[] = [];
+
+  for (const [g1, g2] of HD_CHANNELS) {
+    const code = `${g1}-${g2}`;
+    const codeAlt = `${g2}-${g1}`;
+    const isNatalCh = natalChannelCodes.has(code) || natalChannelCodes.has(codeAlt);
+
+    const tHas1 = transitGates.has(g1);
+    const tHas2 = transitGates.has(g2);
+
+    // Both gates come from transit alone
+    if (tHas1 && tHas2) {
+      transitOnlyChannels.push(code);
+    }
+
+    // Channel not natal, completed by natal+transit (at least one gate from transit)
+    if (!isNatalCh && combinedGates.has(g1) && combinedGates.has(g2)) {
+      if (tHas1 || tHas2) {
+        completedByTransitChannels.push(code);
+      }
+    }
+
+    // Natal channel that transit also activates
+    if (isNatalCh && (tHas1 || tHas2)) {
+      natalChannelsTouchedByTransit.push(code);
+    }
+  }
+
+  return {
+    transitOnlyChannels,
+    completedByTransitChannels,
+    natalChannelsTouchedByTransit,
+    // Centers require a complete channel→center map that isn't included here.
+    temporaryDefinedCenters: [] as string[],
+    temporaryDefinedCentersStatus:
+      "not_calculated_no_channel_center_map" as const,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Timezone resolution
 // ---------------------------------------------------------------------------
 
-/**
- * Resolve IANA timezone string from coordinates using tz-lookup, then
- * convert the given UTC Date to local date (YYYY-MM-DD) and time (HH:mm)
- * in that timezone using Node.js Intl API.
- */
 function resolveLocalDateTime(
   utcDate: Date,
   lat: number,
@@ -81,7 +178,6 @@ function resolveLocalDateTime(
   } catch {
     return null;
   }
-
   if (!timezone) return null;
 
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -97,22 +193,17 @@ function resolveLocalDateTime(
   const get = (type: string) =>
     parts.find((p) => p.type === type)?.value ?? "00";
 
-  const year = get("year");
-  const month = get("month");
-  const day = get("day");
-  // Intl can return "24" for midnight edge case — normalise to "00"
   const hour = get("hour") === "24" ? "00" : get("hour");
-  const minute = get("minute");
 
   return {
     timezone,
-    localDate: `${year}-${month}-${day}`,
-    localTime: `${hour}:${minute}`,
+    localDate: `${get("year")}-${get("month")}-${get("day")}`,
+    localTime: `${hour}:${get("minute")}`,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Human Design API call
+// Human Design API
 // ---------------------------------------------------------------------------
 
 const HD_API_URL = "https://api.humandesignapi.nl/v2/charts/coordinates";
@@ -124,9 +215,7 @@ async function fetchCurrentMomentChart(
   lng: number,
 ): Promise<unknown> {
   const apiKey = process.env.HD_API_KEY;
-  if (!apiKey) {
-    throw new Error("Ключ Human Design API не настроен (HD_API_KEY).");
-  }
+  if (!apiKey) throw new Error("Ключ Human Design API не настроен (HD_API_KEY).");
 
   const payload = { birthdate: localDate, birthtime: localTime, lat, lng };
   console.log("[hd-transit-debug] HD API request payload:", JSON.stringify(payload));
@@ -144,9 +233,8 @@ async function fetchCurrentMomentChart(
   console.log("[hd-transit-debug] HD API response status:", response.status);
 
   if (!response.ok) {
-    const details = extractApiError(data, response.status);
     console.error("[hd-transit-debug] HD API error body:", JSON.stringify(data));
-    throw new Error(`Human Design API (${response.status}): ${details}`);
+    throw new Error(`Human Design API (${response.status}): ${extractApiError(data, response.status)}`);
   }
 
   if (!data) throw new Error("Human Design API вернул пустой ответ.");
@@ -154,34 +242,7 @@ async function fetchCurrentMomentChart(
 }
 
 // ---------------------------------------------------------------------------
-// Overlay computation
-// ---------------------------------------------------------------------------
-
-function toStringSet(arr: unknown): Set<string> {
-  if (!Array.isArray(arr)) return new Set();
-  return new Set(arr.map((v) => asString(v)).filter(Boolean));
-}
-
-function computeOverlay(
-  natalGates: Set<string>,
-  natalChannels: Set<string>,
-  natalCenters: Set<string>,
-  currentGates: Set<string>,
-  currentChannels: Set<string>,
-  currentCenters: Set<string>,
-) {
-  return {
-    addedGates: [...currentGates].filter((g) => !natalGates.has(g)),
-    sharedGates: [...currentGates].filter((g) => natalGates.has(g)),
-    addedChannels: [...currentChannels].filter((c) => !natalChannels.has(c)),
-    sharedChannels: [...currentChannels].filter((c) => natalChannels.has(c)),
-    addedDefinedCenters: [...currentCenters].filter((c) => !natalCenters.has(c)),
-    sharedDefinedCenters: [...currentCenters].filter((c) => natalCenters.has(c)),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Handler
+// Handler shell — catches all unhandled exceptions as structured JSON
 // ---------------------------------------------------------------------------
 
 export const handler: Handler = async (
@@ -203,6 +264,10 @@ export const handler: Handler = async (
     });
   }
 };
+
+// ---------------------------------------------------------------------------
+// Main handler
+// ---------------------------------------------------------------------------
 
 async function transitDebugHandler(event: HandlerEvent) {
   if (event.httpMethod !== "POST") {
@@ -227,19 +292,13 @@ async function transitDebugHandler(event: HandlerEvent) {
     process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? "";
 
   if (!supabaseUrl.trim() || !supabaseAnonKey.trim()) {
-    return jsonResponse(500, {
-      error: "Supabase не настроен на сервере.",
-      source: "config",
-    });
+    return jsonResponse(500, { error: "Supabase не настроен на сервере.", source: "config" });
   }
 
   const authClient = createClient(supabaseUrl, supabaseAnonKey);
   const { data: authData, error: authErr } = await authClient.auth.getUser(token);
   if (authErr || !authData.user) {
-    return jsonResponse(401, {
-      error: "Недействительный или просроченный токен.",
-      source: "auth",
-    });
+    return jsonResponse(401, { error: "Недействительный или просроченный токен.", source: "auth" });
   }
   const userId = authData.user.id;
 
@@ -261,12 +320,8 @@ async function transitDebugHandler(event: HandlerEvent) {
 
   if (chartErr) {
     console.error("[hd-transit-debug] hd_charts load error:", chartErr.message);
-    return jsonResponse(500, {
-      error: "Не удалось загрузить натальную карту.",
-      source: "db",
-    });
+    return jsonResponse(500, { error: "Не удалось загрузить натальную карту.", source: "db" });
   }
-
   if (!chartRow) {
     return jsonResponse(404, {
       error:
@@ -276,28 +331,22 @@ async function transitDebugHandler(event: HandlerEvent) {
     });
   }
 
-  // ── Resolve timezone anchor coordinates ───────────────────────────────────
+  // ── Timezone anchor coordinates ───────────────────────────────────────────
   let lat =
     typeof chartRow.birth_latitude === "number" ? chartRow.birth_latitude : null;
   let lng =
     typeof chartRow.birth_longitude === "number" ? chartRow.birth_longitude : null;
   let coordinatesSource: "hd_charts" | "user_profiles" = "hd_charts";
 
-  // Fallback: user_profiles if coordinates are missing from hd_charts
   if (lat === null || lng === null) {
     const { data: profileRow, error: profileErr } = await db
       .from("user_profiles")
       .select("birth_latitude, birth_longitude")
       .eq("user_id", userId)
       .maybeSingle();
-
     if (profileErr) {
-      console.warn(
-        "[hd-transit-debug] user_profiles fallback error:",
-        profileErr.message,
-      );
+      console.warn("[hd-transit-debug] user_profiles fallback error:", profileErr.message);
     }
-
     if (profileRow) {
       if (lat === null && typeof profileRow.birth_latitude === "number") {
         lat = profileRow.birth_latitude;
@@ -319,7 +368,7 @@ async function transitDebugHandler(event: HandlerEvent) {
     });
   }
 
-  // ── Resolve local time at timezone anchor coordinates ─────────────────────
+  // ── Resolve local time ────────────────────────────────────────────────────
   const now = new Date();
   const nowUtcIso = now.toISOString();
 
@@ -329,9 +378,6 @@ async function transitDebugHandler(event: HandlerEvent) {
   } catch (tzErr) {
     const msg = tzErr instanceof Error ? tzErr.message : String(tzErr);
     console.error("[hd-transit-debug] timezone lookup threw:", msg);
-    if (tzErr instanceof Error && tzErr.stack) {
-      console.error("[hd-transit-debug] tz stack:", tzErr.stack);
-    }
     return jsonResponse(500, {
       error: "Transit debug failed",
       source: "hd-transit-debug",
@@ -344,35 +390,24 @@ async function transitDebugHandler(event: HandlerEvent) {
     return jsonResponse(500, {
       error: "Transit debug failed",
       source: "hd-transit-debug",
-      details:
-        `Could not resolve timezone for timezone anchor coordinates (lat=${lat}, lng=${lng})`,
+      details: `Could not resolve timezone for timezone anchor coordinates (lat=${lat}, lng=${lng})`,
       stage: "timezone_lookup",
     });
   }
 
   const { timezone: resolvedTimezone, localDate, localTime } = localDT;
-
   console.log(
-    `[hd-transit-debug] now UTC: ${nowUtcIso}`,
-    `| timezone anchor: ${resolvedTimezone} (lat=${lat}, lng=${lng})`,
-    `| local: ${localDate} ${localTime}`,
+    `[hd-transit-debug] UTC: ${nowUtcIso} | TZ: ${resolvedTimezone} | local: ${localDate} ${localTime}`,
   );
 
-  // ── Call Human Design API with local time ─────────────────────────────────
+  // ── Call Human Design API ─────────────────────────────────────────────────
   let rawCurrentMomentChart: unknown;
   try {
-    rawCurrentMomentChart = await fetchCurrentMomentChart(
-      localDate,
-      localTime,
-      lat,
-      lng,
-    );
+    rawCurrentMomentChart = await fetchCurrentMomentChart(localDate, localTime, lat, lng);
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Ошибка Human Design API.";
+    const message = err instanceof Error ? err.message : "Ошибка Human Design API.";
     console.error("[hd-transit-debug] hd_api_call error:", message);
-    const isConfig = message.includes("не настроен");
-    return jsonResponse(isConfig ? 500 : 502, {
+    return jsonResponse(message.includes("не настроен") ? 500 : 502, {
       error: "Transit debug failed",
       source: "hd-transit-debug",
       details: message,
@@ -380,12 +415,12 @@ async function transitDebugHandler(event: HandlerEvent) {
     });
   }
 
-  // ── Normalize current moment chart ────────────────────────────────────────
+  // ── Normalize ─────────────────────────────────────────────────────────────
   const normalizedCurrentMomentChart = normalizeHdChart(rawCurrentMomentChart);
 
-  // ── Build natal summary from stored fields ────────────────────────────────
-  const natalGatesAll = toStringSet(chartRow.gates_all);
-  const natalChannels = toStringSet(chartRow.channels_short);
+  // ── Natal data from stored fields ─────────────────────────────────────────
+  const natalGates = toStringSet(chartRow.gates_all);
+  const natalChannelCodes = toStringSet(chartRow.channels_short);
   const natalCenters = toStringSet(chartRow.defined_centers);
 
   const natal = {
@@ -393,49 +428,62 @@ async function transitDebugHandler(event: HandlerEvent) {
     profile: asString(chartRow.profile) || undefined,
     authority: asString(chartRow.authority) || undefined,
     strategy: asString(chartRow.strategy) || undefined,
-    gatesAll: [...natalGatesAll],
-    channelsShort: [...natalChannels],
+    gatesAll: [...natalGates],
+    channelsShort: [...natalChannelCodes],
     definedCenters: [...natalCenters],
   };
 
-  // ── Build current moment summary from normalized ──────────────────────────
-  const cmGates = toStringSet(normalizedCurrentMomentChart.gatesAll);
-  const cmChannels = toStringSet(normalizedCurrentMomentChart.channelsShort);
-  const cmCenters = toStringSet(normalizedCurrentMomentChart.definedCenters);
+  // ── Transit-only: personality activations of current moment ───────────────
+  const cmPersonality = normalizedCurrentMomentChart.activations.personality ?? {};
+  const planetaryActivations = extractPlanetaryActivations(cmPersonality);
+  const transitGatesList = gatesFromActivations(planetaryActivations);
+  const transitGates = new Set(transitGatesList);
 
-  const currentMoment = {
-    calculatedAt: nowUtcIso,
-    inputDate: localDate,
-    inputTime: localTime,
-    lat,
-    lng,
-    type: normalizedCurrentMomentChart.type !== "—"
-      ? normalizedCurrentMomentChart.type
-      : undefined,
-    profile: normalizedCurrentMomentChart.profile !== "—"
-      ? normalizedCurrentMomentChart.profile
-      : undefined,
-    authority: normalizedCurrentMomentChart.authority !== "—"
-      ? normalizedCurrentMomentChart.authority
-      : undefined,
-    strategy: normalizedCurrentMomentChart.strategy !== "—"
-      ? normalizedCurrentMomentChart.strategy
-      : undefined,
-    gatesAll: [...cmGates],
-    channelsShort: [...cmChannels],
-    definedCenters: [...cmCenters],
-    activations: normalizedCurrentMomentChart.activations as unknown,
+  const transitOnly = {
+    source: "current_moment_personality_activations_only" as const,
+    planetaryActivations,
+    gates: transitGatesList,
+    gatesCount: transitGatesList.length,
   };
 
-  // ── Compute overlay ───────────────────────────────────────────────────────
-  const overlay = computeOverlay(
-    natalGatesAll,
-    natalChannels,
-    natalCenters,
-    cmGates,
-    cmChannels,
-    cmCenters,
+  // ── Transit-only overlay ──────────────────────────────────────────────────
+  const addedTransitGates = transitGatesList.filter((g) => !natalGates.has(g));
+  const sharedTransitGates = transitGatesList.filter((g) => natalGates.has(g));
+
+  const channelAnalysis = computeTransitChannelAnalysis(
+    transitGates,
+    natalGates,
+    natalChannelCodes,
   );
+
+  const transitOnlyOverlay = {
+    addedTransitGates,
+    sharedTransitGates,
+    ...channelAnalysis,
+  };
+
+  // ── Full current moment chart (diagnostic only — not transit source) ───────
+  const fullCurrentMomentChartDiagnostic = {
+    warning:
+      "Do not use gatesAll/channelsShort/definedCenters of full current moment chart " +
+      "for transit interpretation because it may include design-layer activations.",
+    gatesAllCount: normalizedCurrentMomentChart.gatesAll.length,
+    channelsShortCount: normalizedCurrentMomentChart.channelsShort.length,
+    definedCentersCount: normalizedCurrentMomentChart.definedCenters.length,
+  };
+
+  // ── Deprecated overlay (v0 — kept for comparison only) ───────────────────
+  const legacyOverlay = {
+    _deprecated: true,
+    _warning:
+      "This overlay was computed from gatesAll (both personality + design). " +
+      "It is NOT the correct source for HD transit analysis. " +
+      "Use transitOnlyOverlay instead.",
+    addedGates: [...new Set(normalizedCurrentMomentChart.gatesAll)]
+      .filter((g) => !natalGates.has(g)),
+    sharedGates: [...new Set(normalizedCurrentMomentChart.gatesAll)]
+      .filter((g) => natalGates.has(g)),
+  };
 
   // ── Time diagnostics ──────────────────────────────────────────────────────
   const apiReturnedBirthDateUtc: string | null =
@@ -448,25 +496,24 @@ async function transitDebugHandler(event: HandlerEvent) {
   let possibleTimezoneShiftDetected = false;
 
   if (apiReturnedBirthDateUtc !== null) {
-    const apiBirthMs = new Date(apiReturnedBirthDateUtc).getTime();
-    const nowMs = new Date(nowUtcIso).getTime();
-    if (!isNaN(apiBirthMs)) {
-      differenceMinutes = Math.round((apiBirthMs - nowMs) / 60_000);
+    const diff = new Date(apiReturnedBirthDateUtc).getTime() - new Date(nowUtcIso).getTime();
+    if (!isNaN(diff)) {
+      differenceMinutes = Math.round(diff / 60_000);
       possibleTimezoneShiftDetected = Math.abs(differenceMinutes) > 10;
     }
   }
 
   console.log(
-    `[hd-transit-debug] timeDiagnostics: apiReturnedBirthDateUtc=${apiReturnedBirthDateUtc},`,
-    `differenceMinutes=${differenceMinutes},`,
-    `possibleTimezoneShiftDetected=${possibleTimezoneShiftDetected}`,
+    `[hd-transit-debug] birthDateUtc=${apiReturnedBirthDateUtc}, ` +
+      `diff=${differenceMinutes}min, tzShift=${possibleTimezoneShiftDetected}`,
   );
 
-  // ── Debug metadata ────────────────────────────────────────────────────────
+  // ── Debug block ───────────────────────────────────────────────────────────
   const debug = {
     source: "humandesignapi_v2_charts_coordinates_as_current_moment_test" as const,
     warning:
-      "This is not confirmed transit API. This endpoint is being tested as a current-moment chart source." as const,
+      "This is not an official transit endpoint. Current moment chart is generated through " +
+      "/v2/charts/coordinates; transit-only semantics are derived from personality activations only." as const,
     savedToDatabase: false as const,
     openAiUsed: false as const,
     timeDiagnostics: {
@@ -487,35 +534,47 @@ async function transitDebugHandler(event: HandlerEvent) {
 
   // ── Diagnostics summary ───────────────────────────────────────────────────
   let diagnosticsSummary: { currentMomentLikelyAccurate: boolean; reason: string };
-
   if (apiReturnedBirthDateUtc === null) {
     diagnosticsSummary = {
       currentMomentLikelyAccurate: false,
-      reason:
-        "API did not return birthDateUtc — cannot verify whether local time conversion was correct.",
+      reason: "API did not return birthDateUtc — cannot verify local time conversion.",
     };
   } else if (possibleTimezoneShiftDetected) {
     diagnosticsSummary = {
       currentMomentLikelyAccurate: false,
       reason:
-        `birthDateUtc returned by API differs from now by ${differenceMinutes} min (>10 min threshold). ` +
+        `birthDateUtc differs from now by ${differenceMinutes} min (>10 min threshold). ` +
         `Timezone anchor: ${resolvedTimezone}. Local time sent: ${localDate} ${localTime}.`,
     };
   } else {
     diagnosticsSummary = {
       currentMomentLikelyAccurate: true,
       reason:
-        `birthDateUtc returned by API is within ${differenceMinutes} min of now UTC. ` +
+        `birthDateUtc within ${differenceMinutes} min of now UTC. ` +
         `Timezone anchor ${resolvedTimezone}: local time ${localDate} ${localTime} correctly maps to UTC.`,
     };
   }
 
+  // ── Accuracy status ───────────────────────────────────────────────────────
+  const accuracyStatus = {
+    timeMappingConfirmed: diagnosticsSummary.currentMomentLikelyAccurate,
+    transitSemantics: "personality_activations_only" as const,
+    currentProviderHasDedicatedTransitEndpointInDocs: false as const,
+    requiresCrossProviderValidation: true as const,
+    note:
+      "Current provider is used via /v2/charts/coordinates as current-moment chart source. " +
+      "Transit-only gates are extracted from current moment personality activations only." as const,
+  };
+
   return jsonResponse(200, {
     natal,
-    currentMoment,
-    overlay,
+    transitOnly,
+    transitOnlyOverlay,
+    fullCurrentMomentChartDiagnostic,
+    legacyOverlay,
     debug,
     diagnosticsSummary,
+    accuracyStatus,
     rawCurrentMomentChart,
     normalizedCurrentMomentChart,
   });

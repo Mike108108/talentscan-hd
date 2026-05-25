@@ -269,44 +269,63 @@ type HdChartStatus = "none" | "ok" | "outdated" | "no_coords" | "error";
 // Transit Debug types (temporary QA tool)
 // ---------------------------------------------------------------------------
 
+type TransitDebugTimeDiagnostics = {
+  nowUtcIso: string;
+  inputDate: string;
+  inputTime: string;
+  inputTimeBasis: string;
+  coordinatesPurpose: string;
+  resolvedTimezone: string | null;
+  coordinatesSource: string;
+  lat: number;
+  lng: number;
+  apiReturnedBirthDateUtc: string | null;
+  differenceMinutesBetweenNowUtcAndApiBirthDateUtc: number | null;
+  possibleTimezoneShiftDetected: boolean;
+};
+
 type TransitDebugResult = {
   diagnosticsSummary: {
     currentMomentLikelyAccurate: boolean;
     reason: string;
   };
-  debug: {
-    timeDiagnostics: {
-      nowUtcIso: string;
-      inputDate: string;
-      inputTime: string;
-      inputTimeBasis: string;
-      coordinatesPurpose: string;
-      resolvedTimezone: string | null;
-      coordinatesSource: string;
-      lat: number;
-      lng: number;
-      apiReturnedBirthDateUtc: string | null;
-      differenceMinutesBetweenNowUtcAndApiBirthDateUtc: number | null;
-      possibleTimezoneShiftDetected: boolean;
-    };
+  accuracyStatus?: {
+    timeMappingConfirmed: boolean;
+    transitSemantics: string;
+    currentProviderHasDedicatedTransitEndpointInDocs: boolean;
+    requiresCrossProviderValidation: boolean;
+    note: string;
   };
-  currentMoment: {
-    type?: string;
-    profile?: string;
-    authority?: string;
-    strategy?: string;
+  debug: {
+    timeDiagnostics: TransitDebugTimeDiagnostics;
+  };
+  transitOnly?: {
+    source: string;
+    planetaryActivations: Array<{ planet: string; value: string; gate: string; line?: string }>;
+    gates: string[];
+    gatesCount: number;
+  };
+  transitOnlyOverlay?: {
+    addedTransitGates: string[];
+    sharedTransitGates: string[];
+    transitOnlyChannels: string[];
+    completedByTransitChannels: string[];
+    natalChannelsTouchedByTransit: string[];
+    temporaryDefinedCenters: string[];
+    temporaryDefinedCentersStatus: string;
+  };
+  fullCurrentMomentChartDiagnostic?: {
+    warning: string;
+    gatesAllCount: number;
+    channelsShortCount: number;
+    definedCentersCount: number;
+  };
+  // legacy — kept for comparison, not used as transit source
+  currentMoment?: {
     gatesAll: string[];
     channelsShort: string[];
     definedCenters: string[];
     activations?: Record<string, unknown>;
-  };
-  overlay: {
-    addedGates: string[];
-    addedChannels: string[];
-    addedDefinedCenters: string[];
-    sharedGates: string[];
-    sharedChannels: string[];
-    sharedDefinedCenters: string[];
   };
 };
 
@@ -1064,30 +1083,38 @@ export default function App() {
 
   async function copyTransitDebugForChatGPT() {
     if (!transitDebugResult) return;
-    const { diagnosticsSummary, debug, currentMoment, overlay } = transitDebugResult;
+    const {
+      diagnosticsSummary,
+      debug,
+      accuracyStatus,
+      transitOnly,
+      transitOnlyOverlay,
+      fullCurrentMomentChartDiagnostic,
+    } = transitDebugResult;
     const payload = {
       diagnosticsSummary,
       timeDiagnostics: debug.timeDiagnostics,
-      currentMomentSummary: {
-        type: currentMoment.type,
-        profile: currentMoment.profile,
-        authority: currentMoment.authority,
-        strategy: currentMoment.strategy,
-        gatesCount: currentMoment.gatesAll.length,
-        channelsCount: currentMoment.channelsShort.length,
-        definedCentersCount: currentMoment.definedCenters.length,
-        hasActivations:
-          !!currentMoment.activations &&
-          Object.keys(currentMoment.activations).length > 0,
-      },
-      overlaySummary: {
-        addedGatesCount: overlay.addedGates.length,
-        addedChannelsCount: overlay.addedChannels.length,
-        addedDefinedCentersCount: overlay.addedDefinedCenters.length,
-        addedGates: overlay.addedGates,
-        addedChannels: overlay.addedChannels,
-        addedDefinedCenters: overlay.addedDefinedCenters,
-      },
+      accuracyStatus,
+      transitOnlySummary: transitOnly
+        ? {
+            source: transitOnly.source,
+            gatesCount: transitOnly.gatesCount,
+            gates: transitOnly.gates,
+            planetaryActivations: transitOnly.planetaryActivations,
+          }
+        : null,
+      transitOnlyOverlaySummary: transitOnlyOverlay
+        ? {
+            addedTransitGates: transitOnlyOverlay.addedTransitGates,
+            sharedTransitGates: transitOnlyOverlay.sharedTransitGates,
+            transitOnlyChannels: transitOnlyOverlay.transitOnlyChannels,
+            completedByTransitChannels: transitOnlyOverlay.completedByTransitChannels,
+            natalChannelsTouchedByTransit: transitOnlyOverlay.natalChannelsTouchedByTransit,
+            temporaryDefinedCenters: transitOnlyOverlay.temporaryDefinedCenters,
+            temporaryDefinedCentersStatus: transitOnlyOverlay.temporaryDefinedCentersStatus,
+          }
+        : null,
+      fullCurrentMomentChartDiagnostic: fullCurrentMomentChartDiagnostic ?? null,
     };
     try {
       await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
@@ -2449,39 +2476,33 @@ export default function App() {
                             </span>
                           </div>
                           <div className="transit-debug-row">
-                            <span className="transit-debug-label">Ворот (тек. момент)</span>
+                            <span className="transit-debug-label">Транзитных ворот</span>
                             <span className="transit-debug-value">
-                              {transitDebugResult.currentMoment.gatesAll.length}
+                              {transitDebugResult.transitOnly?.gatesCount ?? "—"}
                             </span>
                           </div>
                           <div className="transit-debug-row">
-                            <span className="transit-debug-label">Каналов (тек. момент)</span>
+                            <span className="transit-debug-label">Новых ворот в транзите</span>
                             <span className="transit-debug-value">
-                              {transitDebugResult.currentMoment.channelsShort.length}
+                              {transitDebugResult.transitOnlyOverlay?.addedTransitGates.length ?? "—"}
                             </span>
                           </div>
                           <div className="transit-debug-row">
-                            <span className="transit-debug-label">Центров (тек. момент)</span>
+                            <span className="transit-debug-label">Транзитных каналов</span>
                             <span className="transit-debug-value">
-                              {transitDebugResult.currentMoment.definedCenters.length}
+                              {transitDebugResult.transitOnlyOverlay?.transitOnlyChannels.length ?? "—"}
                             </span>
                           </div>
                           <div className="transit-debug-row">
-                            <span className="transit-debug-label">Добавлено ворот</span>
+                            <span className="transit-debug-label">Каналов завершено транзитом</span>
                             <span className="transit-debug-value">
-                              {transitDebugResult.overlay.addedGates.length}
+                              {transitDebugResult.transitOnlyOverlay?.completedByTransitChannels.length ?? "—"}
                             </span>
                           </div>
                           <div className="transit-debug-row">
-                            <span className="transit-debug-label">Добавлено каналов</span>
+                            <span className="transit-debug-label">Full chart ворот (диагн.)</span>
                             <span className="transit-debug-value">
-                              {transitDebugResult.overlay.addedChannels.length}
-                            </span>
-                          </div>
-                          <div className="transit-debug-row">
-                            <span className="transit-debug-label">Добавлено центров</span>
-                            <span className="transit-debug-value">
-                              {transitDebugResult.overlay.addedDefinedCenters.length}
+                              {transitDebugResult.fullCurrentMomentChartDiagnostic?.gatesAllCount ?? "—"}
                             </span>
                           </div>
                         </div>

@@ -280,6 +280,8 @@ type TransitDebugResult = {
       inputDate: string;
       inputTime: string;
       inputTimeBasis: string;
+      coordinatesPurpose: string;
+      resolvedTimezone: string | null;
       coordinatesSource: string;
       lat: number;
       lng: number;

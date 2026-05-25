@@ -4,8 +4,17 @@
  * Transit Debug v0 — Research endpoint only.
  *
  * Tests whether /v2/charts/coordinates can serve as a "current moment" chart
- * source for future transit logic. This is NOT a production transit feature,
- * does NOT call OpenAI, and does NOT write to Supabase.
+ * source for future transit logic. The HD API interprets birthdate/birthtime
+ * as LOCAL time at the given coordinates, so we resolve the IANA timezone
+ * from the "timezone anchor coordinates" (natal birth coords) and convert the
+ * current UTC moment to local time before calling the API.
+ *
+ * NOTE: The coordinates are used ONLY as a timezone anchor to correctly
+ * represent the current UTC moment as local time. They do NOT represent the
+ * user's current physical location.
+ *
+ * This is NOT a production transit feature, does NOT call OpenAI, and does
+ * NOT write to Supabase.
  *
  * POST /.netlify/functions/hd-transit-debug
  * Headers: Authorization: Bearer <supabase_access_token>
@@ -14,7 +23,12 @@
 
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
 import { createClient } from "@supabase/supabase-js";
+import { createRequire } from "node:module";
 import { normalizeHdChart } from "./hd-normalize";
+
+// tz-lookup is a CJS module without type declarations; loaded via createRequire
+const _require = createRequire(import.meta.url);
+const tzlookup = _require("tz-lookup") as (lat: number, lng: number) => string;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -47,14 +61,64 @@ function extractApiError(data: unknown, status: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Timezone resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve IANA timezone string from coordinates using tz-lookup, then
+ * convert the given UTC Date to local date (YYYY-MM-DD) and time (HH:mm)
+ * in that timezone using Node.js Intl API.
+ */
+function resolveLocalDateTime(
+  utcDate: Date,
+  lat: number,
+  lng: number,
+): { timezone: string; localDate: string; localTime: string } | null {
+  let timezone: string;
+  try {
+    timezone = tzlookup(lat, lng);
+  } catch {
+    return null;
+  }
+
+  if (!timezone) return null;
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(utcDate);
+
+  const get = (type: string) =>
+    parts.find((p) => p.type === type)?.value ?? "00";
+
+  const year = get("year");
+  const month = get("month");
+  const day = get("day");
+  // Intl can return "24" for midnight edge case — normalise to "00"
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  const minute = get("minute");
+
+  return {
+    timezone,
+    localDate: `${year}-${month}-${day}`,
+    localTime: `${hour}:${minute}`,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Human Design API call
 // ---------------------------------------------------------------------------
 
 const HD_API_URL = "https://api.humandesignapi.nl/v2/charts/coordinates";
 
 async function fetchCurrentMomentChart(
-  currentDate: string,
-  currentTime: string,
+  localDate: string,
+  localTime: string,
   lat: number,
   lng: number,
 ): Promise<unknown> {
@@ -63,14 +127,7 @@ async function fetchCurrentMomentChart(
     throw new Error("Ключ Human Design API не настроен (HD_API_KEY).");
   }
 
-  const payload = {
-    birthdate: currentDate,
-    birthtime: currentTime,
-    lat,
-    lng,
-  };
-
-  // Log input only — key never logged
+  const payload = { birthdate: localDate, birthtime: localTime, lat, lng };
   console.log("[hd-transit-debug] HD API request payload:", JSON.stringify(payload));
 
   const response = await fetch(HD_API_URL, {
@@ -201,7 +258,7 @@ export const handler: Handler = async (
     });
   }
 
-  // ── Resolve coordinates ───────────────────────────────────────────────────
+  // ── Resolve timezone anchor coordinates ───────────────────────────────────
   let lat =
     typeof chartRow.birth_latitude === "number" ? chartRow.birth_latitude : null;
   let lng =
@@ -244,23 +301,34 @@ export const handler: Handler = async (
     });
   }
 
-  // ── Current moment UTC ────────────────────────────────────────────────────
+  // ── Resolve local time at timezone anchor coordinates ─────────────────────
   const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const currentDate = `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())}`;
-  const currentTime = `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}`;
-  const calculatedAt = now.toISOString();
+  const nowUtcIso = now.toISOString();
+
+  const localDT = resolveLocalDateTime(now, lat, lng);
+  if (!localDT) {
+    return jsonResponse(500, {
+      error:
+        "Could not resolve timezone for timezone anchor coordinates. " +
+        `lat=${lat}, lng=${lng}`,
+      source: "timezone-lookup",
+    });
+  }
+
+  const { timezone: resolvedTimezone, localDate, localTime } = localDT;
 
   console.log(
-    `[hd-transit-debug] current moment UTC: ${currentDate} ${currentTime}, lat=${lat}, lng=${lng}`,
+    `[hd-transit-debug] now UTC: ${nowUtcIso}`,
+    `| timezone anchor: ${resolvedTimezone} (lat=${lat}, lng=${lng})`,
+    `| local: ${localDate} ${localTime}`,
   );
 
-  // ── Call Human Design API for current moment ──────────────────────────────
+  // ── Call Human Design API with local time ─────────────────────────────────
   let rawCurrentMomentChart: unknown;
   try {
     rawCurrentMomentChart = await fetchCurrentMomentChart(
-      currentDate,
-      currentTime,
+      localDate,
+      localTime,
       lat,
       lng,
     );
@@ -298,9 +366,9 @@ export const handler: Handler = async (
   const cmCenters = toStringSet(normalizedCurrentMomentChart.definedCenters);
 
   const currentMoment = {
-    calculatedAt,
-    inputDate: currentDate,
-    inputTime: currentTime,
+    calculatedAt: nowUtcIso,
+    inputDate: localDate,
+    inputTime: localTime,
     lat,
     lng,
     type: normalizedCurrentMomentChart.type !== "—"
@@ -332,9 +400,6 @@ export const handler: Handler = async (
   );
 
   // ── Time diagnostics ──────────────────────────────────────────────────────
-  const nowUtcIso = now.toISOString();
-
-  // birthDateUtc is extracted by normalizeHdChart from the API response
   const apiReturnedBirthDateUtc: string | null =
     typeof normalizedCurrentMomentChart.birthDateUtc === "string" &&
     normalizedCurrentMomentChart.birthDateUtc.trim()
@@ -354,8 +419,9 @@ export const handler: Handler = async (
   }
 
   console.log(
-    `[hd-transit-debug] timeDiagnostics: apiReturnedBirthDateUtc=${apiReturnedBirthDateUtc}, ` +
-      `differenceMinutes=${differenceMinutes}, possibleTimezoneShiftDetected=${possibleTimezoneShiftDetected}`,
+    `[hd-transit-debug] timeDiagnostics: apiReturnedBirthDateUtc=${apiReturnedBirthDateUtc},`,
+    `differenceMinutes=${differenceMinutes},`,
+    `possibleTimezoneShiftDetected=${possibleTimezoneShiftDetected}`,
   );
 
   // ── Debug metadata ────────────────────────────────────────────────────────
@@ -367,9 +433,11 @@ export const handler: Handler = async (
     openAiUsed: false as const,
     timeDiagnostics: {
       nowUtcIso,
-      inputDate: currentDate,
-      inputTime: currentTime,
-      inputTimeBasis: "utc" as const,
+      inputDate: localDate,
+      inputTime: localTime,
+      inputTimeBasis: "local_time_at_timezone_anchor_coordinates" as const,
+      coordinatesPurpose: "timezone_anchor_not_current_location" as const,
+      resolvedTimezone,
       coordinatesSource,
       lat,
       lng,
@@ -386,18 +454,21 @@ export const handler: Handler = async (
     diagnosticsSummary = {
       currentMomentLikelyAccurate: false,
       reason:
-        "API did not return birthDateUtc — cannot verify whether input time was treated as UTC or local time.",
+        "API did not return birthDateUtc — cannot verify whether local time conversion was correct.",
     };
   } else if (possibleTimezoneShiftDetected) {
     diagnosticsSummary = {
       currentMomentLikelyAccurate: false,
-      reason: `birthDateUtc returned by API differs from now by ${differenceMinutes} min (>10 min threshold). ` +
-        "API may be interpreting inputTime as local time for the given coordinates.",
+      reason:
+        `birthDateUtc returned by API differs from now by ${differenceMinutes} min (>10 min threshold). ` +
+        `Timezone anchor: ${resolvedTimezone}. Local time sent: ${localDate} ${localTime}.`,
     };
   } else {
     diagnosticsSummary = {
       currentMomentLikelyAccurate: true,
-      reason: `birthDateUtc returned by API is within ${differenceMinutes} min of now UTC — input time likely treated as UTC.`,
+      reason:
+        `birthDateUtc returned by API is within ${differenceMinutes} min of now UTC. ` +
+        `Timezone anchor ${resolvedTimezone}: local time ${localDate} ${localTime} correctly maps to UTC.`,
     };
   }
 

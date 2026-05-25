@@ -1,7 +1,7 @@
 /**
  * hd-transit-debug.ts
  *
- * Transit Debug v0.2 — Research endpoint only. Transit-only semantics.
+ * Transit Debug v0.3 — Research endpoint only. Transit-only semantics.
  *
  * KEY INSIGHT: The HD API interprets birthdate/birthtime as LOCAL time at the
  * given coordinates. We resolve the IANA timezone from the "timezone anchor
@@ -33,22 +33,84 @@ import tzlookupRaw from "tz-lookup";
 const tzlookup = tzlookupRaw as unknown as (lat: number, lng: number) => string;
 
 // ---------------------------------------------------------------------------
-// Human Design channel map (approximate — used only for debug transit analysis)
-// Each pair [g1, g2] represents one channel between two HD centers.
-// Gate 20 appears in three channels (Throat connects to G, Sacral, Spleen).
+// All 36 Human Design channels → centers (same map as BodyGraphViewer)
 // ---------------------------------------------------------------------------
 
-const HD_CHANNELS: Array<[string, string]> = [
-  ["1", "8"],   ["2", "14"],  ["3", "60"],  ["4", "63"],
-  ["5", "15"],  ["6", "59"],  ["7", "31"],  ["9", "52"],
-  ["10", "20"], ["11", "56"], ["12", "22"], ["13", "33"],
-  ["16", "48"], ["17", "62"], ["18", "58"], ["19", "49"],
-  ["20", "34"], ["20", "57"], ["21", "45"], ["23", "43"],
-  ["24", "61"], ["25", "51"], ["26", "44"], ["27", "50"],
-  ["28", "38"], ["29", "46"], ["30", "41"], ["32", "54"],
-  ["34", "57"], ["35", "36"], ["37", "40"], ["39", "55"],
-  ["42", "53"], ["47", "64"],
-];
+const CHANNEL_CENTER_MAP: Record<string, [string, string]> = {
+  "64-47": ["Head", "Ajna"],
+  "61-24": ["Head", "Ajna"],
+  "63-4": ["Head", "Ajna"],
+  "17-62": ["Ajna", "Throat"],
+  "43-23": ["Ajna", "Throat"],
+  "11-56": ["Ajna", "Throat"],
+  "16-48": ["Throat", "Spleen"],
+  "20-57": ["Throat", "Spleen"],
+  "20-34": ["Throat", "Sacral"],
+  "45-21": ["Throat", "Ego"],
+  "12-22": ["Throat", "Solar Plexus"],
+  "35-36": ["Throat", "Solar Plexus"],
+  "31-7": ["Throat", "G"],
+  "8-1": ["Throat", "G"],
+  "33-13": ["Throat", "G"],
+  "10-20": ["Throat", "G"],
+  "25-51": ["G", "Ego"],
+  "10-57": ["G", "Spleen"],
+  "10-34": ["G", "Sacral"],
+  "2-14": ["G", "Sacral"],
+  "5-15": ["G", "Sacral"],
+  "29-46": ["G", "Sacral"],
+  "40-37": ["Ego", "Solar Plexus"],
+  "26-44": ["Ego", "Spleen"],
+  "59-6": ["Sacral", "Solar Plexus"],
+  "27-50": ["Sacral", "Spleen"],
+  "34-57": ["Sacral", "Spleen"],
+  "3-60": ["Sacral", "Root"],
+  "42-53": ["Sacral", "Root"],
+  "9-52": ["Sacral", "Root"],
+  "19-49": ["Root", "Solar Plexus"],
+  "39-55": ["Root", "Solar Plexus"],
+  "41-30": ["Root", "Solar Plexus"],
+  "18-58": ["Root", "Spleen"],
+  "28-38": ["Root", "Spleen"],
+  "32-54": ["Root", "Spleen"],
+};
+
+const CHANNEL_CLASSIFICATION_RULES = {
+  categoriesMutuallyExclusive: true,
+  transitGateSource: "current_moment_personality_activations_only",
+  transitOnlyChannels:
+    "non-natal channel where both gates are present in transit and neither gate is natal",
+  completedByTransitChannels:
+    "non-natal channel where one gate is natal and the opposite gate is present in transit",
+  natalChannelsTouchedByTransit:
+    "natal channel where transit activates one or both gates",
+  temporaryDefinedCenters:
+    "centers from transitOnlyChannels + completedByTransitChannels minus natalDefinedCenters",
+  channelMapSource: "CHANNEL_CENTER_MAP_36_HD_CHANNELS",
+} as const;
+
+function normalizeChannelKey(channel: string): string | null {
+  const trimmed = channel.trim();
+  if (!trimmed) return null;
+  if (trimmed in CHANNEL_CENTER_MAP) return trimmed;
+  const parts = trimmed.split("-");
+  if (parts.length !== 2) return null;
+  const reversed = `${parts[1]}-${parts[0]}`;
+  if (reversed in CHANNEL_CENTER_MAP) return reversed;
+  return null;
+}
+
+function parseChannelGates(channelKey: string): [string, string] | null {
+  const parts = channelKey.split("-");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  return [parts[0], parts[1]];
+}
+
+function centersForChannel(channelKey: string): [string, string] | null {
+  const normalized = normalizeChannelKey(channelKey);
+  if (!normalized) return null;
+  return CHANNEL_CENTER_MAP[normalized] ?? null;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -115,51 +177,107 @@ function gatesFromActivations(activations: PlanetaryActivation[]): string[] {
 // Channel analysis
 // ---------------------------------------------------------------------------
 
+function isNatalChannel(
+  channelKey: string,
+  natalGates: Set<string>,
+  natalChannelCodes: Set<string>,
+): boolean {
+  const normalized = normalizeChannelKey(channelKey);
+  if (!normalized) return false;
+  const gates = parseChannelGates(normalized);
+  if (!gates) return false;
+  const [g1, g2] = gates;
+  const reversed = `${g2}-${g1}`;
+  if (natalChannelCodes.has(normalized) || natalChannelCodes.has(reversed)) {
+    return true;
+  }
+  return natalGates.has(g1) && natalGates.has(g2);
+}
+
 function computeTransitChannelAnalysis(
   transitGates: Set<string>,
   natalGates: Set<string>,
   natalChannelCodes: Set<string>,
+  natalDefinedCenters: Set<string>,
 ) {
-  const combinedGates = new Set([...transitGates, ...natalGates]);
-
   const transitOnlyChannels: string[] = [];
   const completedByTransitChannels: string[] = [];
   const natalChannelsTouchedByTransit: string[] = [];
 
-  for (const [g1, g2] of HD_CHANNELS) {
-    const code = `${g1}-${g2}`;
-    const codeAlt = `${g2}-${g1}`;
-    const isNatalCh = natalChannelCodes.has(code) || natalChannelCodes.has(codeAlt);
+  for (const channelKey of Object.keys(CHANNEL_CENTER_MAP)) {
+    const gates = parseChannelGates(channelKey);
+    if (!gates) continue;
+    const [g1, g2] = gates;
 
-    const tHas1 = transitGates.has(g1);
-    const tHas2 = transitGates.has(g2);
+    const natalHasA = natalGates.has(g1);
+    const natalHasB = natalGates.has(g2);
+    const transitHasA = transitGates.has(g1);
+    const transitHasB = transitGates.has(g2);
 
-    // Both gates come from transit alone
-    if (tHas1 && tHas2) {
-      transitOnlyChannels.push(code);
-    }
+    const isNatalCh = isNatalChannel(channelKey, natalGates, natalChannelCodes);
 
-    // Channel not natal, completed by natal+transit (at least one gate from transit)
-    if (!isNatalCh && combinedGates.has(g1) && combinedGates.has(g2)) {
-      if (tHas1 || tHas2) {
-        completedByTransitChannels.push(code);
-      }
-    }
-
-    // Natal channel that transit also activates
-    if (isNatalCh && (tHas1 || tHas2)) {
-      natalChannelsTouchedByTransit.push(code);
+    if (
+      isNatalCh &&
+      (transitHasA || transitHasB)
+    ) {
+      natalChannelsTouchedByTransit.push(channelKey);
+    } else if (
+      !isNatalCh &&
+      !natalHasA &&
+      !natalHasB &&
+      transitHasA &&
+      transitHasB
+    ) {
+      transitOnlyChannels.push(channelKey);
+    } else if (
+      !isNatalCh &&
+      ((natalHasA && !natalHasB && transitHasB) ||
+        (natalHasB && !natalHasA && transitHasA))
+    ) {
+      completedByTransitChannels.push(channelKey);
     }
   }
+
+  const duplicatedBetweenTransitOnlyAndCompleted = transitOnlyChannels.filter(
+    (channel) => completedByTransitChannels.includes(channel),
+  );
+
+  const temporaryChannelKeys = [
+    ...transitOnlyChannels,
+    ...completedByTransitChannels,
+  ];
+
+  const temporaryChannelCentersAllSet = new Set<string>();
+  let channelMapComplete = true;
+
+  for (const ch of temporaryChannelKeys) {
+    const centers = centersForChannel(ch);
+    if (!centers) {
+      channelMapComplete = false;
+      continue;
+    }
+    temporaryChannelCentersAllSet.add(centers[0]);
+    temporaryChannelCentersAllSet.add(centers[1]);
+  }
+
+  const temporaryChannelCentersAll = [...temporaryChannelCentersAllSet].sort();
+
+  const temporaryDefinedCenters = temporaryChannelCentersAll
+    .filter((c) => !natalDefinedCenters.has(c))
+    .sort();
+
+  const temporaryDefinedCentersStatus = channelMapComplete
+    ? ("calculated_with_channel_center_map" as const)
+    : ("error_channel_center_map_incomplete" as const);
 
   return {
     transitOnlyChannels,
     completedByTransitChannels,
     natalChannelsTouchedByTransit,
-    // Centers require a complete channel→center map that isn't included here.
-    temporaryDefinedCenters: [] as string[],
-    temporaryDefinedCentersStatus:
-      "not_calculated_no_channel_center_map" as const,
+    temporaryChannelCentersAll,
+    temporaryDefinedCenters,
+    temporaryDefinedCentersStatus,
+    duplicatedBetweenTransitOnlyAndCompleted,
   };
 }
 
@@ -454,6 +572,7 @@ async function transitDebugHandler(event: HandlerEvent) {
     transitGates,
     natalGates,
     natalChannelCodes,
+    natalCenters,
   );
 
   const transitOnlyOverlay = {
@@ -570,6 +689,7 @@ async function transitDebugHandler(event: HandlerEvent) {
     natal,
     transitOnly,
     transitOnlyOverlay,
+    channelClassificationRules: CHANNEL_CLASSIFICATION_RULES,
     fullCurrentMomentChartDiagnostic,
     legacyOverlay,
     debug,

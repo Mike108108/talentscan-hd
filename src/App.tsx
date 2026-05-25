@@ -311,9 +311,12 @@ type TransitDebugResult = {
     transitOnlyChannels: string[];
     completedByTransitChannels: string[];
     natalChannelsTouchedByTransit: string[];
+    temporaryChannelCentersAll: string[];
     temporaryDefinedCenters: string[];
     temporaryDefinedCentersStatus: string;
+    duplicatedBetweenTransitOnlyAndCompleted: string[];
   };
+  channelClassificationRules?: Record<string, string | boolean>;
   fullCurrentMomentChartDiagnostic?: {
     warning: string;
     gatesAllCount: number;
@@ -1089,7 +1092,7 @@ export default function App() {
       accuracyStatus,
       transitOnly,
       transitOnlyOverlay,
-      fullCurrentMomentChartDiagnostic,
+      channelClassificationRules,
     } = transitDebugResult;
     const payload = {
       diagnosticsSummary,
@@ -1110,11 +1113,19 @@ export default function App() {
             transitOnlyChannels: transitOnlyOverlay.transitOnlyChannels,
             completedByTransitChannels: transitOnlyOverlay.completedByTransitChannels,
             natalChannelsTouchedByTransit: transitOnlyOverlay.natalChannelsTouchedByTransit,
+            temporaryChannelCentersAll: transitOnlyOverlay.temporaryChannelCentersAll,
             temporaryDefinedCenters: transitOnlyOverlay.temporaryDefinedCenters,
             temporaryDefinedCentersStatus: transitOnlyOverlay.temporaryDefinedCentersStatus,
+            duplicatedBetweenTransitOnlyAndCompleted:
+              transitOnlyOverlay.duplicatedBetweenTransitOnlyAndCompleted,
           }
         : null,
-      fullCurrentMomentChartDiagnostic: fullCurrentMomentChartDiagnostic ?? null,
+      channelClassificationRules: channelClassificationRules ?? null,
+      temporaryDefinedCenters: transitOnlyOverlay?.temporaryDefinedCenters ?? [],
+      temporaryDefinedCentersStatus:
+        transitOnlyOverlay?.temporaryDefinedCentersStatus ?? null,
+      duplicatedBetweenTransitOnlyAndCompleted:
+        transitOnlyOverlay?.duplicatedBetweenTransitOnlyAndCompleted ?? [],
     };
     try {
       await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));

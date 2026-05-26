@@ -11,7 +11,7 @@ import { getNormalizedChart } from "./BodyGraphViewer";
 type MapTab =
   | "overview"
   | "talents"
-  | "career"
+  | "workStyle"
   | "workEnvironment"
   | "relationships"
   | "communication"
@@ -96,7 +96,7 @@ type MyMapScreenProps = {
 const MAP_NAV: { id: MapTab; label: string }[] = [
   { id: "overview", label: "Обзор" },
   { id: "talents", label: "Таланты" },
-  { id: "career", label: "Карьера" },
+  { id: "workStyle", label: "Рабочий стиль" },
   { id: "workEnvironment", label: "Рабочая среда" },
   { id: "relationships", label: "Отношения" },
   { id: "communication", label: "Коммуникация" },
@@ -199,10 +199,10 @@ function MapFeedTabs({
 }
 
 // ---------------------------------------------------------------------------
-// Cockpit: map layers (level 3) + sphere summary (level 2 right panel)
+// Overview cockpit: browser-tabs (level 3) embedded in map card
 // ---------------------------------------------------------------------------
 
-function MapLayerChips({
+function MapBrowserTabs({
   active,
   onChange,
 }: {
@@ -210,14 +210,14 @@ function MapLayerChips({
   onChange: (layer: MapLayer) => void;
 }): JSX.Element {
   return (
-    <div className="my-map-layer-chips" role="tablist" aria-label="Слои карты">
+    <div className="my-map-browser-tabs" role="tablist" aria-label="Слои карты">
       {MAP_LAYERS.map((item) => (
         <button
           key={item.id}
           type="button"
           role="tab"
           aria-selected={active === item.id}
-          className={`my-map-layer-chip${active === item.id ? " my-map-layer-chip--active" : ""}`}
+          className={`my-map-browser-tab${active === item.id ? " my-map-browser-tab--active" : ""}`}
           onClick={() => onChange(item.id)}
         >
           {item.label}
@@ -277,7 +277,7 @@ function MapLayerPanel({
 }): JSX.Element {
   if (layer === "bodygraph") {
     return (
-      <div className="my-map-layer-panel my-map-layer-bodygraph">
+      <div className="my-map-browser-layer-inner my-map-layer-bodygraph">
         <BodyGraphViewer
           chart={hdChart}
           status={hdChartStatus}
@@ -292,7 +292,7 @@ function MapLayerPanel({
 
   if (hdChartLoading) {
     return (
-      <div className="my-map-layer-panel">
+      <div className="my-map-browser-layer-inner">
         <LayerEmptyHint>Загрузка данных карты…</LayerEmptyHint>
       </div>
     );
@@ -303,7 +303,7 @@ function MapLayerPanel({
 
   if (!hasChart || !nc) {
     return (
-      <div className="my-map-layer-panel">
+      <div className="my-map-browser-layer-inner">
         <LayerEmptyHint>
           {hdChartStatus === "none" || !hdChart
             ? "Рассчитайте HD-карту во вкладке «Данные», чтобы открыть этот слой."
@@ -322,7 +322,7 @@ function MapLayerPanel({
     const open = nc.openCenters ?? [];
     if (defined.length === 0 && open.length === 0) {
       return (
-        <div className="my-map-layer-panel">
+        <div className="my-map-browser-layer-inner">
           <LayerEmptyHint>
             Список центров появится после расчёта карты с полными данными.
           </LayerEmptyHint>
@@ -330,7 +330,7 @@ function MapLayerPanel({
       );
     }
     return (
-      <div className="my-map-layer-panel">
+      <div className="my-map-browser-layer-inner">
         <h3 className="my-map-layer-heading">Центры</h3>
         {defined.length > 0 && (
           <div className="my-map-layer-block">
@@ -366,13 +366,13 @@ function MapLayerPanel({
     const display = long.length > 0 ? long : short;
     if (display.length === 0) {
       return (
-        <div className="my-map-layer-panel">
+        <div className="my-map-browser-layer-inner">
           <LayerEmptyHint>Каналы появятся после расчёта карты с полными данными.</LayerEmptyHint>
         </div>
       );
     }
     return (
-      <div className="my-map-layer-panel">
+      <div className="my-map-browser-layer-inner">
         <h3 className="my-map-layer-heading">Каналы ({short.length || display.length})</h3>
         <ul className="my-map-layer-list">
           {display.map((ch, i) => (
@@ -390,7 +390,7 @@ function MapLayerPanel({
     const hasDesign = design && Object.keys(design).length > 0;
     if (!hasPers && !hasDesign) {
       return (
-        <div className="my-map-layer-panel">
+        <div className="my-map-browser-layer-inner">
           <LayerEmptyHint>
             Планетарные активации появятся после расчёта карты с полными данными.
           </LayerEmptyHint>
@@ -398,7 +398,7 @@ function MapLayerPanel({
       );
     }
     return (
-      <div className="my-map-layer-panel">
+      <div className="my-map-browser-layer-inner">
         <h3 className="my-map-layer-heading">Активации</h3>
         {hasPers && (
           <div className="my-map-layer-block">
@@ -450,7 +450,7 @@ function MapLayerPanel({
 
     if (fields.length === 0 && !hasVariablesObject) {
       return (
-        <div className="my-map-layer-panel">
+        <div className="my-map-browser-layer-inner">
           <LayerSoonPanel
             title="Переменные"
             description="Слой переменных будет раскрыт после подключения расширенной интерпретации карты."
@@ -459,7 +459,7 @@ function MapLayerPanel({
       );
     }
     return (
-      <div className="my-map-layer-panel">
+      <div className="my-map-browser-layer-inner">
         <h3 className="my-map-layer-heading">Переменные</h3>
         {fields.length > 0 && (
           <dl className="my-map-passport-rows">
@@ -500,23 +500,8 @@ function MapLayerPanel({
 
   const soon = soonCopy[layer as "shadows" | "gifts" | "trauma"];
   return (
-    <div className="my-map-layer-panel">
+    <div className="my-map-browser-layer-inner">
       <LayerSoonPanel title={soon.title} description={soon.description} />
-    </div>
-  );
-}
-
-function SummaryPreviewCard({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}): JSX.Element {
-  return (
-    <div className="my-map-summary-preview-card">
-      <h3 className="my-map-summary-preview-title">{title}</h3>
-      <div className="my-map-summary-preview-body">{children}</div>
     </div>
   );
 }
@@ -575,228 +560,7 @@ function PassportSummary({
   );
 }
 
-function SphereSummaryPanel({
-  tab,
-  hdChart,
-  hdChartStatus,
-  profileCompleteness,
-  onGoToData,
-  onGoToNewReport,
-  onLayerChange,
-}: {
-  tab: MapTab;
-  hdChart: HdChartRecord | null;
-  hdChartStatus: HdChartStatus;
-  profileCompleteness: { percent: number; label: string };
-  onGoToData: () => void;
-  onGoToNewReport: (type: AnalysisType) => void;
-  onLayerChange: (layer: MapLayer) => void;
-}): JSX.Element {
-  const nc = hdChart ? getNormalizedChart(hdChart) : null;
-
-  let title = "Обзор";
-  let lead = "";
-  let body: ReactNode = null;
-
-  switch (tab) {
-    case "overview":
-      title = "Паспорт карты";
-      lead = "Ключевые параметры вашей постоянной карты.";
-      body = <PassportSummary hdChart={hdChart} hdChartStatus={hdChartStatus} />;
-      break;
-    case "talents":
-      title = "Таланты";
-      lead =
-        "Здесь будет собираться перевод ворот, каналов и устойчивых качеств в понятные таланты.";
-      body = (
-        <div className="my-map-summary-previews">
-          <SummaryPreviewCard title="Что уже видно по карте">
-            <p className="my-map-summary-text">
-              {nc?.definedCenters?.length
-                ? `Определённых центров: ${nc.definedCenters.length}. `
-                : ""}
-              {nc?.channelsShort?.length
-                ? `Активных каналов: ${nc.channelsShort.length}. `
-                : ""}
-              {nc?.gatesAll?.length ? `Ворот в карте: ${nc.gatesAll.length}.` : ""}
-              {!nc?.definedCenters?.length && !nc?.channelsShort?.length && !nc?.gatesAll?.length
-                ? "Рассчитайте карту — здесь появится структура талантов из ваших данных."
-                : " Детальный перевод появится на следующем этапе."}
-            </p>
-          </SummaryPreviewCard>
-          <SummaryPreviewCard title="Что будет добавлено дальше">
-            <p className="my-map-summary-text">
-              Персональные формулировки талантов, сценарии проявления и связка с карьерой и
-              отношениями — без выдуманных интерпретаций.
-            </p>
-          </SummaryPreviewCard>
-          <SummaryPreviewCard title="Как использовать">
-            <p className="my-map-summary-text">
-              Смотрите слои «Каналы» и «Центры» слева и раздел «Подробнее» ниже для структуры
-              будущего разбора.
-            </p>
-          </SummaryPreviewCard>
-        </div>
-      );
-      break;
-    case "career":
-      title = "Карьера";
-      lead =
-        "Как эта карта будет переводиться в рабочий стиль, подходящие роли и ограничения.";
-      body = (
-        <>
-          <p className="my-map-summary-text">
-            {nc?.type
-              ? `Тип ${nc.type}${nc.strategy ? ` · стратегия «${nc.strategy}»` : ""}${nc.authority ? ` · авторитет ${nc.authority}` : ""}.`
-              : "После расчёта карты здесь появится краткий рабочий профиль."}
-          </p>
-          <div className="my-map-summary-cta-row">
-            <button
-              type="button"
-              className="my-map-cta-btn my-map-cta-btn--sm"
-              onClick={() => onGoToNewReport("vacancy_assessment")}
-            >
-              Оценить вакансию →
-            </button>
-            <button
-              type="button"
-              className="my-map-cta-btn my-map-cta-btn--secondary my-map-cta-btn--sm"
-              onClick={() => onGoToNewReport("current_role")}
-            >
-              Разбор текущей роли →
-            </button>
-          </div>
-        </>
-      );
-      break;
-    case "workEnvironment":
-      title = "Рабочая среда";
-      lead = "Условия, ритм, формат команды, баланс давления и свободы.";
-      body = (
-        <p className="my-map-summary-text">
-          {nc?.definition
-            ? `Определение: ${nc.definition}. `
-            : ""}
-          Этот слой будет расширен на следующем этапе. Сейчас показана структура будущего разбора
-          по рабочей среде.
-        </p>
-      );
-      break;
-    case "relationships":
-      title = "Отношения";
-      lead = "Как вы входите в контакт, где нужна бережность, что важно в близости.";
-      body = (
-        <p className="my-map-summary-text">
-          {nc?.strategy
-            ? `Опора на стратегию «${nc.strategy}» в контакте с людьми. `
-            : ""}
-          Этот слой будет расширен на следующем этапе. Сейчас показана структура будущего разбора
-          по отношениям.
-        </p>
-      );
-      break;
-    case "communication":
-      title = "Коммуникация";
-      lead = "Как вы объясняете, договариваетесь, задаёте вопросы и обозначаете границы.";
-      body = (
-        <p className="my-map-summary-text">
-          {nc?.profile ? `Профиль ${nc.profile} — ролевая линия в общении. ` : ""}
-          Этот слой будет расширен на следующем этапе. Сейчас показана структура будущего разбора
-          по коммуникации.
-        </p>
-      );
-      break;
-    case "energyBody":
-      title = "Энергия и тело";
-      lead = "Ритм, перегруз, восстановление. Не медицинский совет.";
-      body = (
-        <>
-          <p className="my-map-summary-text">
-            {nc?.type
-              ? `Базовый ритм связан с типом ${nc.type}. `
-              : ""}
-            Для телесных зон смотрите слой «Центры» — там видны определённые и открытые центры.
-          </p>
-          <button
-            type="button"
-            className="my-map-layer-link"
-            onClick={() => onLayerChange("centers")}
-          >
-            Открыть слой «Центры» →
-          </button>
-        </>
-      );
-      break;
-    case "money":
-      title = "Деньги";
-      lead = "Ценность, предложения и решения про обмен — не финансовые советы.";
-      body = (
-        <p className="my-map-summary-text">
-          {nc?.authority
-            ? `Ориентир для решений: авторитет ${nc.authority}. `
-            : ""}
-          Этот слой будет расширен на следующем этапе. Сейчас показана структура будущего разбора
-          по деньгам и ценности.
-        </p>
-      );
-      break;
-    case "developmentPlan":
-      title = "План развития";
-      lead = "Ближайшие шаги, профиль и разборы для углубления.";
-      body = (
-        <>
-          <ul className="my-map-summary-list">
-            <li>Довести анкету до {profileCompleteness.percent}% и выше</li>
-            <li>Наблюдать сигнатуру и не-я тему в ежедневных решениях</li>
-            <li>Запустить разбор, когда нужна конкретика по роли или вакансии</li>
-          </ul>
-          {(hdChartStatus === "none" || hdChartStatus === "outdated") && (
-            <button type="button" className="my-map-layer-link" onClick={onGoToData}>
-              Перейти в Данные →
-            </button>
-          )}
-        </>
-      );
-      break;
-  }
-
-  return (
-    <aside className="my-map-sphere-summary" aria-label={title}>
-      <div className="my-map-passport-card my-map-sphere-summary-card">
-        <h2 className="my-map-passport-title">{title}</h2>
-        {lead && <p className="my-map-sphere-lead">{lead}</p>}
-        <div className="my-map-sphere-body">{body}</div>
-      </div>
-    </aside>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Inner tab content components
-// ---------------------------------------------------------------------------
-
-function InsightCard({
-  title,
-  children,
-  accent,
-}: {
-  title: string;
-  children: ReactNode;
-  accent?: boolean;
-}): JSX.Element {
-  return (
-    <div className={`my-map-insight-card${accent ? " my-map-insight-card--accent" : ""}`}>
-      <h3 className="my-map-insight-title">{title}</h3>
-      <div className="my-map-insight-body">{children}</div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Tab: Обзор
-// ---------------------------------------------------------------------------
-
-function TabOverview({
+function DataQualityCard({
   hdChartStatus,
   profile,
   profileCompleteness,
@@ -808,177 +572,192 @@ function TabOverview({
   onGoToData: () => void;
 }): JSX.Element {
   return (
-    <div className="my-map-section">
-      <div className="my-map-data-quality">
-        <h3 className="my-map-data-quality-title">Точность данных</h3>
-        <div className="my-map-data-quality-rows">
-          <div className="my-map-dq-row">
-            <span className="my-map-dq-label">Карта</span>
-            <span className={`my-map-dq-value my-map-dq-value--${hdChartStatus}`}>
-              {hdChartStatus === "ok"
-                ? "Рассчитана"
-                : hdChartStatus === "outdated"
-                ? "Устарела"
-                : hdChartStatus === "none"
-                ? "Не рассчитана"
-                : hdChartStatus === "no_coords"
-                ? "Нет координат"
-                : "Ошибка расчёта"}
-            </span>
-          </div>
-          <div className="my-map-dq-row">
-            <span className="my-map-dq-label">Анкета</span>
-            <span className="my-map-dq-value">
-              {profileCompleteness.percent}% — {profileCompleteness.label}
-            </span>
-          </div>
-          <div className="my-map-dq-row">
-            <span className="my-map-dq-label">Время рождения</span>
-            <span className="my-map-dq-value">
-              {profile.birthTimeAccuracy === "exact"
-                ? "Точное"
-                : profile.birthTimeAccuracy === "approximate"
-                ? "Примерное"
-                : profile.birthTimeAccuracy === "unknown"
-                ? "Неизвестно"
-                : profile.birthTime
-                ? "Указано"
-                : "Не указано"}
-            </span>
-          </div>
-          {(hdChartStatus === "outdated" || hdChartStatus === "none") && (
-            <div className="my-map-dq-row my-map-dq-row--action">
-              <button className="my-map-dq-btn" onClick={onGoToData}>
-                Перейти в Данные →
-              </button>
-            </div>
-          )}
+    <div className="my-map-data-quality my-map-overview-dq">
+      <h3 className="my-map-data-quality-title">Точность данных</h3>
+      <div className="my-map-data-quality-rows">
+        <div className="my-map-dq-row">
+          <span className="my-map-dq-label">Карта</span>
+          <span className={`my-map-dq-value my-map-dq-value--${hdChartStatus}`}>
+            {hdChartStatus === "ok"
+              ? "Рассчитана"
+              : hdChartStatus === "outdated"
+              ? "Устарела"
+              : hdChartStatus === "none"
+              ? "Не рассчитана"
+              : hdChartStatus === "no_coords"
+              ? "Нет координат"
+              : "Ошибка расчёта"}
+          </span>
         </div>
+        <div className="my-map-dq-row">
+          <span className="my-map-dq-label">Анкета</span>
+          <span className="my-map-dq-value">
+            {profileCompleteness.percent}% — {profileCompleteness.label}
+          </span>
+        </div>
+        <div className="my-map-dq-row">
+          <span className="my-map-dq-label">Время рождения</span>
+          <span className="my-map-dq-value">
+            {profile.birthTimeAccuracy === "exact"
+              ? "Точное"
+              : profile.birthTimeAccuracy === "approximate"
+              ? "Примерное"
+              : profile.birthTimeAccuracy === "unknown"
+              ? "Неизвестно"
+              : profile.birthTime
+              ? "Указано"
+              : "Не указано"}
+          </span>
+        </div>
+        {(hdChartStatus === "outdated" || hdChartStatus === "none") && (
+          <div className="my-map-dq-row my-map-dq-row--action">
+            <button type="button" className="my-map-dq-btn" onClick={onGoToData}>
+              Перейти в Данные →
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
+function OverviewCockpit({
+  activeMapLayer,
+  onLayerChange,
+  hdChart,
+  hdChartStatus,
+  hdChartLoading,
+  hdChartCalculating,
+  calculateHdChart,
+  profile,
+  profileCompleteness,
+  onGoToData,
+}: {
+  activeMapLayer: MapLayer;
+  onLayerChange: (layer: MapLayer) => void;
+  hdChart: HdChartRecord | null;
+  hdChartStatus: HdChartStatus;
+  hdChartLoading: boolean;
+  hdChartCalculating: boolean;
+  calculateHdChart: () => void;
+  profile: ProfileInfo;
+  profileCompleteness: { percent: number; label: string };
+  onGoToData: () => void;
+}): JSX.Element {
+  return (
+    <div className="my-map-cockpit my-map-overview-cockpit">
+      <div className="my-map-browser-card">
+        <MapBrowserTabs active={activeMapLayer} onChange={onLayerChange} />
+        <div className="my-map-browser-body">
+          <MapLayerPanel
+            layer={activeMapLayer}
+            hdChart={hdChart}
+            hdChartStatus={hdChartStatus}
+            hdChartLoading={hdChartLoading}
+            hdChartCalculating={hdChartCalculating}
+            calculateHdChart={calculateHdChart}
+            onGoToData={onGoToData}
+          />
+        </div>
+      </div>
+      <aside className="my-map-overview-sidebar" aria-label="Паспорт карты">
+        <div className="my-map-passport-card">
+          <h2 className="my-map-passport-title">Паспорт карты</h2>
+          <PassportSummary hdChart={hdChart} hdChartStatus={hdChartStatus} />
+        </div>
+        <DataQualityCard
+          hdChartStatus={hdChartStatus}
+          profile={profile}
+          profileCompleteness={profileCompleteness}
+          onGoToData={onGoToData}
+        />
+      </aside>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Tab: Таланты
+// Standalone sphere screens (level 2, except Overview)
 // ---------------------------------------------------------------------------
+
+function SphereScreen({
+  title,
+  lead,
+  children,
+  actions,
+}: {
+  title: string;
+  lead: string;
+  children: ReactNode;
+  actions?: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="my-map-sphere-screen" role="tabpanel">
+      <header className="my-map-sphere-screen-header">
+        <h2 className="my-map-sphere-screen-title">{title}</h2>
+        <p className="my-map-sphere-screen-lead">{lead}</p>
+      </header>
+      <div className="my-map-sphere-screen-grid">{children}</div>
+      {actions && <div className="my-map-sphere-screen-actions">{actions}</div>}
+    </div>
+  );
+}
+
+function SphereCard({ title, children }: { title: string; children: ReactNode }): JSX.Element {
+  return (
+    <div className="my-map-sphere-card">
+      <h3 className="my-map-sphere-card-title">{title}</h3>
+      <div className="my-map-sphere-card-body">{children}</div>
+    </div>
+  );
+}
+
+function chartFactsLine(hdChart: HdChartRecord | null): string {
+  const nc = hdChart ? getNormalizedChart(hdChart) : null;
+  if (!nc) return "Рассчитайте карту во вкладке «Данные» — здесь появятся параметры из ваших данных.";
+  const parts: string[] = [];
+  if (nc.type) parts.push(`тип ${nc.type}`);
+  if (nc.profile) parts.push(`профиль ${nc.profile}`);
+  if (nc.strategy) parts.push(`стратегия «${nc.strategy}»`);
+  if (nc.authority) parts.push(`авторитет ${nc.authority}`);
+  return parts.length > 0
+    ? `Из карты уже доступно: ${parts.join(", ")}.`
+    : "Параметры карты появятся после расчёта.";
+}
+
 
 function TabTalents({ hdChart }: { hdChart: HdChartRecord | null }): JSX.Element {
   const nc = hdChart ? getNormalizedChart(hdChart) : null;
-
   return (
-    <div className="my-map-section">
-      <div className="my-map-section-header">
-        <h2 className="my-map-section-title">Таланты</h2>
-        <p className="my-map-section-desc">
-          Природные сильные стороны, врождённая ценность и качества для развития
+    <SphereScreen
+      title="Таланты"
+      lead="Перевод карты в сильные стороны и устойчивые качества — без выдуманных формулировок."
+    >
+      <SphereCard title="Что здесь будет">
+        <p className="my-map-sphere-text">
+          Сборка талантов из ворот, каналов и устойчивых качеств вашей карты в понятный язык.
+          {nc?.gatesAll?.length ? ` Сейчас в карте ${nc.gatesAll.length} активных ворот.` : ""}
         </p>
-      </div>
-
-      <div className="my-map-section-grid">
-        <InsightCard title="Главные таланты карты" accent>
-          {nc ? (
-            <ul className="my-map-list">
-              {nc.type && (
-                <li>
-                  <strong>Тип:</strong> {nc.type} — это основа вашей энергетической механики
-                </li>
-              )}
-              {nc.profile && (
-                <li>
-                  <strong>Профиль {nc.profile}</strong> — архетип, через который раскрывается ваша роль
-                </li>
-              )}
-              {nc.authority && (
-                <li>
-                  <strong>Авторитет:</strong> {nc.authority} — ваш внутренний компас для верных решений
-                </li>
-              )}
-              {nc.definedCenters && nc.definedCenters.length > 0 && (
-                <li>
-                  <strong>Определённых центров:</strong> {nc.definedCenters.length} — устойчивые зоны силы
-                </li>
-              )}
-              {nc.channelsShort && nc.channelsShort.length > 0 && (
-                <li>
-                  <strong>Каналов:</strong> {nc.channelsShort.length} — встроенные дары и способности
-                </li>
-              )}
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">
-              Рассчитайте HD-карту во вкладке «Данные», чтобы увидеть ваши таланты
-            </p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Как проявлять себя сильнее">
-          {nc?.strategy ? (
-            <ul className="my-map-list">
-              <li>
-                Следуйте стратегии <strong>«{nc.strategy}»</strong> — она снижает сопротивление
-                и открывает правильные возможности
-              </li>
-              {nc.signature && (
-                <li>
-                  Сигнатура успеха <strong>«{nc.signature}»</strong> — ориентир, что вы на своём месте
-                </li>
-              )}
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Где талант теряется">
-          {nc?.notSelfTheme ? (
-            <ul className="my-map-list">
-              <li>
-                Не-я тема <strong>«{nc.notSelfTheme}»</strong> — сигнал, что вы действуете
-                вопреки своей природе
-              </li>
-              {nc.openCenters && nc.openCenters.length > 0 && (
-                <li>
-                  Открытых центров: <strong>{nc.openCenters.length}</strong> — места, где легко
-                  брать на себя чужую энергию
-                </li>
-              )}
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Что стоит развивать">
-          {nc ? (
-            <ul className="my-map-list">
-              {nc.gatesAll && nc.gatesAll.length > 0 && (
-                <li>
-                  Активных ворот: <strong>{nc.gatesAll.length}</strong> — каждые несут
-                  потенциал для развития
-                </li>
-              )}
-              <li>
-                Изучение своего профиля и стратегии — ключевой практический шаг
-              </li>
-              <li>
-                Первичная версия раздела — углублённый AI-анализ появится в следующих обновлениях
-              </li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-      </div>
-    </div>
+      </SphereCard>
+      <SphereCard title="Как это использовать">
+        <p className="my-map-sphere-text">
+          Опирайтесь на «Обзор» и слои «Каналы» / «Центры» для структуры. Прикладные выводы появятся
+          после подключения смысловой базы.
+        </p>
+      </SphereCard>
+      <SphereCard title="Что нужно для точности">
+        <p className="my-map-sphere-text">{chartFactsLine(hdChart)}</p>
+      </SphereCard>
+      <SphereCard title="Следующий шаг">
+        <p className="my-map-sphere-text">
+          Этот слой будет расширен на следующем этапе после подключения смысловой базы.
+        </p>
+      </SphereCard>
+    </SphereScreen>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Tab: Карьера
-// ---------------------------------------------------------------------------
-
-function TabCareer({
+function TabWorkStyle({
   hdChart,
   onGoToNewReport,
 }: {
@@ -986,722 +765,285 @@ function TabCareer({
   onGoToNewReport: (type: AnalysisType) => void;
 }): JSX.Element {
   const nc = hdChart ? getNormalizedChart(hdChart) : null;
-
   return (
-    <div className="my-map-section">
-      <div className="my-map-section-header">
-        <h2 className="my-map-section-title">Карьера</h2>
-        <p className="my-map-section-desc">
-          Базовая карьерная логика вашего дизайна — не конкретные вакансии, а фундаментальный вектор
+    <SphereScreen
+      title="Рабочий стиль"
+      lead="Как вы по постоянной карте устроены в работе: нагрузка, ритм и раскрытие в задачах."
+      actions={
+        <div className="my-map-cta-row">
+          <button
+            type="button"
+            className="my-map-cta-btn my-map-cta-btn--sm"
+            onClick={() => onGoToNewReport("vacancy_assessment")}
+          >
+            Оценить вакансию →
+          </button>
+          <button
+            type="button"
+            className="my-map-cta-btn my-map-cta-btn--secondary my-map-cta-btn--sm"
+            onClick={() => onGoToNewReport("current_role")}
+          >
+            Разбор текущей роли →
+          </button>
+        </div>
+      }
+    >
+      <SphereCard title="Как вы работаете">
+        <p className="my-map-sphere-text">
+          {nc?.type
+            ? `Тип ${nc.type}${nc.strategy ? ` · стратегия «${nc.strategy}»` : ""}.`
+            : chartFactsLine(hdChart)}
         </p>
-      </div>
-
-      <div className="my-map-section-grid">
-        <InsightCard title="Рабочий вектор" accent>
-          {nc?.type ? (
-            <ul className="my-map-list">
-              <li>
-                <strong>Тип: {nc.type}</strong>
-              </li>
-              {nc.type === "Generator" && (
-                <>
-                  <li>Вы созданы для работы, которая по-настоящему зажигает</li>
-                  <li>Сакральный отклик — лучший фильтр для карьерных решений</li>
-                </>
-              )}
-              {nc.type === "Manifesting Generator" && (
-                <>
-                  <li>Многогранность и скорость — ваш актив</li>
-                  <li>Лучшие результаты там, где есть разнообразие задач</li>
-                </>
-              )}
-              {nc.type === "Projector" && (
-                <>
-                  <li>Ваша сила — в видении системы и направлении других</li>
-                  <li>Работайте с теми, кто ценит вашу экспертизу</li>
-                </>
-              )}
-              {nc.type === "Manifestor" && (
-                <>
-                  <li>Вы инициатор — лучшие результаты, когда действуете самостоятельно</li>
-                  <li>Информирование команды снижает сопротивление</li>
-                </>
-              )}
-              {nc.type === "Reflector" && (
-                <>
-                  <li>Ваша сила — в отражении и оценке среды</li>
-                  <li>Лунный цикл (28–29 дней) — ваш ориентир для важных решений</li>
-                </>
-              )}
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Рассчитайте HD-карту, чтобы увидеть вектор</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Как принимать карьерные решения">
-          {nc?.authority ? (
-            <ul className="my-map-list">
-              <li>
-                <strong>Авторитет: {nc.authority}</strong>
-              </li>
-              <li>Опирайтесь именно на этот внутренний сигнал при выборе ролей и офферов</li>
-              {nc.strategy && (
-                <li>Стратегия <strong>«{nc.strategy}»</strong> — ваш алгоритм входа в правильные возможности</li>
-              )}
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Сильные рабочие задачи">
-          {nc ? (
-            <ul className="my-map-list">
-              {nc.definedCenters && nc.definedCenters.length > 0 && (
-                <li>
-                  Определённые центры ({nc.definedCenters.join(", ")}) дают устойчивость
-                  в соответствующих областях
-                </li>
-              )}
-              {nc.channelsShort && nc.channelsShort.length > 0 && (
-                <li>
-                  {nc.channelsShort.length} активных канала — встроенные способности и дары
-                </li>
-              )}
-              <li>Углублённый анализ задач появится в следующих обновлениях</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Спорные рабочие форматы">
-          {nc ? (
-            <ul className="my-map-list">
-              {nc.openCenters && nc.openCenters.length > 0 && (
-                <li>
-                  Открытые центры ({nc.openCenters.join(", ")}) могут создавать перегрузку
-                  в определённых форматах
-                </li>
-              )}
-              <li>Подробный анализ появится с AI-расширением раздела</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-      </div>
-
-      <div className="my-map-cta-row">
-        <button
-          className="my-map-cta-btn"
-          onClick={() => onGoToNewReport("talent_map")}
-        >
-          ✨ Запустить карьерный разбор →
-        </button>
-        <button
-          className="my-map-cta-btn my-map-cta-btn--secondary"
-          onClick={() => onGoToNewReport("current_role")}
-        >
-          🧭 Разобрать текущую роль →
-        </button>
-      </div>
-    </div>
+      </SphereCard>
+      <SphereCard title="Где раскрываетесь">
+        <p className="my-map-sphere-text">
+          {nc?.authority
+            ? `Внутренний ориентир — авторитет ${nc.authority}.`
+            : "Этот блок будет расширен на следующем этапе."}
+        </p>
+      </SphereCard>
+      <SphereCard title="Где быстро устаёте">
+        <p className="my-map-sphere-text">
+          {nc?.notSelfTheme
+            ? `Сигнал перегруза — не-я тема «${nc.notSelfTheme}».`
+            : "Наблюдайте, когда работа идёт вопреки стратегии и авторитету."}
+        </p>
+      </SphereCard>
+      <SphereCard title="Что проверить в роли">
+        <p className="my-map-sphere-text">
+          Соответствие роли вашему типу и ритму. Для вакансий и ролей — раздел «Карьера» в меню
+          кабинета.
+        </p>
+      </SphereCard>
+    </SphereScreen>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Tab: Рабочая среда
-// ---------------------------------------------------------------------------
 
 function TabWorkEnvironment({ hdChart }: { hdChart: HdChartRecord | null }): JSX.Element {
   const nc = hdChart ? getNormalizedChart(hdChart) : null;
-
   return (
-    <div className="my-map-section">
-      <div className="my-map-section-header">
-        <h2 className="my-map-section-title">Рабочая среда</h2>
-        <p className="my-map-section-desc">
-          Условия, в которых вы раскрываетесь, и среда, которая истощает
+    <SphereScreen
+      title="Рабочая среда"
+      lead="Условия, ритм, формат команды и баланс давления и свободы."
+    >
+      <SphereCard title="Условия раскрытия">
+        <p className="my-map-sphere-text">
+          {nc?.definition
+            ? `Определение карты: ${nc.definition}.`
+            : "Этот слой будет расширен на следующем этапе."}
         </p>
-      </div>
-
-      <div className="my-map-section-grid">
-        <InsightCard title="Подходящий темп" accent>
-          {nc?.type ? (
-            <ul className="my-map-list">
-              {(nc.type === "Generator" || nc.type === "Manifesting Generator") && (
-                <>
-                  <li>Устойчивый рабочий ритм с вовлечёнными задачами</li>
-                  <li>Важно чувствовать отклик на работу — усталость без удовольствия = не ваше</li>
-                </>
-              )}
-              {nc.type === "Projector" && (
-                <>
-                  <li>Короткие интенсивные периоды работы чередуются с отдыхом</li>
-                  <li>Работа по приглашению — ключ к устойчивости</li>
-                </>
-              )}
-              {nc.type === "Manifestor" && (
-                <>
-                  <li>Свой темп, минимум внешних дедлайнов</li>
-                  <li>Периоды активности сменяются восстановлением</li>
-                </>
-              )}
-              {nc.type === "Reflector" && (
-                <>
-                  <li>Медленный, вдумчивый темп</li>
-                  <li>Важно не торопиться с решениями — лунный цикл как ориентир</li>
-                </>
-              )}
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Идеальная команда">
-          {nc ? (
-            <ul className="my-map-list">
-              <li>Люди, которые ценят ваш вклад и не требуют постоянного доказательства компетентности</li>
-              <li>Среда, где можно работать в своём режиме без навязчивого контроля</li>
-              <li>Развёрнутый анализ появится в следующих обновлениях</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Условия раскрытия">
-          {nc?.definition ? (
-            <ul className="my-map-list">
-              <li>
-                <strong>Определение: {nc.definition}</strong>
-              </li>
-              {nc.definition === "Single" && (
-                <li>Вы самодостаточны — работаете стабильно независимо от команды</li>
-              )}
-              {nc.definition === "Split" && (
-                <li>Правильные люди рядом усиливают вас — важно окружение</li>
-              )}
-              {nc.definition?.includes("Triple") && (
-                <li>Нуждаетесь в разнообразном окружении для полного раскрытия</li>
-              )}
-              <li>Среда, где ваши таланты видят и ценят</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Риски выгорания">
-          {nc ? (
-            <ul className="my-map-list">
-              {nc.notSelfTheme && (
-                <li>
-                  Основной сигнал выгорания — <strong>«{nc.notSelfTheme}»</strong>
-                </li>
-              )}
-              {nc.openCenters && nc.openCenters.length > 0 && (
-                <li>
-                  Открытые центры ({nc.openCenters.length}) — места уязвимости
-                  к чужим энергиям
-                </li>
-              )}
-              <li>Принятие условий, которые противоречат стратегии и авторитету</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Границы и режим">
-          {nc ? (
-            <ul className="my-map-list">
-              <li>Режим, учитывающий вашу стратегию — основа устойчивости</li>
-              <li>Право говорить «нет» задачам, которые не вызывают отклика</li>
-              <li>Детальные рекомендации появятся с AI-расширением</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-      </div>
-    </div>
+      </SphereCard>
+      <SphereCard title="Ритм и темп">
+        <p className="my-map-sphere-text">{chartFactsLine(hdChart)}</p>
+      </SphereCard>
+      <SphereCard title="Команда и формат">
+        <p className="my-map-sphere-text">
+          Структура будущего разбора: кто рядом усиливает, какой формат работы поддерживает карту.
+        </p>
+      </SphereCard>
+      <SphereCard title="Давление и свобода">
+        <p className="my-map-sphere-text">
+          Этот слой будет расширен на следующем этапе после подключения смысловой базы.
+        </p>
+      </SphereCard>
+    </SphereScreen>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Tab: Отношения
-// ---------------------------------------------------------------------------
 
 function TabRelationships({ hdChart }: { hdChart: HdChartRecord | null }): JSX.Element {
   const nc = hdChart ? getNormalizedChart(hdChart) : null;
-
   return (
-    <div className="my-map-section">
-      <div className="my-map-section-header">
-        <h2 className="my-map-section-title">Отношения</h2>
-        <p className="my-map-section-desc">
-          Личная карта отношений — как вы входите в контакт и что важно в близости
+    <SphereScreen
+      title="Отношения"
+      lead="Контакт, близость, границы и бережность — по постоянной карте."
+    >
+      <SphereCard title="Как входите в контакт">
+        <p className="my-map-sphere-text">
+          {nc?.strategy
+            ? `Опора на стратегию «${nc.strategy}» в отношениях.`
+            : chartFactsLine(hdChart)}
         </p>
-      </div>
-
-      <div className="my-map-section-grid">
-        <InsightCard title="Как вы входите в контакт" accent>
-          {nc?.strategy ? (
-            <ul className="my-map-list">
-              <li>
-                Стратегия <strong>«{nc.strategy}»</strong> применима не только в карьере,
-                но и в отношениях
-              </li>
-              <li>Через неё вы можете строить контакт экологично — без навязывания</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Чувствительные места">
-          {nc ? (
-            <ul className="my-map-list">
-              {nc.openCenters && nc.openCenters.length > 0 && (
-                <li>
-                  Открытые центры ({nc.openCenters.join(", ")}) — зоны, где вы легко
-                  берёте на себя чужую энергию в отношениях
-                </li>
-              )}
-              <li>Важно не брать на себя чужие эмоции и состояния</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Полезные договорённости">
-          <ul className="my-map-list">
-            <li>Прозрачность о своём режиме и ритме работы</li>
-            <li>Право на восстановление без объяснений</li>
-            <li>Пространство для принятия решений в своём темпе</li>
-          </ul>
-        </InsightCard>
-
-        <InsightCard title="Кто усиливает / перегружает">
-          {nc ? (
-            <ul className="my-map-list">
-              <li>Люди, уважающие вашу стратегию и авторитет — усиливают</li>
-              <li>Те, кто игнорирует ваши сигналы или требует постоянного доказательства — истощают</li>
-              <li>Детальный анализ совместимости появится в следующих обновлениях</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-      </div>
-    </div>
+      </SphereCard>
+      <SphereCard title="Близость и границы">
+        <p className="my-map-sphere-text">
+          Этот слой будет расширен на следующем этапе. Сейчас — структура будущего разбора.
+        </p>
+      </SphereCard>
+      <SphereCard title="Уязвимости">
+        <p className="my-map-sphere-text">
+          {nc?.openCenters?.length
+            ? `Открытых центров: ${nc.openCenters.length} — зоны чувствительности к чужой энергии.`
+            : "Появится после расчёта карты с полными данными."}
+        </p>
+      </SphereCard>
+      <SphereCard title="Что важно в паре и семье">
+        <p className="my-map-sphere-text">
+          Этот слой будет расширен на следующем этапе после подключения смысловой базы.
+        </p>
+      </SphereCard>
+    </SphereScreen>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Tab: Коммуникация
-// ---------------------------------------------------------------------------
 
 function TabCommunication({ hdChart }: { hdChart: HdChartRecord | null }): JSX.Element {
   const nc = hdChart ? getNormalizedChart(hdChart) : null;
-  const hasThroat = nc?.definedCenters?.includes("Throat");
-
   return (
-    <div className="my-map-section">
-      <div className="my-map-section-header">
-        <h2 className="my-map-section-title">Коммуникация</h2>
-        <p className="my-map-section-desc">
-          Как вам легче говорить, презентовать себя и договариваться
+    <SphereScreen
+      title="Коммуникация"
+      lead="Речь, договорённости, вопросы и отказ — как это следует из вашей карты."
+    >
+      <SphereCard title="Как объясняете идеи">
+        <p className="my-map-sphere-text">
+          {nc?.profile ? `Профиль ${nc.profile} — ролевая линия в общении.` : chartFactsLine(hdChart)}
         </p>
-      </div>
-
-      <div className="my-map-section-grid">
-        <InsightCard title="Как вам легче говорить" accent>
-          {nc ? (
-            <ul className="my-map-list">
-              {hasThroat ? (
-                <>
-                  <li>
-                    <strong>Горло определено</strong> — у вас устойчивый, постоянный голос
-                  </li>
-                  <li>Вы говорите уверенно, ваши слова несут силу и привлекают внимание</li>
-                </>
-              ) : (
-                <>
-                  <li>
-                    <strong>Горло открыто</strong> — ваш голос гибко адаптируется к ситуации
-                  </li>
-                  <li>Важно говорить тогда, когда вас действительно слышат</li>
-                </>
-              )}
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Самопрезентация">
-          {nc ? (
-            <ul className="my-map-list">
-              {nc.type && <li>Тип <strong>{nc.type}</strong> определяет энергетику вашего присутствия</li>}
-              {nc.profile && <li>Профиль <strong>{nc.profile}</strong> — ваша ролевая карта в коммуникации</li>}
-              <li>Говорите о своих достижениях через конкретные результаты и вклад</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Как задавать вопросы и договариваться">
-          <ul className="my-map-list">
-            <li>Уточняйте ожидания до начала работы, а не в процессе</li>
-            <li>Давайте себе время на обдумывание предложений</li>
-            <li>Договорённости работают лучше, когда они письменные</li>
-          </ul>
-        </InsightCard>
-
-        <InsightCard title="Потенциальные конфликты">
-          {nc?.notSelfTheme ? (
-            <ul className="my-map-list">
-              <li>
-                Не-я тема <strong>«{nc.notSelfTheme}»</strong> может провоцировать
-                конфликты в коммуникации
-              </li>
-              <li>Заметив этот сигнал — остановитесь и вернитесь к своей стратегии</li>
-            </ul>
-          ) : (
-            <ul className="my-map-list">
-              <li>Конфликты чаще возникают, когда вы действуете против своей природы</li>
-              <li>Ориентир — следовать своему авторитету в трудных разговорах</li>
-            </ul>
-          )}
-        </InsightCard>
-      </div>
-    </div>
+      </SphereCard>
+      <SphereCard title="Договорённости">
+        <p className="my-map-sphere-text">
+          Структура будущего разбора: как фиксировать ожидания и проверять взаимопонимание.
+        </p>
+      </SphereCard>
+      <SphereCard title="Вопросы и уточнения">
+        <p className="my-map-sphere-text">
+          Этот слой будет расширен на следующем этапе после подключения смысловой базы.
+        </p>
+      </SphereCard>
+      <SphereCard title="Отказ и границы">
+        <p className="my-map-sphere-text">
+          {nc?.notSelfTheme
+            ? `Не-я тема «${nc.notSelfTheme}» может проявляться в сложных разговорах.`
+            : "Честный preview — без персональных интерпретаций."}
+        </p>
+      </SphereCard>
+    </SphereScreen>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Tab: Энергия и тело
-// ---------------------------------------------------------------------------
 
 function TabEnergyBody({ hdChart }: { hdChart: HdChartRecord | null }): JSX.Element {
   const nc = hdChart ? getNormalizedChart(hdChart) : null;
-  const hasSacral = nc?.definedCenters?.includes("Sacral");
-  const hasRoot = nc?.definedCenters?.includes("Root");
-
   return (
-    <div className="my-map-section">
-      <div className="my-map-section-header">
-        <h2 className="my-map-section-title">Энергия и тело</h2>
-        <p className="my-map-section-desc">
-          Как набирать энергию, восстанавливаться и слушать телесные сигналы. Не медицинский совет.
+    <SphereScreen
+      title="Энергия и тело"
+      lead="Ритм, перегруз, восстановление и телесные сигналы. Не медицинский совет."
+    >
+      <SphereCard title="Ритм дня">
+        <p className="my-map-sphere-text">
+          {nc?.type ? `Базовый ритм связан с типом ${nc.type}.` : chartFactsLine(hdChart)}
         </p>
-      </div>
-
-      <div className="my-map-section-grid">
-        <InsightCard title="Источники энергии" accent>
-          {nc?.type ? (
-            <ul className="my-map-list">
-              {hasSacral ? (
-                <li>
-                  <strong>Сакральный центр определён</strong> — у вас мощный, воспроизводимый
-                  жизненный двигатель. Энергия восстанавливается через сон и вовлечённую работу
-                </li>
-              ) : (
-                <li>
-                  <strong>Сакральный центр открыт</strong> — вы не генерируете энергию самостоятельно,
-                  важно бережно расходовать и восстанавливать её
-                </li>
-              )}
-              {hasRoot && (
-                <li>
-                  <strong>Корневой центр определён</strong> — есть постоянное давление к действию.
-                  Важно не реагировать импульсивно на каждый стресс
-                </li>
-              )}
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Энергетические утечки">
-          {nc ? (
-            <ul className="my-map-list">
-              {nc.openCenters && nc.openCenters.length > 0 && (
-                <li>
-                  Открытые центры ({nc.openCenters.length}) — места, где вы
-                  поглощаете и усиливаете чужие энергии
-                </li>
-              )}
-              <li>Переработка, работа без отклика, игнорирование усталости</li>
-              <li>Дела, которые «надо», но не вызывают отклика</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Восстановление и сон">
-          {nc?.type ? (
-            <ul className="my-map-list">
-              {(nc.type === "Generator" || nc.type === "Manifesting Generator") && (
-                <>
-                  <li>Важно ложиться спать уставшим — тело должно истощить сакральную энергию</li>
-                  <li>Не засыпать сразу — лечь и почитать, дать телу переключиться</li>
-                </>
-              )}
-              {nc.type === "Projector" && (
-                <>
-                  <li>Регулярный отдых до наступления усталости — не доводить до истощения</li>
-                  <li>Тихое время перед сном особенно важно</li>
-                </>
-              )}
-              {nc.type === "Manifestor" && (
-                <>
-                  <li>Право на изоляцию и тишину для восстановления</li>
-                  <li>Отдых — необходимость, а не слабость</li>
-                </>
-              )}
-              {nc.type === "Reflector" && (
-                <>
-                  <li>Сон в одиночестве или особенно тихой среде</li>
-                  <li>Важно лечь спать до полуночи и давать себе время на лунный цикл</li>
-                </>
-              )}
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Питание и телесные сигналы">
-          <ul className="my-map-list">
-            <li>Тело — ваш лучший навигатор. Замечайте сигналы усталости и напряжения</li>
-            <li>Физическая активность, которая приносит удовольствие — лучшая</li>
-            <li>
-              <em>Персонализированный раздел «Питание» появится в будущих обновлениях</em>
-            </li>
-          </ul>
-        </InsightCard>
-
-        <InsightCard title="Как не загонять себя">
-          {nc ? (
-            <ul className="my-map-list">
-              <li>Замечайте свою не-я тему — это сигнал, что что-то идёт не так</li>
-              <li>Уважайте стратегию в ежедневных решениях, не только в больших</li>
-              <li>Регулярный аудит своего расписания на соответствие природе</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-      </div>
-    </div>
+      </SphereCard>
+      <SphereCard title="Перегруз">
+        <p className="my-map-sphere-text">
+          {nc?.notSelfTheme
+            ? `Сигнал — «${nc.notSelfTheme}».`
+            : "Этот слой будет расширен на следующем этапе."}
+        </p>
+      </SphereCard>
+      <SphereCard title="Восстановление">
+        <p className="my-map-sphere-text">
+          В «Обзоре» откройте слой «Центры» для определённых и открытых зон тела.
+        </p>
+      </SphereCard>
+      <SphereCard title="Телесные сигналы">
+        <p className="my-map-sphere-text">
+          Этот слой будет расширен на следующем этапе после подключения смысловой базы.
+        </p>
+      </SphereCard>
+    </SphereScreen>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Tab: Деньги
-// ---------------------------------------------------------------------------
 
 function TabMoney({ hdChart }: { hdChart: HdChartRecord | null }): JSX.Element {
   const nc = hdChart ? getNormalizedChart(hdChart) : null;
-
   return (
-    <div className="my-map-section">
-      <div className="my-map-section-header">
-        <h2 className="my-map-section-title">Деньги</h2>
-        <p className="my-map-section-desc">
-          Личная стратегия ценности. Не финансовые советы или инвестиции — только ваша природная механика.
+    <SphereScreen
+      title="Деньги"
+      lead="Ценность, предложения и денежные решения — не финансовые советы."
+    >
+      <SphereCard title="Создание ценности">
+        <p className="my-map-sphere-text">
+          {nc?.channelsShort?.length
+            ? `Активных каналов: ${nc.channelsShort.length} — зоны встроенной ценности.`
+            : chartFactsLine(hdChart)}
         </p>
-      </div>
-
-      <div className="my-map-section-grid">
-        <InsightCard title="Через что легче создавать ценность" accent>
-          {nc ? (
-            <ul className="my-map-list">
-              {nc.type && (
-                <li>
-                  Как <strong>{nc.type}</strong>, вы создаёте ценность через свою уникальную
-                  энергетику — не через подражание другим типам
-                </li>
-              )}
-              {nc.channelsShort && nc.channelsShort.length > 0 && (
-                <li>
-                  {nc.channelsShort.length} активных канала — ваши встроенные зоны ценности
-                  для других
-                </li>
-              )}
-              {nc.authority && (
-                <li>
-                  Авторитет <strong>{nc.authority}</strong> помогает выбирать предложения,
-                  которые действительно вас ценят
-                </li>
-              )}
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Где можешь обесценивать себя">
-          {nc ? (
-            <ul className="my-map-list">
-              {nc.openCenters?.includes("Ego") ? (
-                <li>
-                  <strong>Эго-центр открыт</strong> — склонность брать на себя обязательства,
-                  которые истощают, и недооценивать свою ценность
-                </li>
-              ) : (
-                <li>Принятие условий, противоречащих авторитету — зона риска</li>
-              )}
-              <li>Работа из страха, а не из отклика — приводит к недооценке себя</li>
-              <li>Согласие на невыгодные условия под давлением</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Токсичные денежные паттерны">
-          {nc ? (
-            <ul className="my-map-list">
-              <li>Соглашаться на любую работу, лишь бы был доход</li>
-              <li>Игнорировать внутренние сигналы в пользу внешних ожиданий</li>
-              <li>Сравнивать себя с другими типами вместо следования своей природе</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Экологичный обмен ценности">
-          {nc?.strategy ? (
-            <ul className="my-map-list">
-              <li>
-                Стратегия <strong>«{nc.strategy}»</strong> — ориентир для выбора условий
-                и партнёров, которые резонируют с вашей природой
-              </li>
-              <li>Честная цена своего труда — это уважение к своему дизайну</li>
-              <li>
-                Первичная версия раздела — углублённый анализ появится в следующих обновлениях
-              </li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-      </div>
-    </div>
+      </SphereCard>
+      <SphereCard title="Предложения и обмен">
+        <p className="my-map-sphere-text">
+          Этот слой будет расширен на следующем этапе. Сейчас — структура будущего разбора.
+        </p>
+      </SphereCard>
+      <SphereCard title="Денежные решения">
+        <p className="my-map-sphere-text">
+          {nc?.authority
+            ? `Ориентир — авторитет ${nc.authority}.`
+            : "Появится после расчёта карты."}
+        </p>
+      </SphereCard>
+      <SphereCard title="Обесценивание">
+        <p className="my-map-sphere-text">
+          Этот слой будет расширен на следующем этапе после подключения смысловой базы.
+        </p>
+      </SphereCard>
+    </SphereScreen>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Tab: План развития
-// ---------------------------------------------------------------------------
-
 function TabDevelopmentPlan({
-  hdChart,
+  hdChartStatus,
+  profileCompleteness,
+  onGoToData,
   onGoToNewReport,
 }: {
   hdChart: HdChartRecord | null;
+  hdChartStatus: HdChartStatus;
+  profileCompleteness: { percent: number; label: string };
+  onGoToData: () => void;
   onGoToNewReport: (type: AnalysisType) => void;
 }): JSX.Element {
-  const nc = hdChart ? getNormalizedChart(hdChart) : null;
-
   return (
-    <div className="my-map-section">
-      <div className="my-map-section-header">
-        <h2 className="my-map-section-title">План развития</h2>
-        <p className="my-map-section-desc">
-          Практические шаги на сейчас — что наблюдать, пробовать и делать
+    <SphereScreen
+      title="План развития"
+      lead="Ближайшие шаги: профиль, наблюдения и разборы для углубления."
+      actions={
+        <div className="my-map-cta-row">
+          <button
+            type="button"
+            className="my-map-cta-btn my-map-cta-btn--sm"
+            onClick={() => onGoToNewReport("talent_map")}
+          >
+            Запустить разбор карты →
+          </button>
+        </div>
+      }
+    >
+      <SphereCard title="Ближайшие шаги">
+        <ul className="my-map-summary-list">
+          <li>Довести анкету до {profileCompleteness.percent}% и выше</li>
+          <li>Наблюдать сигнатуру и не-я тему в решениях</li>
+          <li>Использовать «Обзор» для базовых параметров карты</li>
+        </ul>
+      </SphereCard>
+      <SphereCard title="Что добавить в профиль">
+        <p className="my-map-sphere-text">
+          {hdChartStatus === "outdated" || hdChartStatus === "none"
+            ? "Обновите данные рождения и пересчитайте карту."
+            : "Уточните время и место рождения для более точных выводов."}
         </p>
-      </div>
-
-      <div className="my-map-section-grid">
-        <InsightCard title="Что попробовать на этой неделе" accent>
-          {nc ? (
-            <ul className="my-map-list">
-              {nc.strategy && (
-                <li>
-                  Замечайте в течение дня, следуете ли стратегии <strong>«{nc.strategy}»</strong>
-                </li>
-              )}
-              <li>Выберите одну рабочую задачу, которая вызывает настоящий отклик</li>
-              <li>Запишите один пример, когда всё шло легко — что в нём было особенного?</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Рассчитайте HD-карту для персональных рекомендаций</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Что наблюдать">
-          {nc ? (
-            <ul className="my-map-list">
-              {nc.signature && (
-                <li>
-                  Когда возникает чувство <strong>«{nc.signature}»</strong> — записывайте контекст
-                </li>
-              )}
-              {nc.notSelfTheme && (
-                <li>
-                  Когда появляется <strong>«{nc.notSelfTheme}»</strong> — что предшествовало?
-                </li>
-              )}
-              <li>Энергетические паттерны: когда полны сил, когда истощены?</li>
-            </ul>
-          ) : (
-            <p className="my-map-empty-hint">Появится после расчёта карты</p>
-          )}
-        </InsightCard>
-
-        <InsightCard title="Какой эксперимент сделать">
-          <ul className="my-map-list">
-            <li>Примите одно решение, полностью следуя своему авторитету — без логики, только сигнал</li>
-            <li>Один день живите без соглашений, которые не вызывают отклика</li>
-            <li>Поговорите о своих талантах с кем-то, кто вас хорошо знает — что они видят?</li>
-          </ul>
-        </InsightCard>
-
-        <InsightCard title="Вопрос себе на эту неделю">
-          {nc?.type ? (
-            <ul className="my-map-list">
-              {nc.type === "Generator" || nc.type === "Manifesting Generator" ? (
-                <li>«Что из того, что я делаю сейчас, по-настоящему зажигает?»</li>
-              ) : nc.type === "Projector" ? (
-                <li>«Где меня сегодня признали и пригласили? Как я ответил?»</li>
-              ) : nc.type === "Manifestor" ? (
-                <li>«Что я инициировал сегодня? Кого информировал заранее?»</li>
-              ) : (
-                <li>«Что среда отражает мне сегодня?»</li>
-              )}
-              <li>«Что бы я сделал иначе, если бы не было страха?»</li>
-            </ul>
-          ) : (
-            <ul className="my-map-list">
-              <li>«Что в моей работе приносит настоящее удовлетворение?»</li>
-              <li>«Где я чаще всего действую вопреки своей природе?»</li>
-            </ul>
-          )}
-        </InsightCard>
-      </div>
-
-      <div className="my-map-cta-row">
-        <button
-          className="my-map-cta-btn"
-          onClick={() => onGoToNewReport("talent_map")}
-        >
-          ✨ Сделать новый разбор →
-        </button>
-      </div>
-    </div>
+        {(hdChartStatus === "outdated" || hdChartStatus === "none") && (
+          <button type="button" className="my-map-layer-link" onClick={onGoToData}>
+            Перейти в Данные →
+          </button>
+        )}
+      </SphereCard>
+      <SphereCard title="Какие разборы запустить">
+        <p className="my-map-sphere-text">
+          Разбор роли, вакансии или карты талантов — в разделе «Разборы» и через кнопку ниже.
+        </p>
+      </SphereCard>
+      <SphereCard title="Следующий слой">
+        <p className="my-map-sphere-text">
+          Персональные рекомендации появятся на следующем этапе после подключения смысловой базы.
+        </p>
+      </SphereCard>
+    </SphereScreen>
   );
 }
 
@@ -1733,58 +1075,41 @@ export default function MyMapScreen({
 
       <MapFeedTabs active={activeMapTab} onChange={setActiveMapTab} />
 
-      <div className="my-map-cockpit">
-        <div className="my-map-cockpit-left">
-          <MapLayerChips active={activeMapLayer} onChange={setActiveMapLayer} />
-          <MapLayerPanel
-            layer={activeMapLayer}
-            hdChart={hdChart}
-            hdChartStatus={hdChartStatus}
-            hdChartLoading={hdChartLoading}
-            hdChartCalculating={hdChartCalculating}
-            calculateHdChart={calculateHdChart}
-            onGoToData={onGoToData}
-          />
-        </div>
-        <SphereSummaryPanel
-          tab={activeMapTab}
+      {activeMapTab === "overview" ? (
+        <OverviewCockpit
+          activeMapLayer={activeMapLayer}
+          onLayerChange={setActiveMapLayer}
           hdChart={hdChart}
           hdChartStatus={hdChartStatus}
+          hdChartLoading={hdChartLoading}
+          hdChartCalculating={hdChartCalculating}
+          calculateHdChart={calculateHdChart}
+          profile={profile}
           profileCompleteness={profileCompleteness}
           onGoToData={onGoToData}
-          onGoToNewReport={onGoToNewReport}
-          onLayerChange={setActiveMapLayer}
         />
-      </div>
-
-      <div className="my-map-tab-content my-map-tab-content--secondary" role="tabpanel">
-        <div className="my-map-detail-intro">
-          <h2 className="my-map-detail-heading">Подробнее</h2>
-          <p className="my-map-detail-sub">
-            Дополнительная детализация выбранной сферы — следующий слой разбора.
-          </p>
-        </div>
-        {activeMapTab === "overview" && (
-          <TabOverview
-            hdChartStatus={hdChartStatus}
-            profile={profile}
-            profileCompleteness={profileCompleteness}
-            onGoToData={onGoToData}
-          />
-        )}
-        {activeMapTab === "talents" && <TabTalents hdChart={hdChart} />}
-        {activeMapTab === "career" && (
-          <TabCareer hdChart={hdChart} onGoToNewReport={onGoToNewReport} />
-        )}
-        {activeMapTab === "workEnvironment" && <TabWorkEnvironment hdChart={hdChart} />}
-        {activeMapTab === "relationships" && <TabRelationships hdChart={hdChart} />}
-        {activeMapTab === "communication" && <TabCommunication hdChart={hdChart} />}
-        {activeMapTab === "energyBody" && <TabEnergyBody hdChart={hdChart} />}
-        {activeMapTab === "money" && <TabMoney hdChart={hdChart} />}
-        {activeMapTab === "developmentPlan" && (
-          <TabDevelopmentPlan hdChart={hdChart} onGoToNewReport={onGoToNewReport} />
-        )}
-      </div>
+      ) : (
+        <>
+          {activeMapTab === "talents" && <TabTalents hdChart={hdChart} />}
+          {activeMapTab === "workStyle" && (
+            <TabWorkStyle hdChart={hdChart} onGoToNewReport={onGoToNewReport} />
+          )}
+          {activeMapTab === "workEnvironment" && <TabWorkEnvironment hdChart={hdChart} />}
+          {activeMapTab === "relationships" && <TabRelationships hdChart={hdChart} />}
+          {activeMapTab === "communication" && <TabCommunication hdChart={hdChart} />}
+          {activeMapTab === "energyBody" && <TabEnergyBody hdChart={hdChart} />}
+          {activeMapTab === "money" && <TabMoney hdChart={hdChart} />}
+          {activeMapTab === "developmentPlan" && (
+            <TabDevelopmentPlan
+              hdChart={hdChart}
+              hdChartStatus={hdChartStatus}
+              profileCompleteness={profileCompleteness}
+              onGoToData={onGoToData}
+              onGoToNewReport={onGoToNewReport}
+            />
+          )}
+        </>
+      )}
     </section>
   );
 }

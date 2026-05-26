@@ -11,9 +11,25 @@ export type TodayGraphCardProps = {
   hdChartStatus: HdChartStatus;
   hdChartLoading: boolean;
   hdChartCalculating?: boolean;
+  profileCompletenessPercent: number;
   onGoToMyMap: () => void;
   onGoToData: () => void;
 };
+
+function chartStatusLabel(status: HdChartStatus): { text: string; ok: boolean } {
+  switch (status) {
+    case "ok":
+      return { text: "Карта рассчитана", ok: true };
+    case "outdated":
+      return { text: "Карта устарела", ok: false };
+    case "no_coords":
+      return { text: "Нет координат", ok: false };
+    case "error":
+      return { text: "Ошибка расчёта", ok: false };
+    default:
+      return { text: "Карта не рассчитана", ok: false };
+  }
+}
 
 type GraphTab = "transit" | "changes" | "base";
 
@@ -287,15 +303,27 @@ export default function TodayGraphCard({
   hdChartStatus,
   hdChartLoading,
   hdChartCalculating,
+  profileCompletenessPercent,
   onGoToMyMap,
   onGoToData,
 }: TodayGraphCardProps): JSX.Element {
   const [tab, setTab] = useState<GraphTab>("transit");
+  const chart = chartStatusLabel(hdChartStatus);
 
   return (
     <div className="tgc tgc--dock">
-      <div className="tgc-header">
+      <div className="tgc-dock-title-row">
         <h3 className="tgc-title">Дневной радар</h3>
+        <div className="tgc-dock-badges">
+          <span className={`tgc-dock-badge${chart.ok ? " tgc-dock-badge--ok" : ""}`}>
+            {chart.text}
+          </span>
+          <span className="tgc-dock-badge tgc-dock-badge--muted">
+            Профиль {profileCompletenessPercent}%
+          </span>
+        </div>
+      </div>
+      <div className="tgc-header">
         <div className="tgc-tabs">
           {(["transit", "changes", "base"] as GraphTab[]).map((t) => (
             <button
@@ -318,6 +346,7 @@ export default function TodayGraphCard({
             hdChartStatus={hdChartStatus}
             hdChartLoading={hdChartLoading}
             hdChartCalculating={hdChartCalculating}
+            profileCompletenessPercent={profileCompletenessPercent}
             onGoToMyMap={onGoToMyMap}
             onGoToData={onGoToData}
           />

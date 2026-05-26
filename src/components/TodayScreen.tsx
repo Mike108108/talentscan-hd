@@ -39,7 +39,7 @@ type TodayScreenProps = {
   calculateHdChart: () => void;
 };
 
-type FeedTab = "focus" | "recommendations" | "practice" | "ai";
+type FeedTab = "focus" | "planets" | "recommendations" | "practice" | "ai";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -57,71 +57,30 @@ function getNc(hdChart: HdChartRecord | null): NormalizedChart | null {
   return hdChart.normalized_chart_json ?? null;
 }
 
-function chartStatusLabel(status: HdChartStatus): { text: string; ok: boolean } {
-  switch (status) {
-    case "ok":
-      return { text: "Карта рассчитана", ok: true };
-    case "outdated":
-      return { text: "Карта устарела", ok: false };
-    case "no_coords":
-      return { text: "Нет координат", ok: false };
-    case "error":
-      return { text: "Ошибка расчёта", ok: false };
-    default:
-      return { text: "Карта не рассчитана", ok: false };
-  }
-}
-
 // ---------------------------------------------------------------------------
-// Planet strip (right dock, preview only)
+// Planets tab data (preview only — no real positions)
 // ---------------------------------------------------------------------------
 
 const PLANETS = [
-  { symbol: "☉", name: "Солнце" },
-  { symbol: "⊕", name: "Земля" },
-  { symbol: "☽", name: "Луна" },
-  { symbol: "☿", name: "Меркурий" },
-  { symbol: "♀", name: "Венера" },
-  { symbol: "♂", name: "Марс" },
+  { symbol: "☉", name: "Солнце", role: "Главный фокус дня", badge: "скоро" as const },
+  { symbol: "⊕", name: "Земля", role: "Заземление и опора", badge: "скоро" as const },
+  { symbol: "☽", name: "Луна", role: "Эмоциональный и телесный импульс", badge: "будет подключено" as const },
+  { symbol: "☿", name: "Меркурий", role: "Мысли и коммуникация", badge: "скоро" as const },
+  { symbol: "♀", name: "Венера", role: "Ценности и отношения", badge: "скоро" as const },
+  { symbol: "♂", name: "Марс", role: "Действие, напряжение и взросление", badge: "будет подключено" as const },
 ];
 
-function PlanetStrip(): JSX.Element {
-  return (
-    <div className="today-planet-strip today-planet-strip--dock">
-      <span className="today-planet-strip-heading">Планеты сейчас</span>
-      <div className="today-planet-pills">
-        {PLANETS.map((p) => (
-          <div key={p.name} className="today-planet-pill">
-            <span className="today-planet-symbol">{p.symbol}</span>
-            <span className="today-planet-name">{p.name}</span>
-            <span className="today-planet-badge">скоро</span>
-          </div>
-        ))}
-      </div>
-      <p className="today-planet-note">
-        Реальные положения планет будут подключены следующим этапом.
-      </p>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
-// Compact top line
+// Compact date line (minimal header)
 // ---------------------------------------------------------------------------
 
-function CompactHeader({
-  profile,
-  profileCompleteness,
+function CompactDateLine({
   hdChartStatus,
   onGoToData,
 }: {
-  profile: UserProfile;
-  profileCompleteness: ProfileCompleteness;
   hdChartStatus: HdChartStatus;
   onGoToData: () => void;
 }): JSX.Element {
-  const name = profile.displayName;
-  const chart = chartStatusLabel(hdChartStatus);
   const showDataCta =
     hdChartStatus === "none" ||
     hdChartStatus === "outdated" ||
@@ -129,34 +88,17 @@ function CompactHeader({
     hdChartStatus === "error";
 
   return (
-    <header className="today-topline">
-      <div className="today-topline-main">
-        <div className="today-topline-eyebrow">
-          <span className="today-hero-tag">Сегодня</span>
-          <span className="today-hero-date">{todayDateCompact()}</span>
-        </div>
-        {name && <p className="today-topline-greeting">Привет, {name}</p>}
-        <p className="today-topline-sub">
-          Дневной cockpit — транзит и радар справа, фокус и практика в центре.
-        </p>
-      </div>
-      <div className="today-topline-status">
-        <span className={`today-status-badge${chart.ok ? " today-status-badge--ok" : ""}`}>
-          {chart.text}
-        </span>
-        <span className="today-status-badge today-status-badge--muted">
-          Профиль {profileCompleteness.percent}%
-        </span>
-        {showDataCta && (
-          <button className="today-status-cta" onClick={onGoToData}>
-            {hdChartStatus === "outdated"
-              ? "Обновить данные"
-              : hdChartStatus === "none"
-              ? "Перейти в Данные"
-              : "Уточнить данные"}
-          </button>
-        )}
-      </div>
+    <header className="today-date-line">
+      <span className="today-hero-date">{todayDateCompact()}</span>
+      {showDataCta && (
+        <button className="today-date-line-cta" onClick={onGoToData}>
+          {hdChartStatus === "outdated"
+            ? "Обновить данные"
+            : hdChartStatus === "none"
+            ? "Перейти в Данные"
+            : "Уточнить данные"}
+        </button>
+      )}
     </header>
   );
 }
@@ -167,9 +109,10 @@ function CompactHeader({
 
 const FEED_TABS: { id: FeedTab; label: string }[] = [
   { id: "focus", label: "Фокус дня" },
+  { id: "planets", label: "Планеты сейчас" },
   { id: "recommendations", label: "Рекомендации" },
   { id: "practice", label: "Практика" },
-  { id: "ai", label: "AI-вопросы" },
+  { id: "ai", label: "AI-чат" },
 ];
 
 function FeedTabs({
@@ -236,9 +179,11 @@ function buildFocusContent(
 }
 
 function FocusTabPanel({
+  displayName,
   hdChart,
   hdChartStatus,
 }: {
+  displayName: string;
   hdChart: HdChartRecord | null;
   hdChartStatus: HdChartStatus;
 }): JSX.Element {
@@ -247,6 +192,9 @@ function FocusTabPanel({
 
   return (
     <div className="today-feed-panel">
+      {displayName && (
+        <p className="today-focus-greeting">Привет, {displayName}</p>
+      )}
       <section className="today-focus-block">
         <h2 className="today-feed-heading">Главный фокус</h2>
         <p className="today-focus-lead">{content.main}</p>
@@ -262,6 +210,40 @@ function FocusTabPanel({
         </div>
       </section>
       <blockquote className="today-phrase-day">{content.phrase}</blockquote>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tab: Планеты сейчас
+// ---------------------------------------------------------------------------
+
+function PlanetsTabPanel(): JSX.Element {
+  return (
+    <div className="today-feed-panel">
+      <div className="today-planets-grid">
+        {PLANETS.map((p) => (
+          <div key={p.name} className="today-planet-card">
+            <div className="today-planet-card-top">
+              <span className="today-planet-card-symbol">{p.symbol}</span>
+              <span
+                className={`today-planet-card-badge${
+                  p.badge === "будет подключено" ? " today-planet-card-badge--pending" : ""
+                }`}
+              >
+                {p.badge}
+              </span>
+            </div>
+            <h3 className="today-planet-card-name">{p.name}</h3>
+            <p className="today-planet-card-role">{p.role}</p>
+          </div>
+        ))}
+      </div>
+      <p className="today-planets-footer">
+        Позже здесь появятся реальные положения планет и их влияние на вашу карту: какие
+        темы дня активируются, что усиливается, где быть внимательнее и как использовать
+        этот фон practically.
+      </p>
     </div>
   );
 }
@@ -377,7 +359,7 @@ function PracticeTabPanel(): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// Tab: AI-вопросы
+// Tab: AI-чат
 // ---------------------------------------------------------------------------
 
 const AI_QUICK_QUESTIONS = [
@@ -504,20 +486,20 @@ export default function TodayScreen({
 
   return (
     <div className="today-screen">
-      <CompactHeader
-        profile={profile}
-        profileCompleteness={profileCompleteness}
-        hdChartStatus={hdChartStatus}
-        onGoToData={onGoToData}
-      />
+      <CompactDateLine hdChartStatus={hdChartStatus} onGoToData={onGoToData} />
 
       <div className="today-cockpit">
         <main className="today-main-feed">
           <FeedTabs active={feedTab} onChange={setFeedTab} />
           <div className="today-feed-content" role="tabpanel">
             {feedTab === "focus" && (
-              <FocusTabPanel hdChart={hdChart} hdChartStatus={hdChartStatus} />
+              <FocusTabPanel
+                displayName={profile.displayName}
+                hdChart={hdChart}
+                hdChartStatus={hdChartStatus}
+              />
             )}
+            {feedTab === "planets" && <PlanetsTabPanel />}
             {feedTab === "recommendations" && (
               <RecommendationsTabPanel hdChart={hdChart} />
             )}
@@ -532,10 +514,10 @@ export default function TodayScreen({
             hdChartStatus={hdChartStatus}
             hdChartLoading={hdChartLoading}
             hdChartCalculating={hdChartCalculating}
+            profileCompletenessPercent={profileCompleteness.percent}
             onGoToMyMap={onGoToCareerMap}
             onGoToData={onGoToData}
           />
-          <PlanetStrip />
         </aside>
       </div>
 

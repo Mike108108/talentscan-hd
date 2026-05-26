@@ -1220,71 +1220,79 @@ export default function App() {
             Section: Сегодня
         ══════════════════════════════════════ */}
         {activeSection === "today" && (
-          <TodayScreen
-            profile={userProfile}
-            profileCompleteness={completeness}
-            hdChart={hdChart}
-            hdChartStatus={getHdChartStatus(hdChart, userProfile)}
-            hdChartLoading={hdChartLoading}
-            hdChartCalculating={hdChartCalculating}
-            reportsCount={reports.length}
-            onGoToCareerMap={() => setActiveSection("my-map")}
-            onGoToData={() => setActiveSection("data")}
-            onGoToNewReport={goToNewReport}
-            onGoToAiAssistant={() => setActiveSection("ai")}
-            calculateHdChart={calculateHdChart}
-          />
+          <div className="ts-screen ts-screen--wide">
+            <TodayScreen
+              profile={userProfile}
+              profileCompleteness={completeness}
+              hdChart={hdChart}
+              hdChartStatus={getHdChartStatus(hdChart, userProfile)}
+              hdChartLoading={hdChartLoading}
+              hdChartCalculating={hdChartCalculating}
+              reportsCount={reports.length}
+              onGoToCareerMap={() => setActiveSection("my-map")}
+              onGoToData={() => setActiveSection("data")}
+              onGoToNewReport={goToNewReport}
+              onGoToAiAssistant={() => setActiveSection("ai")}
+              calculateHdChart={calculateHdChart}
+            />
+          </div>
         )}
 
         {/* ══════════════════════════════════════
             Section: Моя карта
         ══════════════════════════════════════ */}
         {activeSection === "my-map" && (
-          <MyMapScreen
-            hdChart={hdChart}
-            hdChartStatus={getHdChartStatus(hdChart, userProfile)}
-            hdChartLoading={hdChartLoading}
-            hdChartCalculating={hdChartCalculating}
-            calculateHdChart={calculateHdChart}
-            profile={userProfile}
-            profileCompleteness={completeness}
-            onGoToData={() => setActiveSection("data")}
-            onGoToNewReport={goToNewReport}
-          />
+          <div className="ts-screen ts-screen--wide">
+            <MyMapScreen
+              hdChart={hdChart}
+              hdChartStatus={getHdChartStatus(hdChart, userProfile)}
+              hdChartLoading={hdChartLoading}
+              hdChartCalculating={hdChartCalculating}
+              calculateHdChart={calculateHdChart}
+              profile={userProfile}
+              profileCompleteness={completeness}
+              onGoToData={() => setActiveSection("data")}
+              onGoToNewReport={goToNewReport}
+            />
+          </div>
         )}
 
         {/* ══════════════════════════════════════
             Section: Карьера
         ══════════════════════════════════════ */}
         {activeSection === "career" && (
-          <div className="tab-screen">
-            <div className="screen-header">
-              <h1 className="screen-title">Карьера</h1>
-              <p className="screen-subtitle">
+          <div className="ts-screen ts-screen--work">
+            <header className="ts-screen-header">
+              <h2 className="ts-screen-title">Карьера</h2>
+              <p className="ts-screen-subtitle">
                 Текущая роль, вакансии, сравнение и карьерные решения
               </p>
-            </div>
+            </header>
 
-            <div className="profile-sections">
+            <div className="ts-panel-grid">
               {ROLES_SECTIONS.map((sec) => (
-                <div key={sec.title} className="profile-section">
-                  <div className="profile-section-header">
-                    <span className="profile-section-icon" aria-hidden="true">
+                <div
+                  key={sec.title}
+                  className={`ts-panel${sec.action ? " ts-panel--interactive" : " ts-panel--disabled"}`}
+                >
+                  <div className="ts-panel-row">
+                    <span className="ts-panel-icon" aria-hidden="true">
                       {sec.icon}
                     </span>
-                    <div className="profile-section-meta">
-                      <span className="profile-section-title">{sec.title}</span>
-                      <span className="profile-section-desc">{sec.desc}</span>
+                    <div className="ts-panel-body">
+                      <span className="ts-panel-title">{sec.title}</span>
+                      <span className="ts-panel-desc">{sec.desc}</span>
                     </div>
                     {sec.action ? (
                       <button
-                        className="profile-action-btn"
+                        type="button"
+                        className="ts-panel-action"
                         onClick={() => goToNewReport(sec.action!.type)}
                       >
                         {sec.action.label} →
                       </button>
                     ) : (
-                      <span className="coming-soon-badge">В разработке</span>
+                      <span className="ts-panel-badge">В разработке</span>
                     )}
                   </div>
                 </div>
@@ -1311,20 +1319,17 @@ export default function App() {
             Section: AI-помощник
         ══════════════════════════════════════ */}
         {activeSection === "ai" && (
-          <div className="tab-screen">
-
-            {/* Hero */}
-            <div className="ai-hero">
-              <div className="ai-hero-icon" aria-hidden="true">🤖</div>
-              <h1 className="ai-hero-title">AI-помощник TalentScan</h1>
-              <p className="ai-hero-subtitle">
+          <div className="ts-screen ts-screen--work">
+            <header className="ts-screen-header">
+              <h2 className="ts-screen-title">AI-помощник</h2>
+              <p className="ts-screen-subtitle">
                 Поможет разобраться с карьерной картой, текущей ролью, вакансиями,
                 резюме и собеседованиями.
               </p>
-            </div>
+            </header>
 
             {/* Quick actions */}
-            <section>
+            <section className="ts-panel">
               <p className="dash-section-label">Быстрые действия</p>
               <div className="ai-actions-grid">
                 <button
@@ -1381,7 +1386,7 @@ export default function App() {
             </section>
 
             {/* What assistant knows */}
-            <section className="ai-knows">
+            <section className="ai-knows ts-panel">
               <p className="dash-section-label">Что помощник уже знает обо мне</p>
               <div className="ai-knows-grid">
                 <div className="ai-knows-item">
@@ -1460,7 +1465,7 @@ export default function App() {
             </section>
 
             {/* Chat placeholder */}
-            <section className="ai-chat-placeholder">
+            <section className="ai-chat-placeholder ts-panel">
               <p className="dash-section-label">Чат с AI-помощником</p>
               <div className="ai-chat-box">
                 <textarea
@@ -1481,7 +1486,7 @@ export default function App() {
             Section: Новый разбор
         ══════════════════════════════════════ */}
         {activeSection === "new-report" && (
-          <div className="tab-screen">
+          <div className="ts-screen ts-screen--work">
             <form className="form-card" onSubmit={handleSubmit}>
               <h2>Данные для расчёта</h2>
 
@@ -1677,10 +1682,15 @@ export default function App() {
             Section: Разборы
         ══════════════════════════════════════ */}
         {activeSection === "reports" && (
-          <div className="tab-screen">
-            <section className="history-section">
-              <h2 className="history-heading">Разборы</h2>
+          <div className="ts-screen ts-screen--work">
+            <header className="ts-screen-header">
+              <h2 className="ts-screen-title">Разборы</h2>
+              <p className="ts-screen-subtitle">
+                Сохранённые анализы по карте талантов, роли и вакансиям
+              </p>
+            </header>
 
+            <div className="ts-panel ts-reports-panel">
               {!isSupabaseConfigured || !authUser ? (
                 <p className="history-hint">
                   Войдите по email, чтобы сохранять историю разборов.
@@ -1696,9 +1706,9 @@ export default function App() {
                   Разборов пока нет. Сделайте первый расчёт!
                 </p>
               ) : (
-                <ul className="history-list">
+                <ul className="history-list ts-report-list">
                   {reports.map((r) => (
-                    <li key={r.id} className="history-item">
+                    <li key={r.id} className="history-item ts-report-row">
                       <div className="history-item-meta">
                         <span className="history-item-type">
                           {ANALYSIS_TYPE_LABEL[r.analysis_type]}
@@ -1736,7 +1746,7 @@ export default function App() {
                   ))}
                 </ul>
               )}
-            </section>
+            </div>
           </div>
         )}
 
@@ -1744,13 +1754,13 @@ export default function App() {
             Section: Данные — профиль пользователя
         ══════════════════════════════════════ */}
         {activeSection === "data" && (
-          <div className="tab-screen">
-            <div className="screen-header">
-              <h1 className="screen-title">Данные профиля</h1>
-              <p className="screen-subtitle">
+          <div className="ts-screen ts-screen--work">
+            <header className="ts-screen-header">
+              <h2 className="ts-screen-title">Данные профиля</h2>
+              <p className="ts-screen-subtitle">
                 Заполните анкету — AI-помощник и разборы станут точнее
               </p>
-            </div>
+            </header>
 
             {profileLoading && !profileInitialLoaded ? (
               <p className="history-hint">Загружаем профиль…</p>
@@ -1760,7 +1770,7 @@ export default function App() {
                   <p className="pf-refresh-hint" aria-live="polite">Синхронизация…</p>
                 )}
                 {/* Profile completeness */}
-                <div className="profile-completeness-card">
+                <div className="profile-completeness-card ts-panel">
                   <div className="profile-completeness-header">
                     <span className="profile-completeness-title">{completeness.label}</span>
                     <span className="profile-completeness-pct">{completeness.percent}%</span>
@@ -2281,9 +2291,9 @@ export default function App() {
             Section: Настройки
         ══════════════════════════════════════ */}
         {activeSection === "settings" && (
-          <div className="tab-screen">
-            <div className="ts-settings-card">
-              <h1 className="screen-title">Настройки</h1>
+          <div className="ts-screen ts-screen--center">
+            <div className="ts-panel ts-settings-card">
+              <h2 className="ts-screen-title">Настройки</h2>
               <p className="ts-settings-meta">
                 {userProfile.displayName && (
                   <>
@@ -2293,10 +2303,10 @@ export default function App() {
                 )}
                 {authUser.email}
               </p>
-              <p className="screen-subtitle">
+              <p className="ts-screen-subtitle">
                 Профиль и данные рождения редактируются во вкладке «Данные».
               </p>
-              <div className="ts-coming-soon-actions">
+              <div className="ts-action-row">
                 <button
                   type="button"
                   className="submit-btn"

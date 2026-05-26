@@ -16,13 +16,13 @@ export default function ComingSoonScreen({
   onSecondaryAction,
 }: ComingSoonScreenProps) {
   return (
-    <div className="ts-coming-soon tab-screen">
-      <div className="ts-coming-soon-card">
+    <div className="ts-screen ts-screen--center">
+      <div className="ts-panel ts-coming-soon-card">
         <span className="ts-coming-soon-badge">Скоро</span>
-        <h1 className="screen-title">{title}</h1>
-        <p className="screen-subtitle">{description}</p>
-        <div className="ts-coming-soon-actions">
-          <button type="button" className="submit-btn" onClick={onPrimaryAction}>
+        <h2 className="ts-screen-title">{title}</h2>
+        <p className="ts-screen-subtitle">{description}</p>
+        <div className="ts-action-row">
+          <button type="button" className="ts-topbar-primary-btn" onClick={onPrimaryAction}>
             {primaryActionLabel}
           </button>
           {secondaryActionLabel && onSecondaryAction && (

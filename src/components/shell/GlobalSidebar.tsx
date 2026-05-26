@@ -39,30 +39,32 @@ export default function GlobalSidebar({
         <span className="ts-sidebar-tagline">Кабинет</span>
       </div>
 
-      <nav className="ts-sidebar-nav">
-        {MAIN_NAV_ITEMS.map((item) => {
-          const isActive = sidebarActive === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              className={`ts-sidebar-item${isActive ? " ts-sidebar-item--active" : ""}`}
-              onClick={() => onSectionChange(item.id)}
-              aria-current={isActive ? "page" : undefined}
-            >
-              <span className="ts-sidebar-item-icon" aria-hidden="true">
-                {item.icon}
-              </span>
-              <span className="ts-sidebar-item-label">{item.label}</span>
-              {"soon" in item && item.soon && (
-                <span className="ts-sidebar-soon">скоро</span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
+      <div className="ts-sidebar-main">
+        <nav className="ts-sidebar-nav">
+          {MAIN_NAV_ITEMS.map((item) => {
+            const isActive = sidebarActive === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`ts-sidebar-item${isActive ? " ts-sidebar-item--active" : ""}`}
+                onClick={() => onSectionChange(item.id)}
+                aria-current={isActive ? "page" : undefined}
+              >
+                <span className="ts-sidebar-item-icon" aria-hidden="true">
+                  {item.icon}
+                </span>
+                <span className="ts-sidebar-item-label">{item.label}</span>
+                {"soon" in item && item.soon && (
+                  <span className="ts-sidebar-soon">скоро</span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
 
-      <div className="ts-sidebar-footer">
+      <footer className="ts-sidebar-footer">
         <button
           type="button"
           className={`ts-sidebar-footer-btn${activeSection === "settings" ? " ts-sidebar-item--active" : ""}`}
@@ -101,7 +103,7 @@ export default function GlobalSidebar({
           </span>
           <span className="ts-sidebar-footer-label">Выйти</span>
         </button>
-      </div>
+      </footer>
     </aside>
   );
 }

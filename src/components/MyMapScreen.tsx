@@ -38,17 +38,174 @@ type MyMapScreenProps = {
   onGoToNewReport: (type: AnalysisType) => void;
 };
 
-const MAP_NAV: { id: MapTab; label: string; icon: string }[] = [
-  { id: "overview", label: "Обзор", icon: "🔮" },
-  { id: "talents", label: "Таланты", icon: "✨" },
-  { id: "career", label: "Карьера", icon: "🧭" },
-  { id: "workEnvironment", label: "Рабочая среда", icon: "🏢" },
-  { id: "relationships", label: "Отношения", icon: "🤝" },
-  { id: "communication", label: "Коммуникация", icon: "💬" },
-  { id: "energyBody", label: "Энергия и тело", icon: "⚡" },
-  { id: "money", label: "Деньги", icon: "💎" },
-  { id: "developmentPlan", label: "План развития", icon: "📈" },
+const MAP_NAV: { id: MapTab; label: string }[] = [
+  { id: "overview", label: "Обзор" },
+  { id: "talents", label: "Таланты" },
+  { id: "career", label: "Карьера" },
+  { id: "workEnvironment", label: "Рабочая среда" },
+  { id: "relationships", label: "Отношения" },
+  { id: "communication", label: "Коммуникация" },
+  { id: "energyBody", label: "Энергия и тело" },
+  { id: "money", label: "Деньги" },
+  { id: "developmentPlan", label: "План развития" },
 ];
+
+function chartStatusPill(status: HdChartStatus): { text: string; ok: boolean } {
+  switch (status) {
+    case "ok":
+      return { text: "Карта рассчитана", ok: true };
+    case "outdated":
+      return { text: "Карта устарела", ok: false };
+    case "no_coords":
+      return { text: "Нет координат", ok: false };
+    case "error":
+      return { text: "Ошибка расчёта", ok: false };
+    default:
+      return { text: "Карта не рассчитана", ok: false };
+  }
+}
+
+function formatChartUpdatedAt(calculatedAt: string | undefined): string | null {
+  if (!calculatedAt) return null;
+  const d = new Date(calculatedAt);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(d);
+}
+
+// ---------------------------------------------------------------------------
+// Compact header + passport (cockpit chrome)
+// ---------------------------------------------------------------------------
+
+function CompactMapHeader({
+  hdChartStatus,
+  profileCompleteness,
+  hdChart,
+}: {
+  hdChartStatus: HdChartStatus;
+  profileCompleteness: { percent: number; label: string };
+  hdChart: HdChartRecord | null;
+}): JSX.Element {
+  const chartPill = chartStatusPill(hdChartStatus);
+  const updatedLabel = hdChart?.calculated_at
+    ? formatChartUpdatedAt(hdChart.calculated_at)
+    : null;
+
+  return (
+    <header className="my-map-compact-header">
+      <div className="my-map-header-text">
+        <h1 className="my-map-header-title">Моя карта</h1>
+        <p className="my-map-header-sub">
+          Постоянная основа: бодиграф, таланты, энергия, работа, отношения и личные рекомендации.
+        </p>
+      </div>
+      <div className="my-map-header-pills" aria-label="Статус карты">
+        <span className={`my-map-pill${chartPill.ok ? " my-map-pill--ok" : ""}`}>
+          {chartPill.text}
+        </span>
+        <span className="my-map-pill my-map-pill--muted">
+          Профиль {profileCompleteness.percent}%
+        </span>
+        {updatedLabel && (
+          <span className="my-map-pill my-map-pill--muted">
+            Обновлена: {updatedLabel}
+          </span>
+        )}
+      </div>
+    </header>
+  );
+}
+
+function MapFeedTabs({
+  active,
+  onChange,
+}: {
+  active: MapTab;
+  onChange: (tab: MapTab) => void;
+}): JSX.Element {
+  return (
+    <div className="my-map-feed-tabs" role="tablist" aria-label="Разделы карты">
+      {MAP_NAV.map((item) => (
+        <button
+          key={item.id}
+          role="tab"
+          aria-selected={active === item.id}
+          className={`my-map-feed-tab${active === item.id ? " my-map-feed-tab--active" : ""}`}
+          onClick={() => onChange(item.id)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ChartPassport({
+  hdChart,
+  hdChartStatus,
+}: {
+  hdChart: HdChartRecord | null;
+  hdChartStatus: HdChartStatus;
+}): JSX.Element {
+  const nc = hdChart ? getNormalizedChart(hdChart) : null;
+  const hasChart = hdChartStatus === "ok" || hdChartStatus === "outdated";
+
+  const rows: { label: string; value: string | null | undefined }[] = [
+    { label: "Тип", value: nc?.type ?? hdChart?.type },
+    { label: "Профиль", value: nc?.profile ?? hdChart?.profile },
+    { label: "Стратегия", value: nc?.strategy ?? hdChart?.strategy },
+    { label: "Авторитет", value: nc?.authority ?? hdChart?.authority },
+    { label: "Определение", value: nc?.definition ?? hdChart?.definition },
+    {
+      label: "Крест",
+      value: nc?.incarnationCross ?? hdChart?.incarnation_cross,
+    },
+    { label: "Сигнатура", value: nc?.signature ?? hdChart?.signature },
+    {
+      label: "Не-я тема",
+      value: nc?.notSelfTheme ?? hdChart?.not_self_theme,
+    },
+  ];
+
+  const filledRows = rows.filter((r) => r.value && r.value !== "—");
+
+  return (
+    <aside className="my-map-passport" aria-label="Паспорт карты">
+      <div className="my-map-passport-card">
+        <h2 className="my-map-passport-title">Паспорт карты</h2>
+        {hasChart && filledRows.length > 0 ? (
+          <dl className="my-map-passport-rows">
+            {filledRows.map(({ label, value }) => (
+              <div key={label} className="my-map-passport-row">
+                <dt className="my-map-passport-key">{label}</dt>
+                <dd className="my-map-passport-val">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <p className="my-map-passport-empty">
+            {hdChartStatus === "none" || !hdChart
+              ? "Рассчитайте HD-карту во вкладке «Данные», чтобы увидеть паспорт."
+              : hdChartStatus === "no_coords"
+              ? "Укажите координаты места рождения для расчёта карты."
+              : hdChartStatus === "error"
+              ? "При расчёте возникла ошибка — проверьте данные и попробуйте снова."
+              : "Параметры карты появятся после успешного расчёта."}
+          </p>
+        )}
+        <div className="my-map-passport-translation">
+          <h3 className="my-map-passport-translation-title">Главный перевод</h3>
+          <p className="my-map-passport-translation-text">
+            Этот блок будет расширен персональной интерпретацией на следующих этапах.
+          </p>
+        </div>
+      </div>
+    </aside>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Inner tab content components
@@ -76,37 +233,18 @@ function InsightCard({
 // ---------------------------------------------------------------------------
 
 function TabOverview({
-  hdChart,
   hdChartStatus,
-  hdChartLoading,
-  hdChartCalculating,
-  calculateHdChart,
   profile,
   profileCompleteness,
   onGoToData,
 }: {
-  hdChart: HdChartRecord | null;
   hdChartStatus: HdChartStatus;
-  hdChartLoading: boolean;
-  hdChartCalculating: boolean;
-  calculateHdChart: () => void;
   profile: ProfileInfo;
   profileCompleteness: { percent: number; label: string };
   onGoToData: () => void;
 }): JSX.Element {
   return (
     <div className="my-map-section">
-      {/* BodyGraphViewer */}
-      <BodyGraphViewer
-        chart={hdChart}
-        status={hdChartStatus}
-        loading={hdChartLoading}
-        onGoToData={onGoToData}
-        onRecalculate={calculateHdChart}
-        recalculating={hdChartCalculating}
-      />
-
-      {/* Data quality card */}
       <div className="my-map-data-quality">
         <h3 className="my-map-data-quality-title">Точность данных</h3>
         <div className="my-map-data-quality-rows">
@@ -1022,75 +1160,49 @@ export default function MyMapScreen({
 
   return (
     <section className="my-map-screen">
-      <header className="my-map-screen-header">
-        <p className="my-map-screen-eyebrow">Моя карта</p>
-        <h1 className="my-map-screen-title">Личная карта TalentScan</h1>
-        <p className="my-map-screen-desc">
-          Бодиграф, таланты, энергия, отношения, работа, коммуникация и практические рекомендации
-        </p>
-      </header>
+      <CompactMapHeader
+        hdChartStatus={hdChartStatus}
+        profileCompleteness={profileCompleteness}
+        hdChart={hdChart}
+      />
 
-      {/* Mobile horizontal tabs */}
-      <div className="my-map-mobile-tabs" role="tablist" aria-label="Разделы карты">
-        {MAP_NAV.map((item) => (
-          <button
-            key={item.id}
-            role="tab"
-            aria-selected={activeMapTab === item.id}
-            className={`my-map-mobile-tab${activeMapTab === item.id ? " my-map-mobile-tab--active" : ""}`}
-            onClick={() => setActiveMapTab(item.id)}
-          >
-            <span className="my-map-mobile-tab-icon" aria-hidden="true">{item.icon}</span>
-            <span className="my-map-mobile-tab-label">{item.label}</span>
-          </button>
-        ))}
+      <MapFeedTabs active={activeMapTab} onChange={setActiveMapTab} />
+
+      <div className="my-map-cockpit">
+        <div className="my-map-cockpit-graph">
+          <BodyGraphViewer
+            chart={hdChart}
+            status={hdChartStatus}
+            loading={hdChartLoading}
+            onGoToData={onGoToData}
+            onRecalculate={calculateHdChart}
+            recalculating={hdChartCalculating}
+          />
+        </div>
+        <ChartPassport hdChart={hdChart} hdChartStatus={hdChartStatus} />
       </div>
 
-      <div className="my-map-layout">
-        {/* Desktop sidebar */}
-        <aside className="my-map-sidebar" aria-label="Навигация по карте">
-          <nav className="my-map-sidebar-nav">
-            {MAP_NAV.map((item) => (
-              <button
-                key={item.id}
-                className={`my-map-nav-button${activeMapTab === item.id ? " my-map-nav-button--active" : ""}`}
-                onClick={() => setActiveMapTab(item.id)}
-                aria-current={activeMapTab === item.id ? "page" : undefined}
-              >
-                <span className="my-map-nav-icon" aria-hidden="true">{item.icon}</span>
-                <span className="my-map-nav-label">{item.label}</span>
-              </button>
-            ))}
-          </nav>
-        </aside>
-
-        {/* Content area */}
-        <div className="my-map-content" role="tabpanel">
-          {activeMapTab === "overview" && (
-            <TabOverview
-              hdChart={hdChart}
-              hdChartStatus={hdChartStatus}
-              hdChartLoading={hdChartLoading}
-              hdChartCalculating={hdChartCalculating}
-              calculateHdChart={calculateHdChart}
-              profile={profile}
-              profileCompleteness={profileCompleteness}
-              onGoToData={onGoToData}
-            />
-          )}
-          {activeMapTab === "talents" && <TabTalents hdChart={hdChart} />}
-          {activeMapTab === "career" && (
-            <TabCareer hdChart={hdChart} onGoToNewReport={onGoToNewReport} />
-          )}
-          {activeMapTab === "workEnvironment" && <TabWorkEnvironment hdChart={hdChart} />}
-          {activeMapTab === "relationships" && <TabRelationships hdChart={hdChart} />}
-          {activeMapTab === "communication" && <TabCommunication hdChart={hdChart} />}
-          {activeMapTab === "energyBody" && <TabEnergyBody hdChart={hdChart} />}
-          {activeMapTab === "money" && <TabMoney hdChart={hdChart} />}
-          {activeMapTab === "developmentPlan" && (
-            <TabDevelopmentPlan hdChart={hdChart} onGoToNewReport={onGoToNewReport} />
-          )}
-        </div>
+      <div className="my-map-tab-content" role="tabpanel">
+        {activeMapTab === "overview" && (
+          <TabOverview
+            hdChartStatus={hdChartStatus}
+            profile={profile}
+            profileCompleteness={profileCompleteness}
+            onGoToData={onGoToData}
+          />
+        )}
+        {activeMapTab === "talents" && <TabTalents hdChart={hdChart} />}
+        {activeMapTab === "career" && (
+          <TabCareer hdChart={hdChart} onGoToNewReport={onGoToNewReport} />
+        )}
+        {activeMapTab === "workEnvironment" && <TabWorkEnvironment hdChart={hdChart} />}
+        {activeMapTab === "relationships" && <TabRelationships hdChart={hdChart} />}
+        {activeMapTab === "communication" && <TabCommunication hdChart={hdChart} />}
+        {activeMapTab === "energyBody" && <TabEnergyBody hdChart={hdChart} />}
+        {activeMapTab === "money" && <TabMoney hdChart={hdChart} />}
+        {activeMapTab === "developmentPlan" && (
+          <TabDevelopmentPlan hdChart={hdChart} onGoToNewReport={onGoToNewReport} />
+        )}
       </div>
     </section>
   );

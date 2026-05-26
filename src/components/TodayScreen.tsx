@@ -2,7 +2,6 @@ import { useState } from "react";
 import type { JSX } from "react";
 import TodayGraphCard from "./TodayGraphCard";
 import type { HdChartRecord, HdChartStatus, NormalizedChart } from "./BodyGraphViewer";
-import type { AnalysisType } from "../lib/supabase";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,10 +34,12 @@ type TodayScreenProps = {
   reportsCount: number;
   onGoToCareerMap: () => void;
   onGoToData: () => void;
-  onGoToNewReport: (type: AnalysisType) => void;
+  onGoToNewReport: (type: import("../lib/supabase").AnalysisType) => void;
   onGoToAiAssistant: () => void;
   calculateHdChart: () => void;
 };
+
+type FeedTab = "focus" | "recommendations" | "practice" | "ai";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -56,8 +57,23 @@ function getNc(hdChart: HdChartRecord | null): NormalizedChart | null {
   return hdChart.normalized_chart_json ?? null;
 }
 
+function chartStatusLabel(status: HdChartStatus): { text: string; ok: boolean } {
+  switch (status) {
+    case "ok":
+      return { text: "Карта рассчитана", ok: true };
+    case "outdated":
+      return { text: "Карта устарела", ok: false };
+    case "no_coords":
+      return { text: "Нет координат", ok: false };
+    case "error":
+      return { text: "Ошибка расчёта", ok: false };
+    default:
+      return { text: "Карта не рассчитана", ok: false };
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Planet strip (preview)
+// Planet strip (right dock, preview only)
 // ---------------------------------------------------------------------------
 
 const PLANETS = [
@@ -71,8 +87,8 @@ const PLANETS = [
 
 function PlanetStrip(): JSX.Element {
   return (
-    <div className="today-planet-strip">
-      <span className="today-planet-strip-heading">Планеты сегодня</span>
+    <div className="today-planet-strip today-planet-strip--dock">
+      <span className="today-planet-strip-heading">Планеты сейчас</span>
       <div className="today-planet-pills">
         {PLANETS.map((p) => (
           <div key={p.name} className="today-planet-pill">
@@ -90,104 +106,90 @@ function PlanetStrip(): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// A. Compact Hero
+// Compact top line
 // ---------------------------------------------------------------------------
 
-function CompactHero({
+function CompactHeader({
   profile,
+  profileCompleteness,
   hdChartStatus,
-  onGoToCareerMap,
   onGoToData,
 }: {
   profile: UserProfile;
+  profileCompleteness: ProfileCompleteness;
   hdChartStatus: HdChartStatus;
-  onGoToCareerMap: () => void;
   onGoToData: () => void;
 }): JSX.Element {
   const name = profile.displayName;
-
-  let focusText: string;
-  if (hdChartStatus === "ok") {
-    focusText =
-      "Выберите 1–2 действия, где ваша энергия даст максимальный эффект, и проверяйте решения через свой внутренний способ выбора.";
-  } else if (hdChartStatus === "outdated") {
-    focusText = "Данные рождения изменились. Обновите карту, чтобы рекомендации стали точнее.";
-  } else {
-    focusText = "Рассчитайте карту во вкладке «Данные» — и фокус дня станет персональным.";
-  }
+  const chart = chartStatusLabel(hdChartStatus);
+  const showDataCta =
+    hdChartStatus === "none" ||
+    hdChartStatus === "outdated" ||
+    hdChartStatus === "no_coords" ||
+    hdChartStatus === "error";
 
   return (
-    <div className="today-compact-hero">
-      <div className="today-compact-hero-top">
-        <div className="today-compact-hero-left">
-          <div className="today-compact-hero-eyebrow">
-            <span className="today-hero-tag">Сегодня</span>
-            <span className="today-hero-date">{todayDateCompact()}</span>
-          </div>
-          {name && <p className="today-compact-hero-greeting">Привет, {name}</p>}
-          <h1 className="today-compact-hero-title">Главный фокус дня</h1>
-          <p className="today-compact-hero-text">{focusText}</p>
+    <header className="today-topline">
+      <div className="today-topline-main">
+        <div className="today-topline-eyebrow">
+          <span className="today-hero-tag">Сегодня</span>
+          <span className="today-hero-date">{todayDateCompact()}</span>
         </div>
-        <div className="today-compact-hero-actions">
-          <button className="today-btn today-btn--primary today-btn--sm" onClick={onGoToCareerMap}>
-            Моя карта
-          </button>
-          <button className="today-btn today-btn--ghost today-btn--sm" onClick={onGoToData}>
-            {hdChartStatus === "outdated"
-              ? "Обновить карту"
-              : hdChartStatus === "none"
-              ? "Рассчитать карту"
-              : "Данные"}
-          </button>
-        </div>
+        {name && <p className="today-topline-greeting">Привет, {name}</p>}
+        <p className="today-topline-sub">
+          Дневной cockpit — транзит и радар справа, фокус и практика в центре.
+        </p>
       </div>
-      <PlanetStrip />
-    </div>
+      <div className="today-topline-status">
+        <span className={`today-status-badge${chart.ok ? " today-status-badge--ok" : ""}`}>
+          {chart.text}
+        </span>
+        <span className="today-status-badge today-status-badge--muted">
+          Профиль {profileCompleteness.percent}%
+        </span>
+        {showDataCta && (
+          <button className="today-status-cta" onClick={onGoToData}>
+            {hdChartStatus === "outdated"
+              ? "Обновить данные"
+              : hdChartStatus === "none"
+              ? "Перейти в Данные"
+              : "Уточнить данные"}
+          </button>
+        )}
+      </div>
+    </header>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Quick rail (left side)
+// Browser-like feed tabs
 // ---------------------------------------------------------------------------
 
-const QUICK_NAV = [
-  { icon: "🗺️", label: "Моя карта", key: "career-map" as const },
-  { icon: "📋", label: "Данные", key: "data" as const },
-  { icon: "✨", label: "Новый разбор", key: "new-report" as const },
-  { icon: "🤖", label: "ИИ-помощник", key: "ai-assistant" as const },
+const FEED_TABS: { id: FeedTab; label: string }[] = [
+  { id: "focus", label: "Фокус дня" },
+  { id: "recommendations", label: "Рекомендации" },
+  { id: "practice", label: "Практика" },
+  { id: "ai", label: "AI-вопросы" },
 ];
 
-type NavKey = "career-map" | "data" | "new-report" | "ai-assistant";
-
-function QuickRail({
-  onGoToCareerMap,
-  onGoToData,
-  onGoToNewReport,
-  onGoToAiAssistant,
+function FeedTabs({
+  active,
+  onChange,
 }: {
-  onGoToCareerMap: () => void;
-  onGoToData: () => void;
-  onGoToNewReport: (type: AnalysisType) => void;
-  onGoToAiAssistant: () => void;
+  active: FeedTab;
+  onChange: (tab: FeedTab) => void;
 }): JSX.Element {
-  function handleNav(key: NavKey) {
-    switch (key) {
-      case "career-map": onGoToCareerMap(); break;
-      case "data": onGoToData(); break;
-      case "new-report": onGoToNewReport("talent_map"); break;
-      case "ai-assistant": onGoToAiAssistant(); break;
-    }
-  }
   return (
-    <div className="today-quick-rail">
-      {QUICK_NAV.map((item) => (
+    <div className="today-feed-tabs" role="tablist" aria-label="Контент дня">
+      {FEED_TABS.map((t) => (
         <button
-          key={item.key}
-          className="today-quick-rail-btn"
-          onClick={() => handleNav(item.key)}
+          key={t.id}
+          role="tab"
+          aria-selected={active === t.id}
+          className={`today-feed-tab${active === t.id ? " today-feed-tab--active" : ""}`}
+          onClick={() => onChange(t.id)}
         >
-          <span className="today-quick-rail-icon" aria-hidden="true">{item.icon}</span>
-          <span className="today-quick-rail-label">{item.label}</span>
+          {t.label}
         </button>
       ))}
     </div>
@@ -195,45 +197,187 @@ function QuickRail({
 }
 
 // ---------------------------------------------------------------------------
-// Mini accuracy status (left side, bottom)
+// Tab: Фокус дня
 // ---------------------------------------------------------------------------
 
-function MiniAccuracy({
-  profileCompleteness,
+function buildFocusContent(
+  hdChartStatus: HdChartStatus,
+  nc: NormalizedChart | null,
+): {
+  main: string;
+  supports: string;
+  watch: string;
+  phrase: string;
+} {
+  if (hdChartStatus === "ok" && nc) {
+    const strategy = nc.strategy ?? "вашей стратегии";
+    const authority = nc.authority ?? "внутреннего способа выбора";
+    return {
+      main: "Выберите 1–2 действия, где ваша энергия даст максимальный эффект, и проверяйте решения через свой внутренний способ выбора.",
+      supports: `Сегодня поддерживает опора на ${strategy.toLowerCase()} и ясность через ${authority.toLowerCase()}.`,
+      watch: "Не превращайте день в гонку задач и не принимайте важное решение из давления или спешки.",
+      phrase: "Один главный результат — сильнее десяти половинных.",
+    };
+  }
+  if (hdChartStatus === "outdated") {
+    return {
+      main: "Данные рождения изменились — обновите карту, чтобы фокус дня снова стал персональным.",
+      supports: "Пока рекомендации опираются на последнюю сохранённую версию профиля.",
+      watch: "Не опирайтесь на устаревшие выводы при важных решениях.",
+      phrase: "Точность данных — основа точного дня.",
+    };
+  }
+  return {
+    main: "Рассчитайте карту во вкладке «Данные» — и фокус дня станет персональным.",
+    supports: "Сейчас подсказки общие: соберите один приоритет и проверьте, откуда приходит импульс к действию.",
+    watch: "Не перегружайте день лишними обязательствами без внутреннего «да».",
+    phrase: "Меньше шума — больше ясности.",
+  };
+}
+
+function FocusTabPanel({
+  hdChart,
   hdChartStatus,
-  onGoToData,
 }: {
-  profileCompleteness: ProfileCompleteness;
+  hdChart: HdChartRecord | null;
   hdChartStatus: HdChartStatus;
-  onGoToData: () => void;
 }): JSX.Element {
-  const chartOk = hdChartStatus === "ok";
-  const profileOk = profileCompleteness.percent >= 50;
+  const nc = getNc(hdChart);
+  const content = buildFocusContent(hdChartStatus, nc);
 
   return (
-    <div className="today-mini-accuracy">
-      <p className="today-mini-accuracy-title">Точность подсказок</p>
-      <div className="today-mini-accuracy-row">
-        <span className={`today-mini-dot${chartOk ? " today-mini-dot--ok" : ""}`} />
-        <span className="today-mini-accuracy-text">
-          {chartOk ? "Карта рассчитана" : hdChartStatus === "outdated" ? "Карта устарела" : "Карта не рассчитана"}
-        </span>
-      </div>
-      <div className="today-mini-accuracy-row">
-        <span className={`today-mini-dot${profileOk ? " today-mini-dot--ok" : ""}`} />
-        <span className="today-mini-accuracy-text">Профиль {profileCompleteness.percent}%</span>
-      </div>
-      {!chartOk && (
-        <button className="today-mini-accuracy-cta" onClick={onGoToData}>
-          Уточнить данные →
-        </button>
-      )}
+    <div className="today-feed-panel">
+      <section className="today-focus-block">
+        <h2 className="today-feed-heading">Главный фокус</h2>
+        <p className="today-focus-lead">{content.main}</p>
+      </section>
+      <section className="today-focus-grid">
+        <div className="today-focus-card">
+          <h3 className="today-focus-card-title">Что сегодня поддерживает</h3>
+          <p className="today-focus-card-text">{content.supports}</p>
+        </div>
+        <div className="today-focus-card">
+          <h3 className="today-focus-card-title">Где быть внимательнее</h3>
+          <p className="today-focus-card-text">{content.watch}</p>
+        </div>
+      </section>
+      <blockquote className="today-phrase-day">{content.phrase}</blockquote>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// B. AI mini-card (right side, top)
+// Tab: Рекомендации
+// ---------------------------------------------------------------------------
+
+type RecCard = { icon: string; title: string; text: string; color: string };
+
+function buildRecommendationCards(nc: NormalizedChart | null, hasChart: boolean): RecCard[] {
+  return [
+    {
+      icon: "💼",
+      title: "Работа",
+      color: "blue",
+      text: hasChart
+        ? "Выбирайте задачи, где чувствуете внутреннее «да». Один сильный результат важнее длинного списка."
+        : "После расчёта карты здесь появится подсказка по рабочему ритму.",
+    },
+    {
+      icon: "💬",
+      title: "Коммуникация",
+      color: "violet",
+      text: "Говорите точнее, а не больше. Один ясный запрос сильнее длинного объяснения.",
+    },
+    {
+      icon: "⚡",
+      title: "Энергия",
+      color: "amber",
+      text: hasChart
+        ? "Действуйте там, где чувствуете импульс или ясность — не там, где «надо срочно»."
+        : "Рассчитайте карту — здесь появится подсказка по энергии дня.",
+    },
+    {
+      icon: "🧭",
+      title: "Решения",
+      color: "teal",
+      text: nc?.authority
+        ? `Проверяйте решения через ${nc.authority.toLowerCase()}, а не через срочность или чужое давление.`
+        : "После расчёта карты — подсказка по вашему способу принятия решений.",
+    },
+    {
+      icon: "💎",
+      title: "Деньги / ценность",
+      color: "green",
+      text: "Сверяйте траты и обязательства с тем, что для вас действительно ценно сегодня — не с фоновой тревогой.",
+    },
+  ];
+}
+
+function RecommendationsTabPanel({ hdChart }: { hdChart: HdChartRecord | null }): JSX.Element {
+  const nc = getNc(hdChart);
+  const cards = buildRecommendationCards(nc, !!nc);
+
+  return (
+    <div className="today-feed-panel">
+      <div className="today-rec-grid">
+        {cards.map((card) => (
+          <div key={card.title} className={`today-rec-card today-rec-card--${card.color}`}>
+            <span className="today-rec-icon">{card.icon}</span>
+            <h3 className="today-rec-title">{card.title}</h3>
+            <p className="today-rec-text">{card.text}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tab: Практика
+// ---------------------------------------------------------------------------
+
+const PRACTICE_ACTIONS = [
+  { num: "1", title: "Собрать фокус", text: "Выберите одну главную задачу дня и зафиксируйте её письменно." },
+  { num: "2", title: "Проверить решение", text: "Не принимайте важное решение из давления, спешки или чужого ожидания." },
+  { num: "3", title: "Закрыть день наблюдением", text: "Отметьте: где вы действовали в согласии с собой, а где дожимали себя." },
+];
+
+function PracticeTabPanel(): JSX.Element {
+  return (
+    <div className="today-feed-panel">
+      <section className="today-practice-section">
+        <h2 className="today-feed-heading">3 действия на сегодня</h2>
+        <div className="today-plan">
+          {PRACTICE_ACTIONS.map((step) => (
+            <div key={step.num} className="today-plan-row">
+              <div className="today-plan-num">{step.num}</div>
+              <div>
+                <strong className="today-plan-title">{step.title}</strong>
+                <p className="today-plan-text">{step.text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="today-practice-section">
+        <h2 className="today-feed-heading">Короткий план</h2>
+        <p className="today-practice-plan">
+          Утро — один приоритет. День — проверка импульса перед важным шагом. Вечер — короткая
+          фиксация: что сработало, что забрало энергию.
+        </p>
+      </section>
+      <section className="today-practice-question">
+        <span className="today-practice-question-label">Вопрос для самонаблюдения</span>
+        <p className="today-practice-question-text">
+          Где сегодня я действовал из внутреннего «да», а где — из привычки «надо»?
+        </p>
+      </section>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tab: AI-вопросы
 // ---------------------------------------------------------------------------
 
 const AI_QUICK_QUESTIONS = [
@@ -243,16 +387,12 @@ const AI_QUICK_QUESTIONS = [
   "Где я могу перегореть?",
 ];
 
-function AiMiniCard({ onGoToAiAssistant }: { onGoToAiAssistant: () => void }): JSX.Element {
+function AiTabPanel({ onGoToAiAssistant }: { onGoToAiAssistant: () => void }): JSX.Element {
   return (
-    <div className="today-ai-card">
-      <div className="today-ai-card-header">
-        <span className="today-ai-card-icon">🤖</span>
-        <div>
-          <h3 className="today-ai-card-title">ИИ-помощник</h3>
-          <p className="today-ai-card-sub">Спросите, как прожить день точнее</p>
-        </div>
-      </div>
+    <div className="today-feed-panel">
+      <p className="today-ai-tab-intro">
+        Быстрые вопросы к AI-помощнику. Полноценный чат — в разделе «AI-помощник».
+      </p>
       <div className="today-ai-chips">
         {AI_QUICK_QUESTIONS.map((q) => (
           <button key={q} className="today-ai-chip" onClick={onGoToAiAssistant}>
@@ -260,166 +400,9 @@ function AiMiniCard({ onGoToAiAssistant }: { onGoToAiAssistant: () => void }): J
           </button>
         ))}
       </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// C. Compass day (right side, compact 2x2)
-// ---------------------------------------------------------------------------
-
-type CompassCard = {
-  icon: string;
-  title: string;
-  text: string;
-  color: string;
-};
-
-function buildCompassCards(nc: NormalizedChart | null): CompassCard[] {
-  const hasChart = !!nc;
-  return [
-    {
-      icon: "⚡",
-      title: "Энергия",
-      color: "amber",
-      text: hasChart
-        ? "Выбирайте действия, где чувствуете внутреннее «да» или ясный импульс."
-        : "Рассчитайте карту — здесь появится подсказка по энергии.",
-    },
-    {
-      icon: "🧭",
-      title: "Решения",
-      color: "blue",
-      text: nc?.authority
-        ? "Проверяйте решения через свой авторитет, а не через срочность."
-        : "После расчёта карты — подсказка по авторитету решений.",
-    },
-    {
-      icon: "💬",
-      title: "Коммуникация",
-      color: "violet",
-      text: "Говорите точнее, а не больше. Один ясный запрос сильнее длинного объяснения.",
-    },
-    {
-      icon: "🎯",
-      title: "Фокус",
-      color: "green",
-      text: "Один главный результат дня. Не превращайте его в гонку задач.",
-    },
-  ];
-}
-
-function CompassBlock({ hdChart }: { hdChart: HdChartRecord | null }): JSX.Element {
-  const cards = buildCompassCards(getNc(hdChart));
-  return (
-    <div className="today-section">
-      <h2 className="today-section-title">Компас дня</h2>
-      <div className="today-compass-grid">
-        {cards.map((card) => (
-          <div key={card.title} className={`today-compass-card today-compass-card--${card.color}`}>
-            <span className="today-compass-icon">{card.icon}</span>
-            <strong className="today-compass-label">{card.title}</strong>
-            <p className="today-compass-text">{card.text}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// D. Day plan (compact)
-// ---------------------------------------------------------------------------
-
-const DAY_PLAN = [
-  { num: "1", title: "Собрать фокус", text: "Выберите одну главную задачу дня." },
-  { num: "2", title: "Проверить решение", text: "Не принимайте важное решение из давления или спешки." },
-  { num: "3", title: "Закрыть день наблюдением", text: "Где вы действовали в согласии с собой, а где дожимали себя?" },
-];
-
-function DayPlanBlock(): JSX.Element {
-  return (
-    <div className="today-section">
-      <h2 className="today-section-title">3 шага на сегодня</h2>
-      <div className="today-plan">
-        {DAY_PLAN.map((step) => (
-          <div key={step.num} className="today-plan-row">
-            <div className="today-plan-num">{step.num}</div>
-            <div>
-              <strong className="today-plan-title">{step.title}</strong>
-              <p className="today-plan-text">{step.text}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// E. Accuracy block (right side, full)
-// ---------------------------------------------------------------------------
-
-function AccuracyBlock({
-  profile,
-  profileCompleteness,
-  hdChartStatus,
-  onGoToData,
-  onGoToCareerMap,
-  onGoToNewReport,
-}: {
-  profile: UserProfile;
-  profileCompleteness: ProfileCompleteness;
-  hdChartStatus: HdChartStatus;
-  onGoToData: () => void;
-  onGoToCareerMap: () => void;
-  onGoToNewReport: (type: AnalysisType) => void;
-}): JSX.Element {
-  const hasBirthData = !!(profile.birthDate && profile.birthTime);
-  const hasCoords = !!profile.birthLatitude;
-
-  const chartRow = (() => {
-    switch (hdChartStatus) {
-      case "ok": return { text: "Карта рассчитана", ok: true };
-      case "outdated": return { text: "Карта устарела", ok: false };
-      case "error": return { text: "Ошибка расчёта", ok: false };
-      case "none": return { text: "Карта не рассчитана", ok: false };
-      case "no_coords": return { text: "Нет координат для карты", ok: false };
-    }
-  })();
-
-  const rows = [
-    chartRow,
-    { text: `Профиль ${profileCompleteness.percent}% — ${profileCompleteness.label}`, ok: profileCompleteness.percent >= 50 },
-    { text: hasBirthData ? "Данные рождения указаны" : "Данные рождения не указаны", ok: hasBirthData },
-    { text: hasCoords ? "Координаты есть" : "Координаты не указаны", ok: hasCoords },
-  ];
-
-  return (
-    <div className="today-section">
-      <h2 className="today-section-title">Точность подсказок</h2>
-      <p className="today-accuracy-intro">
-        Чем точнее данные рождения, профиль и цели — тем точнее TalentScan объясняет ваш день, роли и решения.
-      </p>
-      <div className="today-accuracy-rows">
-        {rows.map((row, i) => (
-          <div key={i} className={`today-accuracy-row${row.ok ? " today-accuracy-row--ok" : ""}`}>
-            <span className="today-accuracy-dot">{row.ok ? "✓" : "○"}</span>
-            <span>{row.text}</span>
-          </div>
-        ))}
-      </div>
-      <div className="today-accuracy-actions">
-        <button className="today-btn today-btn--secondary today-btn--sm" onClick={onGoToData}>
-          Уточнить данные
-        </button>
-        <button className="today-btn today-btn--ghost today-btn--sm" onClick={onGoToCareerMap}>
-          Моя карта
-        </button>
-        <button className="today-btn today-btn--ghost today-btn--sm" onClick={() => onGoToNewReport("talent_map")}>
-          Новый разбор
-        </button>
-      </div>
+      <button className="today-btn today-btn--primary" onClick={onGoToAiAssistant}>
+        Открыть AI-помощник
+      </button>
     </div>
   );
 }
@@ -440,7 +423,6 @@ function FloatingAi({ onGoToAiAssistant }: { onGoToAiAssistant: () => void }): J
 
   return (
     <>
-      {/* Backdrop */}
       {open && (
         <div
           className="today-ai-backdrop"
@@ -449,11 +431,10 @@ function FloatingAi({ onGoToAiAssistant }: { onGoToAiAssistant: () => void }): J
         />
       )}
 
-      {/* Drawer */}
       {open && (
-        <div className="today-ai-drawer" role="dialog" aria-label="ИИ-помощник">
+        <div className="today-ai-drawer" role="dialog" aria-label="AI-помощник">
           <div className="today-ai-drawer-header">
-            <span className="today-ai-drawer-title">ИИ-помощник TalentScan</span>
+            <span className="today-ai-drawer-title">AI-помощник TalentScan</span>
             <button
               className="today-ai-drawer-close"
               onClick={() => setOpen(false)}
@@ -487,16 +468,15 @@ function FloatingAi({ onGoToAiAssistant }: { onGoToAiAssistant: () => void }): J
               onGoToAiAssistant();
             }}
           >
-            Открыть ИИ-помощника
+            Открыть AI-помощник
           </button>
         </div>
       )}
 
-      {/* Float button */}
       <button
         className={`today-ai-float${open ? " today-ai-float--open" : ""}`}
         onClick={() => setOpen((v) => !v)}
-        aria-label="ИИ-помощник"
+        aria-label="AI-помощник"
       >
         <span className="today-ai-float-icon">{open ? "×" : "💬"}</span>
       </button>
@@ -517,24 +497,36 @@ export default function TodayScreen({
   hdChartCalculating,
   onGoToCareerMap,
   onGoToData,
-  onGoToNewReport,
   onGoToAiAssistant,
   calculateHdChart: _calculateHdChart,
 }: TodayScreenProps): JSX.Element {
+  const [feedTab, setFeedTab] = useState<FeedTab>("focus");
+
   return (
     <div className="today-screen">
-      {/* Compact header */}
-      <CompactHero
+      <CompactHeader
         profile={profile}
+        profileCompleteness={profileCompleteness}
         hdChartStatus={hdChartStatus}
-        onGoToCareerMap={onGoToCareerMap}
         onGoToData={onGoToData}
       />
 
-      {/* Cockpit grid */}
       <div className="today-cockpit">
-        {/* LEFT RAIL — sticky on desktop */}
-        <div className="today-left-rail">
+        <main className="today-main-feed">
+          <FeedTabs active={feedTab} onChange={setFeedTab} />
+          <div className="today-feed-content" role="tabpanel">
+            {feedTab === "focus" && (
+              <FocusTabPanel hdChart={hdChart} hdChartStatus={hdChartStatus} />
+            )}
+            {feedTab === "recommendations" && (
+              <RecommendationsTabPanel hdChart={hdChart} />
+            )}
+            {feedTab === "practice" && <PracticeTabPanel />}
+            {feedTab === "ai" && <AiTabPanel onGoToAiAssistant={onGoToAiAssistant} />}
+          </div>
+        </main>
+
+        <aside className="today-transit-dock">
           <TodayGraphCard
             hdChart={hdChart}
             hdChartStatus={hdChartStatus}
@@ -543,41 +535,10 @@ export default function TodayScreen({
             onGoToMyMap={onGoToCareerMap}
             onGoToData={onGoToData}
           />
-
-          <QuickRail
-            onGoToCareerMap={onGoToCareerMap}
-            onGoToData={onGoToData}
-            onGoToNewReport={onGoToNewReport}
-            onGoToAiAssistant={onGoToAiAssistant}
-          />
-
-          <MiniAccuracy
-            profileCompleteness={profileCompleteness}
-            hdChartStatus={hdChartStatus}
-            onGoToData={onGoToData}
-          />
-        </div>
-
-        {/* RIGHT FLOW — scrollable */}
-        <div className="today-right-flow">
-          <AiMiniCard onGoToAiAssistant={onGoToAiAssistant} />
-
-          <CompassBlock hdChart={hdChart} />
-
-          <DayPlanBlock />
-
-          <AccuracyBlock
-            profile={profile}
-            profileCompleteness={profileCompleteness}
-            hdChartStatus={hdChartStatus}
-            onGoToData={onGoToData}
-            onGoToCareerMap={onGoToCareerMap}
-            onGoToNewReport={onGoToNewReport}
-          />
-        </div>
+          <PlanetStrip />
+        </aside>
       </div>
 
-      {/* Floating AI */}
       <FloatingAi onGoToAiAssistant={onGoToAiAssistant} />
     </div>
   );

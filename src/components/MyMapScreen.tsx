@@ -19,6 +19,61 @@ type MapTab =
   | "money"
   | "developmentPlan";
 
+type MapLayer =
+  | "bodygraph"
+  | "centers"
+  | "channels"
+  | "activations"
+  | "variables"
+  | "shadows"
+  | "gifts"
+  | "trauma";
+
+const MAP_LAYERS: { id: MapLayer; label: string }[] = [
+  { id: "bodygraph", label: "Бодиграф" },
+  { id: "centers", label: "Центры" },
+  { id: "channels", label: "Каналы" },
+  { id: "activations", label: "Активации" },
+  { id: "variables", label: "Переменные" },
+  { id: "shadows", label: "Тени" },
+  { id: "gifts", label: "Дары" },
+  { id: "trauma", label: "Травма" },
+];
+
+const PLANET_LABELS: Record<string, string> = {
+  sun: "Солнце",
+  earth: "Земля",
+  moon: "Луна",
+  northNode: "Северный узел",
+  southNode: "Южный узел",
+  mercury: "Меркурий",
+  venus: "Венера",
+  mars: "Марс",
+  jupiter: "Юпитер",
+  saturn: "Сатурн",
+  uranus: "Уран",
+  neptune: "Нептун",
+  pluto: "Плутон",
+  chiron: "Хирон",
+};
+
+const PLANET_ORDER = [
+  "sun",
+  "earth",
+  "moon",
+  "northNode",
+  "southNode",
+  "mercury",
+  "venus",
+  "mars",
+  "jupiter",
+  "saturn",
+  "uranus",
+  "neptune",
+  "pluto",
+  "chiron",
+];
+
 type ProfileInfo = {
   displayName: string;
   birthDate: string;
@@ -143,7 +198,330 @@ function MapFeedTabs({
   );
 }
 
-function ChartPassport({
+// ---------------------------------------------------------------------------
+// Cockpit: map layers (level 3) + sphere summary (level 2 right panel)
+// ---------------------------------------------------------------------------
+
+function MapLayerChips({
+  active,
+  onChange,
+}: {
+  active: MapLayer;
+  onChange: (layer: MapLayer) => void;
+}): JSX.Element {
+  return (
+    <div className="my-map-layer-chips" role="tablist" aria-label="Слои карты">
+      {MAP_LAYERS.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          role="tab"
+          aria-selected={active === item.id}
+          className={`my-map-layer-chip${active === item.id ? " my-map-layer-chip--active" : ""}`}
+          onClick={() => onChange(item.id)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function LayerEmptyHint({ children }: { children: ReactNode }): JSX.Element {
+  return <p className="my-map-layer-empty">{children}</p>;
+}
+
+function LayerSoonPanel({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}): JSX.Element {
+  return (
+    <div className="my-map-layer-soon">
+      <span className="my-map-layer-soon-badge">скоро</span>
+      <h3 className="my-map-layer-soon-title">{title}</h3>
+      <p className="my-map-layer-soon-text">{description}</p>
+    </div>
+  );
+}
+
+function sortedActivationEntries(map: Record<string, string>): Array<[string, string]> {
+  const ordered: Array<[string, string]> = [];
+  for (const p of PLANET_ORDER) {
+    if (map[p] !== undefined) ordered.push([p, map[p]]);
+  }
+  for (const [k, v] of Object.entries(map)) {
+    if (!PLANET_ORDER.includes(k)) ordered.push([k, v]);
+  }
+  return ordered;
+}
+
+function MapLayerPanel({
+  layer,
+  hdChart,
+  hdChartStatus,
+  hdChartLoading,
+  hdChartCalculating,
+  calculateHdChart,
+  onGoToData,
+}: {
+  layer: MapLayer;
+  hdChart: HdChartRecord | null;
+  hdChartStatus: HdChartStatus;
+  hdChartLoading: boolean;
+  hdChartCalculating: boolean;
+  calculateHdChart: () => void;
+  onGoToData: () => void;
+}): JSX.Element {
+  if (layer === "bodygraph") {
+    return (
+      <div className="my-map-layer-panel my-map-layer-bodygraph">
+        <BodyGraphViewer
+          chart={hdChart}
+          status={hdChartStatus}
+          loading={hdChartLoading}
+          onGoToData={onGoToData}
+          onRecalculate={calculateHdChart}
+          recalculating={hdChartCalculating}
+        />
+      </div>
+    );
+  }
+
+  if (hdChartLoading) {
+    return (
+      <div className="my-map-layer-panel">
+        <LayerEmptyHint>Загрузка данных карты…</LayerEmptyHint>
+      </div>
+    );
+  }
+
+  const nc = hdChart ? getNormalizedChart(hdChart) : null;
+  const hasChart = hdChartStatus === "ok" || hdChartStatus === "outdated";
+
+  if (!hasChart || !nc) {
+    return (
+      <div className="my-map-layer-panel">
+        <LayerEmptyHint>
+          {hdChartStatus === "none" || !hdChart
+            ? "Рассчитайте HD-карту во вкладке «Данные», чтобы открыть этот слой."
+            : hdChartStatus === "no_coords"
+            ? "Укажите координаты места рождения для расчёта карты."
+            : hdChartStatus === "error"
+            ? "При расчёте возникла ошибка — проверьте данные и попробуйте снова."
+            : "Данные слоя появятся после успешного расчёта карты."}
+        </LayerEmptyHint>
+      </div>
+    );
+  }
+
+  if (layer === "centers") {
+    const defined = nc.definedCenters ?? [];
+    const open = nc.openCenters ?? [];
+    if (defined.length === 0 && open.length === 0) {
+      return (
+        <div className="my-map-layer-panel">
+          <LayerEmptyHint>
+            Список центров появится после расчёта карты с полными данными.
+          </LayerEmptyHint>
+        </div>
+      );
+    }
+    return (
+      <div className="my-map-layer-panel">
+        <h3 className="my-map-layer-heading">Центры</h3>
+        {defined.length > 0 && (
+          <div className="my-map-layer-block">
+            <p className="my-map-layer-sublabel">Определённые ({defined.length})</p>
+            <div className="my-map-layer-chiplist">
+              {defined.map((c) => (
+                <span key={c} className="my-map-layer-chip-tag my-map-layer-chip-tag--defined">
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {open.length > 0 && (
+          <div className="my-map-layer-block">
+            <p className="my-map-layer-sublabel">Открытые ({open.length})</p>
+            <div className="my-map-layer-chiplist">
+              {open.map((c) => (
+                <span key={c} className="my-map-layer-chip-tag my-map-layer-chip-tag--open">
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (layer === "channels") {
+    const short = nc.channelsShort ?? [];
+    const long = nc.channelsLong ?? [];
+    const display = long.length > 0 ? long : short;
+    if (display.length === 0) {
+      return (
+        <div className="my-map-layer-panel">
+          <LayerEmptyHint>Каналы появятся после расчёта карты с полными данными.</LayerEmptyHint>
+        </div>
+      );
+    }
+    return (
+      <div className="my-map-layer-panel">
+        <h3 className="my-map-layer-heading">Каналы ({short.length || display.length})</h3>
+        <ul className="my-map-layer-list">
+          {display.map((ch, i) => (
+            <li key={`${ch}-${i}`}>{ch}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  if (layer === "activations") {
+    const personality = nc.activations?.personality;
+    const design = nc.activations?.design;
+    const hasPers = personality && Object.keys(personality).length > 0;
+    const hasDesign = design && Object.keys(design).length > 0;
+    if (!hasPers && !hasDesign) {
+      return (
+        <div className="my-map-layer-panel">
+          <LayerEmptyHint>
+            Планетарные активации появятся после расчёта карты с полными данными.
+          </LayerEmptyHint>
+        </div>
+      );
+    }
+    return (
+      <div className="my-map-layer-panel">
+        <h3 className="my-map-layer-heading">Активации</h3>
+        {hasPers && (
+          <div className="my-map-layer-block">
+            <p className="my-map-layer-sublabel">Личность</p>
+            <dl className="my-map-layer-activations">
+              {sortedActivationEntries(personality!).map(([planet, value]) => (
+                <div key={`p-${planet}`} className="my-map-layer-act-row">
+                  <dt>{PLANET_LABELS[planet] ?? planet}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+        {hasDesign && (
+          <div className="my-map-layer-block">
+            <p className="my-map-layer-sublabel">Дизайн</p>
+            <dl className="my-map-layer-activations">
+              {sortedActivationEntries(design!).map(([planet, value]) => (
+                <div key={`d-${planet}`} className="my-map-layer-act-row">
+                  <dt>{PLANET_LABELS[planet] ?? planet}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (layer === "variables") {
+    const fields = [
+      { label: "Когниция", value: nc.cognition },
+      { label: "Определение (PHS)", value: nc.determination },
+      { label: "Мотивация", value: nc.motivation },
+      { label: "Трансферентность", value: nc.transference },
+      { label: "Перспектива", value: nc.perspective },
+      { label: "Отвлечение", value: nc.distraction },
+      { label: "Среда", value: nc.environment },
+    ].filter((f) => f.value && String(f.value).trim() !== "");
+
+    const hasVariablesObject =
+      nc.variables !== undefined &&
+      nc.variables !== null &&
+      typeof nc.variables === "object" &&
+      !Array.isArray(nc.variables) &&
+      Object.keys(nc.variables as object).length > 0;
+
+    if (fields.length === 0 && !hasVariablesObject) {
+      return (
+        <div className="my-map-layer-panel">
+          <LayerSoonPanel
+            title="Переменные"
+            description="Слой переменных будет раскрыт после подключения расширенной интерпретации карты."
+          />
+        </div>
+      );
+    }
+    return (
+      <div className="my-map-layer-panel">
+        <h3 className="my-map-layer-heading">Переменные</h3>
+        {fields.length > 0 && (
+          <dl className="my-map-passport-rows">
+            {fields.map(({ label, value }) => (
+              <div key={label} className="my-map-passport-row">
+                <dt className="my-map-passport-key">{label}</dt>
+                <dd className="my-map-passport-val">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {hasVariablesObject && (
+          <p className="my-map-layer-note">
+            Расширенный блок переменных сохранён в карте — визуализация появится на следующем этапе.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  const soonCopy: Record<"shadows" | "gifts" | "trauma", { title: string; description: string }> = {
+    shadows: {
+      title: "Тени",
+      description:
+        "Слой будет подключён позже. Здесь появится расшифровка на основе Gene Keys / глубинных паттернов, когда будет готова смысловая база.",
+    },
+    gifts: {
+      title: "Дары",
+      description:
+        "Слой будет подключён позже. Здесь появится расшифровка даров и устойчивых качеств, когда будет готова смысловая база.",
+    },
+    trauma: {
+      title: "Травма",
+      description:
+        "Слой будет подключён позже. Здесь появится бережная расшифровка уязвимых паттернов, когда будет готова смысловая база.",
+    },
+  };
+
+  const soon = soonCopy[layer as "shadows" | "gifts" | "trauma"];
+  return (
+    <div className="my-map-layer-panel">
+      <LayerSoonPanel title={soon.title} description={soon.description} />
+    </div>
+  );
+}
+
+function SummaryPreviewCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="my-map-summary-preview-card">
+      <h3 className="my-map-summary-preview-title">{title}</h3>
+      <div className="my-map-summary-preview-body">{children}</div>
+    </div>
+  );
+}
+
+function PassportSummary({
   hdChart,
   hdChartStatus,
 }: {
@@ -159,49 +537,235 @@ function ChartPassport({
     { label: "Стратегия", value: nc?.strategy ?? hdChart?.strategy },
     { label: "Авторитет", value: nc?.authority ?? hdChart?.authority },
     { label: "Определение", value: nc?.definition ?? hdChart?.definition },
-    {
-      label: "Крест",
-      value: nc?.incarnationCross ?? hdChart?.incarnation_cross,
-    },
+    { label: "Крест", value: nc?.incarnationCross ?? hdChart?.incarnation_cross },
     { label: "Сигнатура", value: nc?.signature ?? hdChart?.signature },
-    {
-      label: "Не-я тема",
-      value: nc?.notSelfTheme ?? hdChart?.not_self_theme,
-    },
+    { label: "Не-я тема", value: nc?.notSelfTheme ?? hdChart?.not_self_theme },
   ];
-
   const filledRows = rows.filter((r) => r.value && r.value !== "—");
 
   return (
-    <aside className="my-map-passport" aria-label="Паспорт карты">
-      <div className="my-map-passport-card">
-        <h2 className="my-map-passport-title">Паспорт карты</h2>
-        {hasChart && filledRows.length > 0 ? (
-          <dl className="my-map-passport-rows">
-            {filledRows.map(({ label, value }) => (
-              <div key={label} className="my-map-passport-row">
-                <dt className="my-map-passport-key">{label}</dt>
-                <dd className="my-map-passport-val">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        ) : (
-          <p className="my-map-passport-empty">
-            {hdChartStatus === "none" || !hdChart
-              ? "Рассчитайте HD-карту во вкладке «Данные», чтобы увидеть паспорт."
-              : hdChartStatus === "no_coords"
-              ? "Укажите координаты места рождения для расчёта карты."
-              : hdChartStatus === "error"
-              ? "При расчёте возникла ошибка — проверьте данные и попробуйте снова."
-              : "Параметры карты появятся после успешного расчёта."}
-          </p>
-        )}
-        <div className="my-map-passport-translation">
-          <h3 className="my-map-passport-translation-title">Главный перевод</h3>
-          <p className="my-map-passport-translation-text">
-            Этот блок будет расширен персональной интерпретацией на следующих этапах.
-          </p>
+    <>
+      {hasChart && filledRows.length > 0 ? (
+        <dl className="my-map-passport-rows">
+          {filledRows.map(({ label, value }) => (
+            <div key={label} className="my-map-passport-row">
+              <dt className="my-map-passport-key">{label}</dt>
+              <dd className="my-map-passport-val">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="my-map-passport-empty">
+          {hdChartStatus === "none" || !hdChart
+            ? "Рассчитайте HD-карту во вкладке «Данные», чтобы увидеть паспорт."
+            : hdChartStatus === "no_coords"
+            ? "Укажите координаты места рождения для расчёта карты."
+            : hdChartStatus === "error"
+            ? "При расчёте возникла ошибка — проверьте данные и попробуйте снова."
+            : "Параметры карты появятся после успешного расчёта."}
+        </p>
+      )}
+      <div className="my-map-passport-translation">
+        <h3 className="my-map-passport-translation-title">Главный перевод</h3>
+        <p className="my-map-passport-translation-text">
+          Этот блок будет расширен персональной интерпретацией на следующих этапах.
+        </p>
+      </div>
+    </>
+  );
+}
+
+function SphereSummaryPanel({
+  tab,
+  hdChart,
+  hdChartStatus,
+  profileCompleteness,
+  onGoToData,
+  onGoToNewReport,
+  onLayerChange,
+}: {
+  tab: MapTab;
+  hdChart: HdChartRecord | null;
+  hdChartStatus: HdChartStatus;
+  profileCompleteness: { percent: number; label: string };
+  onGoToData: () => void;
+  onGoToNewReport: (type: AnalysisType) => void;
+  onLayerChange: (layer: MapLayer) => void;
+}): JSX.Element {
+  const nc = hdChart ? getNormalizedChart(hdChart) : null;
+
+  let title = "Обзор";
+  let lead = "";
+  let body: ReactNode = null;
+
+  switch (tab) {
+    case "overview":
+      title = "Паспорт карты";
+      lead = "Ключевые параметры вашей постоянной карты.";
+      body = <PassportSummary hdChart={hdChart} hdChartStatus={hdChartStatus} />;
+      break;
+    case "talents":
+      title = "Таланты";
+      lead =
+        "Здесь будет собираться перевод ворот, каналов и устойчивых качеств в понятные таланты.";
+      body = (
+        <div className="my-map-summary-previews">
+          <SummaryPreviewCard title="Что уже видно по карте">
+            <p className="my-map-summary-text">
+              {nc?.definedCenters?.length
+                ? `Определённых центров: ${nc.definedCenters.length}. `
+                : ""}
+              {nc?.channelsShort?.length
+                ? `Активных каналов: ${nc.channelsShort.length}. `
+                : ""}
+              {nc?.gatesAll?.length ? `Ворот в карте: ${nc.gatesAll.length}.` : ""}
+              {!nc?.definedCenters?.length && !nc?.channelsShort?.length && !nc?.gatesAll?.length
+                ? "Рассчитайте карту — здесь появится структура талантов из ваших данных."
+                : " Детальный перевод появится на следующем этапе."}
+            </p>
+          </SummaryPreviewCard>
+          <SummaryPreviewCard title="Что будет добавлено дальше">
+            <p className="my-map-summary-text">
+              Персональные формулировки талантов, сценарии проявления и связка с карьерой и
+              отношениями — без выдуманных интерпретаций.
+            </p>
+          </SummaryPreviewCard>
+          <SummaryPreviewCard title="Как использовать">
+            <p className="my-map-summary-text">
+              Смотрите слои «Каналы» и «Центры» слева и раздел «Подробнее» ниже для структуры
+              будущего разбора.
+            </p>
+          </SummaryPreviewCard>
         </div>
+      );
+      break;
+    case "career":
+      title = "Карьера";
+      lead =
+        "Как эта карта будет переводиться в рабочий стиль, подходящие роли и ограничения.";
+      body = (
+        <>
+          <p className="my-map-summary-text">
+            {nc?.type
+              ? `Тип ${nc.type}${nc.strategy ? ` · стратегия «${nc.strategy}»` : ""}${nc.authority ? ` · авторитет ${nc.authority}` : ""}.`
+              : "После расчёта карты здесь появится краткий рабочий профиль."}
+          </p>
+          <div className="my-map-summary-cta-row">
+            <button
+              type="button"
+              className="my-map-cta-btn my-map-cta-btn--sm"
+              onClick={() => onGoToNewReport("vacancy_assessment")}
+            >
+              Оценить вакансию →
+            </button>
+            <button
+              type="button"
+              className="my-map-cta-btn my-map-cta-btn--secondary my-map-cta-btn--sm"
+              onClick={() => onGoToNewReport("current_role")}
+            >
+              Разбор текущей роли →
+            </button>
+          </div>
+        </>
+      );
+      break;
+    case "workEnvironment":
+      title = "Рабочая среда";
+      lead = "Условия, ритм, формат команды, баланс давления и свободы.";
+      body = (
+        <p className="my-map-summary-text">
+          {nc?.definition
+            ? `Определение: ${nc.definition}. `
+            : ""}
+          Этот слой будет расширен на следующем этапе. Сейчас показана структура будущего разбора
+          по рабочей среде.
+        </p>
+      );
+      break;
+    case "relationships":
+      title = "Отношения";
+      lead = "Как вы входите в контакт, где нужна бережность, что важно в близости.";
+      body = (
+        <p className="my-map-summary-text">
+          {nc?.strategy
+            ? `Опора на стратегию «${nc.strategy}» в контакте с людьми. `
+            : ""}
+          Этот слой будет расширен на следующем этапе. Сейчас показана структура будущего разбора
+          по отношениям.
+        </p>
+      );
+      break;
+    case "communication":
+      title = "Коммуникация";
+      lead = "Как вы объясняете, договариваетесь, задаёте вопросы и обозначаете границы.";
+      body = (
+        <p className="my-map-summary-text">
+          {nc?.profile ? `Профиль ${nc.profile} — ролевая линия в общении. ` : ""}
+          Этот слой будет расширен на следующем этапе. Сейчас показана структура будущего разбора
+          по коммуникации.
+        </p>
+      );
+      break;
+    case "energyBody":
+      title = "Энергия и тело";
+      lead = "Ритм, перегруз, восстановление. Не медицинский совет.";
+      body = (
+        <>
+          <p className="my-map-summary-text">
+            {nc?.type
+              ? `Базовый ритм связан с типом ${nc.type}. `
+              : ""}
+            Для телесных зон смотрите слой «Центры» — там видны определённые и открытые центры.
+          </p>
+          <button
+            type="button"
+            className="my-map-layer-link"
+            onClick={() => onLayerChange("centers")}
+          >
+            Открыть слой «Центры» →
+          </button>
+        </>
+      );
+      break;
+    case "money":
+      title = "Деньги";
+      lead = "Ценность, предложения и решения про обмен — не финансовые советы.";
+      body = (
+        <p className="my-map-summary-text">
+          {nc?.authority
+            ? `Ориентир для решений: авторитет ${nc.authority}. `
+            : ""}
+          Этот слой будет расширен на следующем этапе. Сейчас показана структура будущего разбора
+          по деньгам и ценности.
+        </p>
+      );
+      break;
+    case "developmentPlan":
+      title = "План развития";
+      lead = "Ближайшие шаги, профиль и разборы для углубления.";
+      body = (
+        <>
+          <ul className="my-map-summary-list">
+            <li>Довести анкету до {profileCompleteness.percent}% и выше</li>
+            <li>Наблюдать сигнатуру и не-я тему в ежедневных решениях</li>
+            <li>Запустить разбор, когда нужна конкретика по роли или вакансии</li>
+          </ul>
+          {(hdChartStatus === "none" || hdChartStatus === "outdated") && (
+            <button type="button" className="my-map-layer-link" onClick={onGoToData}>
+              Перейти в Данные →
+            </button>
+          )}
+        </>
+      );
+      break;
+  }
+
+  return (
+    <aside className="my-map-sphere-summary" aria-label={title}>
+      <div className="my-map-passport-card my-map-sphere-summary-card">
+        <h2 className="my-map-passport-title">{title}</h2>
+        {lead && <p className="my-map-sphere-lead">{lead}</p>}
+        <div className="my-map-sphere-body">{body}</div>
       </div>
     </aside>
   );
@@ -1157,6 +1721,7 @@ export default function MyMapScreen({
   onGoToNewReport,
 }: MyMapScreenProps): JSX.Element {
   const [activeMapTab, setActiveMapTab] = useState<MapTab>("overview");
+  const [activeMapLayer, setActiveMapLayer] = useState<MapLayer>("bodygraph");
 
   return (
     <section className="my-map-screen">
@@ -1169,20 +1734,36 @@ export default function MyMapScreen({
       <MapFeedTabs active={activeMapTab} onChange={setActiveMapTab} />
 
       <div className="my-map-cockpit">
-        <div className="my-map-cockpit-graph">
-          <BodyGraphViewer
-            chart={hdChart}
-            status={hdChartStatus}
-            loading={hdChartLoading}
+        <div className="my-map-cockpit-left">
+          <MapLayerChips active={activeMapLayer} onChange={setActiveMapLayer} />
+          <MapLayerPanel
+            layer={activeMapLayer}
+            hdChart={hdChart}
+            hdChartStatus={hdChartStatus}
+            hdChartLoading={hdChartLoading}
+            hdChartCalculating={hdChartCalculating}
+            calculateHdChart={calculateHdChart}
             onGoToData={onGoToData}
-            onRecalculate={calculateHdChart}
-            recalculating={hdChartCalculating}
           />
         </div>
-        <ChartPassport hdChart={hdChart} hdChartStatus={hdChartStatus} />
+        <SphereSummaryPanel
+          tab={activeMapTab}
+          hdChart={hdChart}
+          hdChartStatus={hdChartStatus}
+          profileCompleteness={profileCompleteness}
+          onGoToData={onGoToData}
+          onGoToNewReport={onGoToNewReport}
+          onLayerChange={setActiveMapLayer}
+        />
       </div>
 
-      <div className="my-map-tab-content" role="tabpanel">
+      <div className="my-map-tab-content my-map-tab-content--secondary" role="tabpanel">
+        <div className="my-map-detail-intro">
+          <h2 className="my-map-detail-heading">Подробнее</h2>
+          <p className="my-map-detail-sub">
+            Дополнительная детализация выбранной сферы — следующий слой разбора.
+          </p>
+        </div>
         {activeMapTab === "overview" && (
           <TabOverview
             hdChartStatus={hdChartStatus}

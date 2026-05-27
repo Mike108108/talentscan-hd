@@ -1,5 +1,5 @@
 import type { NormalizedChart } from "../BodyGraphViewer";
-import type { CenterKey, Point } from "./bodygraphGeometry";
+import type { CenterKey, Point } from "./bodygraphTemplate";
 
 export type GateSource = "inactive" | "personality" | "design" | "both";
 
@@ -74,10 +74,6 @@ export function getGateSource(
 
 export function pointsToString(points: Point[]): string {
   return points.map((p) => `${p.x},${p.y}`).join(" ");
-}
-
-export function midpoint(a: Point, b: Point): Point {
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
 export function centerIsDefined(

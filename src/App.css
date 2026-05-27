@@ -3798,14 +3798,14 @@
 /* ── Visual card (SVG container) ─────────────────────────────────────────── */
 
 .bodygraph-visual-card {
-  background: #f3f4f6;
+  background: #f2f4f7;
   border: 1px solid rgba(148, 163, 184, 0.28);
   border-radius: 1rem;
-  padding: 1rem 0.85rem 0.6rem;
+  padding: 0.9rem 0.75rem 0.5rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.25rem;
   box-shadow: none;
   color: #0f172a;
   overflow: hidden;
@@ -3813,7 +3813,7 @@
 
 .bodygraph-svg {
   width: 100%;
-  max-width: 420px;
+  max-width: 400px;
   height: auto;
   display: block;
 }
@@ -3825,34 +3825,36 @@
 }
 
 .bodygraph-center-shape {
-  stroke-width: 1.5;
+  stroke-width: 1.2;
 }
 
 .bodygraph-center-shape--open {
-  fill: #f8fafc;
+  fill: #ffffff;
   stroke: #cbd5e1;
 }
 
 .bodygraph-channel-bg {
-  stroke: #cfd8e3;
-  stroke-width: 3;
+  stroke: #d0d7e2;
+  stroke-width: 2;
   stroke-linecap: round;
+  stroke-linejoin: round;
   fill: none;
   opacity: 1;
 }
 
 .bodygraph-channel-half {
-  stroke-width: 3.4;
+  stroke-width: 3;
   stroke-linecap: round;
+  stroke-linejoin: round;
   fill: none;
 }
 
 .bodygraph-channel-half--both-under {
-  stroke-width: 4.2;
+  stroke-width: 3.6;
 }
 
 .bodygraph-channel-half--both-over {
-  stroke-width: 2.2;
+  stroke-width: 1.8;
 }
 
 .bodygraph-channel-half--personality {
@@ -3864,7 +3866,7 @@
 }
 
 .bodygraph-gate-circle {
-  stroke-width: 1.2;
+  stroke-width: 1.1;
 }
 
 .bodygraph-gate-circle--inactive {
@@ -3889,7 +3891,7 @@
 }
 
 .bodygraph-gate-label {
-  font-size: 8px;
+  font-size: 7.5px;
   font-weight: 700;
   text-anchor: middle;
   dominant-baseline: central;
@@ -3909,18 +3911,18 @@
 
 .bodygraph-svg-legend {
   display: flex;
-  gap: 0.5rem 0.75rem;
+  gap: 0.45rem 0.65rem;
   justify-content: center;
   flex-wrap: wrap;
   margin-top: 0;
-  padding-bottom: 0.1rem;
+  padding-bottom: 0;
 }
 
 .bodygraph-legend-item {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  font-size: 0.68rem;
+  gap: 0.3rem;
+  font-size: 0.65rem;
   color: #64748b;
 }
 
@@ -4701,17 +4703,17 @@
 }
 
 .my-map-layer-bodygraph .bodygraph-visual-card {
-  background: #f3f4f6;
+  background: #f2f4f7;
   padding: 1.25rem;
   min-height: 620px;
   justify-content: center;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.2rem;
 }
 
 .my-map-layer-bodygraph .bodygraph-svg {
-  width: min(100%, 420px);
-  max-width: 420px;
+  width: min(100%, 400px);
+  max-width: 400px;
   height: auto;
 }
 
@@ -4722,8 +4724,8 @@
   }
 
   .my-map-layer-bodygraph .bodygraph-svg {
-    width: min(100%, 320px);
-    max-width: 320px;
+    width: min(100%, 315px);
+    max-width: 315px;
   }
 
   .my-map-layer-panel {

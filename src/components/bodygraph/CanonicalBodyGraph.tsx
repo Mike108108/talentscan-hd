@@ -6,11 +6,10 @@ import {
   CENTER_DEFINED_STROKES,
   CENTER_ORDER,
   CENTER_SHAPES,
-  CHANNELS,
-  GATE_POSITIONS,
+  CHANNEL_TEMPLATE,
+  GATE_LABEL_POSITIONS,
   type CenterKey,
-  type Point,
-} from "./bodygraphGeometry";
+} from "./bodygraphTemplate";
 import {
   buildGateSourceMap,
   channelHalfClass,
@@ -18,12 +17,11 @@ import {
   gateLabelClass,
   gateSourceLabel,
   getGateSource,
-  midpoint,
   pointsToString,
   type GateSource,
 } from "./bodygraphUtils";
 
-const GATE_RADIUS = 8;
+const GATE_RADIUS = 7;
 
 type CanonicalBodyGraphProps = {
   normalizedChart: NormalizedChart;
@@ -70,54 +68,29 @@ function CenterShapeElement({
   );
 }
 
-function ChannelBackground({
-  gateA,
-  gateB,
-  posA,
-  posB,
-}: {
-  gateA: string;
-  gateB: string;
-  posA: Point;
-  posB: Point;
-}): JSX.Element {
-  const d = `M ${posA.x} ${posA.y} L ${posB.x} ${posB.y}`;
-  return (
-    <path
-      key={`bg-${gateA}-${gateB}`}
-      className="bodygraph-channel-bg"
-      d={d}
-    />
-  );
-}
-
-function ChannelHalf({
-  from,
-  to,
+function TemplateChannelHalf({
+  pathD,
   source,
-  channelKey,
-  side,
+  channelId,
+  gate,
 }: {
-  from: Point;
-  to: Point;
+  pathD: string;
   source: GateSource;
-  channelKey: string;
-  side: "a" | "b";
+  channelId: string;
+  gate: string;
 }): JSX.Element | null {
   if (source === "inactive") return null;
 
-  const d = `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
-
   if (source === "both") {
     return (
-      <g key={`half-${channelKey}-${side}`}>
+      <g key={`active-${channelId}-${gate}`}>
         <path
           className="bodygraph-channel-half bodygraph-channel-half--design bodygraph-channel-half--both-under"
-          d={d}
+          d={pathD}
         />
         <path
           className="bodygraph-channel-half bodygraph-channel-half--personality bodygraph-channel-half--both-over"
-          d={d}
+          d={pathD}
         />
       </g>
     );
@@ -125,9 +98,9 @@ function ChannelHalf({
 
   return (
     <path
-      key={`half-${channelKey}-${side}`}
+      key={`active-${channelId}-${gate}`}
       className={channelHalfClass(source)}
-      d={d}
+      d={pathD}
     />
   );
 }
@@ -138,25 +111,18 @@ function GateMarker({
   source,
 }: {
   gate: string;
-  position: Point;
+  position: { x: number; y: number };
   source: GateSource;
 }): JSX.Element {
   return (
-    <g
-      key={gate}
-      aria-label={`Ворота ${gate}, ${gateSourceLabel(source)}`}
-    >
+    <g aria-label={`Ворота ${gate}, ${gateSourceLabel(source)}`}>
       <circle
         className={gateCircleClass(source)}
         cx={position.x}
         cy={position.y}
         r={GATE_RADIUS}
       />
-      <text
-        className={gateLabelClass(source)}
-        x={position.x}
-        y={position.y}
-      >
+      <text className={gateLabelClass(source)} x={position.x} y={position.y}>
         {gate}
       </text>
     </g>
@@ -180,44 +146,44 @@ export default function CanonicalBodyGraph({
     const backgrounds: JSX.Element[] = [];
     const activeHalves: JSX.Element[] = [];
 
-    for (const [gateA, gateB] of CHANNELS) {
-      const posA = GATE_POSITIONS[gateA];
-      const posB = GATE_POSITIONS[gateB];
-      if (!posA || !posB) continue;
+    for (const channel of CHANNEL_TEMPLATE) {
+      const [gateA, gateB] = channel.gates;
+      const pathA = channel.halves[gateA];
+      const pathB = channel.halves[gateB];
+      if (!pathA || !pathB) continue;
 
-      const channelKey = `${gateA}-${gateB}`;
       backgrounds.push(
-        <ChannelBackground
-          key={`bg-${channelKey}`}
-          gateA={gateA}
-          gateB={gateB}
-          posA={posA}
-          posB={posB}
+        <path
+          key={`bg-${channel.id}-${gateA}`}
+          className="bodygraph-channel-bg"
+          d={pathA}
+        />,
+        <path
+          key={`bg-${channel.id}-${gateB}`}
+          className="bodygraph-channel-bg"
+          d={pathB}
         />,
       );
 
-      const mid = midpoint(posA, posB);
       const sourceA = getGateSource(gateSourceMap, gateA);
       const sourceB = getGateSource(gateSourceMap, gateB);
 
       const halfA = (
-        <ChannelHalf
-          key={`active-${channelKey}-a`}
-          from={posA}
-          to={mid}
+        <TemplateChannelHalf
+          key={`active-${channel.id}-a`}
+          pathD={pathA}
           source={sourceA}
-          channelKey={channelKey}
-          side="a"
+          channelId={channel.id}
+          gate={gateA}
         />
       );
       const halfB = (
-        <ChannelHalf
-          key={`active-${channelKey}-b`}
-          from={posB}
-          to={mid}
+        <TemplateChannelHalf
+          key={`active-${channel.id}-b`}
+          pathD={pathB}
           source={sourceB}
-          channelKey={channelKey}
-          side="b"
+          channelId={channel.id}
+          gate={gateB}
         />
       );
 
@@ -230,7 +196,7 @@ export default function CanonicalBodyGraph({
 
   const gateElements = useMemo(
     () =>
-      Object.entries(GATE_POSITIONS).map(([gate, position]) => (
+      Object.entries(GATE_LABEL_POSITIONS).map(([gate, position]) => (
         <GateMarker
           key={gate}
           gate={gate}

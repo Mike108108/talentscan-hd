@@ -36,7 +36,7 @@ export default function HrLoginPage() {
 
   return (
     <div className="hr-root hr-fork">
-      <div className="hr-card" style={{ width: "min(440px, 100%)" }}>
+      <div className="hr-card hr-auth-card hr-auth-card--narrow">
         <h2 style={{ marginTop: 0 }}>Вход в HR-кабинет</h2>
         {!isSupabaseConfigured && (
           <p className="hr-error">Авторизация недоступна: Supabase не настроен.</p>
@@ -61,14 +61,16 @@ export default function HrLoginPage() {
             {loading ? "Вход…" : "Войти"}
           </button>
         </form>
-        <p style={{ marginTop: 16, color: "var(--hr-muted)" }}>
-          Нет HR-кабинета? <Link to="/hr/signup">Создать</Link>
-        </p>
-        <p style={{ marginTop: 8 }}>
-          <Link to="/" style={{ color: "var(--hr-muted)" }}>
-            ← Выбор кабинета
-          </Link>
-        </p>
+        <div className="hr-auth-footer">
+          <p>
+            Нет HR-кабинета? <Link to="/hr/signup">Создать</Link>
+          </p>
+          <p>
+            <Link to="/" className="hr-link-muted">
+              ← Выбор кабинета
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -6,23 +6,22 @@ export default function CabinetForkPage() {
     <div className="hr-root hr-fork">
       <div className="hr-fork-inner">
         <h1>TalentScan</h1>
-        <p style={{ color: "var(--hr-muted)", fontSize: 18 }}>Выберите кабинет</p>
+        <p className="hr-fork-subtitle">Выберите рабочее пространство</p>
         <div className="hr-fork-cards">
           <div className="hr-fork-card">
             <h2>Личный кабинет</h2>
-            <p>
-              Для себя: карта, таланты, карьерные роли и личные рекомендации.
-            </p>
+            <p>Для себя: карта, таланты, рекомендации и личные разборы.</p>
             <div className="hr-fork-actions">
               <Link to="/app" className="hr-btn">
-                Войти в Личный кабинет
+                Открыть личный кабинет
               </Link>
             </div>
           </div>
           <div className="hr-fork-card">
             <h2>HR-кабинет</h2>
             <p>
-              Для бизнеса: кандидаты, вакансии, сотрудники, совместимость и решения по найму.
+              Для бизнеса: кандидаты, карта талантов кандидата и первые HR-гипотезы для
+              найма.
             </p>
             <div className="hr-fork-actions">
               <Link to="/hr/login" className="hr-btn">

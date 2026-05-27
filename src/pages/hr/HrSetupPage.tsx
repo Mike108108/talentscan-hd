@@ -90,7 +90,7 @@ export default function HrSetupPage() {
 
   return (
     <div className="hr-root hr-fork">
-      <div className="hr-card" style={{ width: "min(520px, 100%)" }}>
+      <div className="hr-card hr-auth-card">
         <h2 style={{ marginTop: 0 }}>Завершить настройку HR-кабинета</h2>
         <p style={{ color: "var(--hr-muted)", marginTop: 0 }}>
           Аккаунт подтверждён. Создайте HR-профиль и первую компанию, чтобы открыть рабочее
@@ -118,9 +118,11 @@ export default function HrSetupPage() {
             {submitting ? "Сохранение…" : "Открыть HR-кабинет"}
           </button>
         </form>
-        <p style={{ marginTop: 16 }}>
-          <Link to="/hr/login">Другой вход</Link>
-        </p>
+        <div className="hr-auth-footer">
+          <p>
+            <Link to="/hr/login">Другой вход</Link>
+          </p>
+        </div>
       </div>
     </div>
   );

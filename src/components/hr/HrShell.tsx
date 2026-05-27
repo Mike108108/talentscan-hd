@@ -1,5 +1,6 @@
 import { Link, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
+import "../../hr.css";
 
 const NAV = [
   { path: "", label: "Обзор", hint: "Главный экран", enabled: true },
@@ -9,12 +10,7 @@ const NAV = [
   { path: "data", label: "Данные", hint: "Скоро", enabled: false },
 ];
 
-const ROADMAP = [
-  "Сравнения",
-  "TeamScan",
-  "Интервью",
-  "Адаптация",
-];
+const ROADMAP = ["Сравнения", "TeamScan", "Интервью", "Адаптация"];
 
 export default function HrShell() {
   const { companyId } = useParams<{ companyId: string }>();
@@ -31,38 +27,27 @@ export default function HrShell() {
 
   return (
     <div className="hr-root">
-      <div className="hr-app">
-        <header className="hr-topbar">
-          <div className="hr-brand">
-            <div className="hr-logo" aria-hidden />
-            <div>
-              <h1>TalentScan HR</h1>
-              <p>Рабочий кабинет работодателя</p>
-            </div>
+      <div className="hr-shell">
+        <aside className="hr-sidebar" aria-label="HR-меню">
+          <div className="hr-sidebar-brand">
+            <span className="hr-sidebar-logo">TalentScan</span>
+            <span className="hr-sidebar-tagline">Кабинет</span>
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link to="/hr/companies" className="hr-btn hr-btn--ghost">
-              Компании
-            </Link>
-            <span className="hr-pill">
-              <span className="hr-dot" />
-              Demo HR access
-            </span>
-            <button type="button" className="hr-btn hr-btn--secondary" onClick={signOut}>
-              Выйти
-            </button>
-          </div>
-        </header>
 
-        <div className="hr-layout">
-          <aside className="hr-sidebar">
-            <div style={{ padding: "8px 10px 12px", borderBottom: "1px solid rgba(255,255,255,.1)" }}>
-              <b style={{ fontSize: 17 }}>Workspace</b>
-              <span style={{ display: "block", color: "var(--hr-muted)", fontSize: 11, marginTop: 4 }}>
-                Разделы кабинета
+          <div className="hr-workspace-switch">
+            <span className="hr-workspace-label">Рабочее пространство</span>
+            <div className="hr-workspace-modes">
+              <span className="hr-workspace-mode hr-workspace-mode--active" aria-current="true">
+                HR
               </span>
+              <Link to="/app" className="hr-workspace-mode">
+                Личный
+              </Link>
             </div>
-            <nav className="hr-nav" style={{ marginTop: 8 }}>
+          </div>
+
+          <div className="hr-sidebar-main">
+            <nav className="hr-nav">
               {NAV.map((item) => {
                 const to = item.path ? `${base}/${item.path}` : base;
                 const active =
@@ -71,7 +56,7 @@ export default function HrShell() {
                     : sectionPath.startsWith(item.path);
                 if (!item.enabled) {
                   return (
-                    <span key={item.path} className="hr-nav--disabled" style={{ padding: "8px 9px" }}>
+                    <span key={item.path} className="hr-nav--disabled">
                       <span>
                         {item.label}
                         <small>{item.hint}</small>
@@ -89,16 +74,45 @@ export default function HrShell() {
                 );
               })}
             </nav>
-            <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.1)" }}>
-              <p style={{ margin: "0 0 8px", fontSize: 11, color: "var(--hr-muted)" }}>Скоро</p>
-              {ROADMAP.map((label) => (
-                <div key={label} className="hr-nav--disabled" style={{ padding: "6px 9px", fontSize: 13 }}>
-                  {label}
-                </div>
-              ))}
+          </div>
+
+          <div className="hr-sidebar-roadmap">
+            <p className="hr-sidebar-roadmap-title">Дорожная карта</p>
+            {ROADMAP.map((label) => (
+              <div key={label} className="hr-sidebar-roadmap-item">
+                {label}
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <div className="hr-app-area">
+          <header className="hr-topbar">
+            <div className="hr-brand">
+              <div className="hr-logo" aria-hidden />
+              <div>
+                <h1>TalentScan HR</h1>
+                <p>Рабочий кабинет работодателя</p>
+              </div>
             </div>
-          </aside>
-          <main>
+            <div className="hr-topbar-actions">
+              <Link to="/app" className="hr-btn hr-btn--ghost">
+                Личный кабинет
+              </Link>
+              <Link to="/hr/companies" className="hr-btn hr-btn--ghost">
+                Компании
+              </Link>
+              <span className="hr-pill">
+                <span className="hr-dot" />
+                HR-доступ
+              </span>
+              <button type="button" className="hr-btn hr-btn--secondary" onClick={signOut}>
+                Выйти
+              </button>
+            </div>
+          </header>
+
+          <main className="hr-workspace">
             <Outlet />
           </main>
         </div>

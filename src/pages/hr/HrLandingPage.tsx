@@ -4,17 +4,18 @@ import "../../hr.css";
 export default function HrLandingPage() {
   return (
     <div className="hr-root hr-fork">
-      <div className="hr-fork-inner" style={{ textAlign: "left", maxWidth: 720 }}>
+      <div className="hr-fork-inner hr-fork-inner--left">
         <div className="hr-hero">
           <span className="hr-eyebrow">
             <span className="hr-dot" />
             TalentScan HR
           </span>
-          <h2 style={{ margin: 0 }}>Кабинет работодателя</h2>
-          <p style={{ marginTop: 12 }}>
-            Кандидаты, карты талантов, вакансии и HR-решения — без угадывания по первому впечатлению.
+          <h2>Кабинет работодателя</h2>
+          <p>
+            Кандидаты, карты талантов и первые HR-гипотезы для найма — в одном рабочем
+            пространстве.
           </p>
-          <div className="hr-fork-actions" style={{ marginTop: 20 }}>
+          <div className="hr-fork-actions hr-fork-actions--spaced">
             <Link to="/hr/login" className="hr-btn">
               Войти
             </Link>

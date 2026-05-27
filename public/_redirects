@@ -1,1 +1,5 @@
-/*    /index.html   200
+# Netlify Functions are served before redirects; explicit rules for SPA deep links.
+/.netlify/functions/*  200
+/app/*  /index.html  200
+/hr/*   /index.html  200
+/*      /index.html  200

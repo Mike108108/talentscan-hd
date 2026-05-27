@@ -28,7 +28,7 @@ export default function HrLoginPage() {
     const profile = await fetchHrProfile();
     setLoading(false);
     if (!profile) {
-      navigate("/hr/cabinet", { replace: true });
+      navigate("/hr/setup", { replace: true });
       return;
     }
     navigate("/hr/companies", { replace: true });

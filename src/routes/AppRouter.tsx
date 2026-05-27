@@ -13,6 +13,7 @@ import HrCompanyOverviewPage from "../pages/hr/HrCompanyOverviewPage";
 import HrLandingPage from "../pages/hr/HrLandingPage";
 import HrLoginPage from "../pages/hr/HrLoginPage";
 import HrSignupPage from "../pages/hr/HrSignupPage";
+import HrSetupPage from "../pages/hr/HrSetupPage";
 
 export default function AppRouter() {
   return (
@@ -24,6 +25,7 @@ export default function AppRouter() {
         <Route path="/hr" element={<HrLandingPage />} />
         <Route path="/hr/login" element={<HrLoginPage />} />
         <Route path="/hr/signup" element={<HrSignupPage />} />
+        <Route path="/hr/setup" element={<HrSetupPage />} />
         <Route
           path="/hr/cabinet"
           element={

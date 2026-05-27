@@ -40,7 +40,7 @@ export const handler: Handler = async (
     event.headers["authorization"] ?? event.headers["Authorization"] ?? "";
   const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
   if (!bearerMatch) {
-    return jsonResponse(401, { error: "Требуется вход в HR-кабинет.", source: "auth" });
+    return jsonResponse(401, { error: "Требуется вход.", source: "auth" });
   }
   const token = bearerMatch[1];
 
@@ -56,7 +56,7 @@ export const handler: Handler = async (
   const authClient = createClient(supabaseUrl, supabaseAnonKey);
   const { data: authData, error: authErr } = await authClient.auth.getUser(token);
   if (authErr || !authData.user) {
-    return jsonResponse(401, { error: "Требуется вход в HR-кабинет.", source: "auth" });
+    return jsonResponse(401, { error: "Требуется вход.", source: "auth" });
   }
 
   let body: { candidate_id?: string; company_id?: string };
@@ -126,6 +126,13 @@ export const handler: Handler = async (
     }
   }
 
+  const markError = async () => {
+    await db
+      .from("hr_candidates")
+      .update({ chart_status: "calculation_error", updated_at: new Date().toISOString() })
+      .eq("id", candidateId);
+  };
+
   await db
     .from("hr_candidates")
     .update({ chart_status: "calculating", updated_at: new Date().toISOString() })
@@ -144,17 +151,15 @@ export const handler: Handler = async (
   try {
     rawChart = await fetchHumanDesignChart(birthDate, birthTime, lat, lng);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Ошибка Human Design API.";
-    await db
-      .from("hr_candidates")
-      .update({ chart_status: "calculation_error", updated_at: new Date().toISOString() })
-      .eq("id", candidateId);
-    return jsonResponse(502, { error: message, source: "humandesign-api" });
+    const message = err instanceof Error ? err.message : "Ошибка расчёта карты.";
+    await markError();
+    return jsonResponse(502, { error: message, source: "chart-api" });
   }
 
   const normalized = normalizeHdChart(rawChart);
   const now = new Date().toISOString();
 
+  try {
   const { data: existingChart } = await db
     .from("hr_candidate_charts")
     .select("id")
@@ -181,9 +186,7 @@ export const handler: Handler = async (
       .eq("id", existingChart.id)
       .select()
       .single();
-    if (error) {
-      return jsonResponse(500, { error: error.message, source: "db" });
-    }
+    if (error) throw new Error(error.message);
     chartRow = data;
   } else {
     const { data, error } = await db
@@ -191,9 +194,7 @@ export const handler: Handler = async (
       .insert(chartPayload)
       .select()
       .single();
-    if (error) {
-      return jsonResponse(500, { error: error.message, source: "db" });
-    }
+    if (error) throw new Error(error.message);
     chartRow = data;
   }
 
@@ -240,9 +241,7 @@ export const handler: Handler = async (
       .eq("id", existingMap.id)
       .select()
       .single();
-    if (error) {
-      return jsonResponse(500, { error: error.message, source: "db" });
-    }
+    if (error) throw new Error(error.message);
     talentMapRow = data;
   } else {
     const { data, error } = await db
@@ -250,9 +249,7 @@ export const handler: Handler = async (
       .insert(mapPayload)
       .select()
       .single();
-    if (error) {
-      return jsonResponse(500, { error: error.message, source: "db" });
-    }
+    if (error) throw new Error(error.message);
     talentMapRow = data;
   }
 
@@ -267,13 +264,16 @@ export const handler: Handler = async (
     .select()
     .single();
 
-  if (updErr) {
-    return jsonResponse(500, { error: updErr.message, source: "db" });
-  }
+  if (updErr) throw new Error(updErr.message);
 
   return jsonResponse(200, {
     candidate: updatedCandidate,
     chart: chartRow,
     talent_map: talentMapRow,
   });
+  } catch (err) {
+    await markError();
+    const message = err instanceof Error ? err.message : "Ошибка сохранения результата.";
+    return jsonResponse(500, { error: message, source: "db" });
+  }
 };

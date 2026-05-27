@@ -201,7 +201,7 @@ export async function calculateCandidateChart(
   talent_map: Record<string, unknown>;
 }> {
   const token = await getAccessToken();
-  if (!token) throw new Error("Требуется вход в HR-кабинет");
+  if (!token) throw new Error("Требуется вход");
   const resp = await fetch("/.netlify/functions/hr-candidate-chart-calculate", {
     method: "POST",
     headers: {

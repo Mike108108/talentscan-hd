@@ -1,5 +1,9 @@
 -- HR branch tables (TalentScan investor MVP)
 -- Apply in Supabase SQL editor or via supabase db push
+-- Safe to re-run: policies use DROP IF EXISTS; indexes use IF NOT EXISTS
+
+-- gen_random_uuid() is built-in on PostgreSQL 13+ (Supabase). Enable pgcrypto if your project requires it:
+create extension if not exists "pgcrypto";
 
 -- hr_profiles
 create table if not exists public.hr_profiles (
@@ -13,14 +17,17 @@ create table if not exists public.hr_profiles (
 
 alter table public.hr_profiles enable row level security;
 
+drop policy if exists "hr_profiles_select_own" on public.hr_profiles;
 create policy "hr_profiles_select_own"
   on public.hr_profiles for select
   using (auth.uid() = id);
 
+drop policy if exists "hr_profiles_insert_own" on public.hr_profiles;
 create policy "hr_profiles_insert_own"
   on public.hr_profiles for insert
   with check (auth.uid() = id);
 
+drop policy if exists "hr_profiles_update_own" on public.hr_profiles;
 create policy "hr_profiles_update_own"
   on public.hr_profiles for update
   using (auth.uid() = id);
@@ -40,18 +47,22 @@ create index if not exists hr_companies_owner_idx on public.hr_companies(owner_u
 
 alter table public.hr_companies enable row level security;
 
+drop policy if exists "hr_companies_select_own" on public.hr_companies;
 create policy "hr_companies_select_own"
   on public.hr_companies for select
   using (auth.uid() = owner_user_id);
 
+drop policy if exists "hr_companies_insert_own" on public.hr_companies;
 create policy "hr_companies_insert_own"
   on public.hr_companies for insert
   with check (auth.uid() = owner_user_id);
 
+drop policy if exists "hr_companies_update_own" on public.hr_companies;
 create policy "hr_companies_update_own"
   on public.hr_companies for update
   using (auth.uid() = owner_user_id);
 
+drop policy if exists "hr_companies_delete_own" on public.hr_companies;
 create policy "hr_companies_delete_own"
   on public.hr_companies for delete
   using (auth.uid() = owner_user_id);
@@ -82,6 +93,7 @@ create index if not exists hr_candidates_company_idx on public.hr_candidates(com
 
 alter table public.hr_candidates enable row level security;
 
+drop policy if exists "hr_candidates_select_own_company" on public.hr_candidates;
 create policy "hr_candidates_select_own_company"
   on public.hr_candidates for select
   using (
@@ -91,6 +103,7 @@ create policy "hr_candidates_select_own_company"
     )
   );
 
+drop policy if exists "hr_candidates_insert_own_company" on public.hr_candidates;
 create policy "hr_candidates_insert_own_company"
   on public.hr_candidates for insert
   with check (
@@ -100,6 +113,7 @@ create policy "hr_candidates_insert_own_company"
     )
   );
 
+drop policy if exists "hr_candidates_update_own_company" on public.hr_candidates;
 create policy "hr_candidates_update_own_company"
   on public.hr_candidates for update
   using (
@@ -109,6 +123,7 @@ create policy "hr_candidates_update_own_company"
     )
   );
 
+drop policy if exists "hr_candidates_delete_own_company" on public.hr_candidates;
 create policy "hr_candidates_delete_own_company"
   on public.hr_candidates for delete
   using (
@@ -134,9 +149,12 @@ create table if not exists public.hr_candidate_charts (
 );
 
 create index if not exists hr_candidate_charts_candidate_idx on public.hr_candidate_charts(candidate_id);
+create unique index if not exists hr_candidate_charts_candidate_uidx
+  on public.hr_candidate_charts(candidate_id);
 
 alter table public.hr_candidate_charts enable row level security;
 
+drop policy if exists "hr_candidate_charts_select_own_company" on public.hr_candidate_charts;
 create policy "hr_candidate_charts_select_own_company"
   on public.hr_candidate_charts for select
   using (
@@ -146,6 +164,7 @@ create policy "hr_candidate_charts_select_own_company"
     )
   );
 
+drop policy if exists "hr_candidate_charts_insert_own_company" on public.hr_candidate_charts;
 create policy "hr_candidate_charts_insert_own_company"
   on public.hr_candidate_charts for insert
   with check (
@@ -155,6 +174,7 @@ create policy "hr_candidate_charts_insert_own_company"
     )
   );
 
+drop policy if exists "hr_candidate_charts_update_own_company" on public.hr_candidate_charts;
 create policy "hr_candidate_charts_update_own_company"
   on public.hr_candidate_charts for update
   using (
@@ -164,6 +184,7 @@ create policy "hr_candidate_charts_update_own_company"
     )
   );
 
+drop policy if exists "hr_candidate_charts_delete_own_company" on public.hr_candidate_charts;
 create policy "hr_candidate_charts_delete_own_company"
   on public.hr_candidate_charts for delete
   using (
@@ -204,6 +225,7 @@ create unique index if not exists hr_candidate_talent_maps_candidate_uidx
 
 alter table public.hr_candidate_talent_maps enable row level security;
 
+drop policy if exists "hr_candidate_talent_maps_select_own_company" on public.hr_candidate_talent_maps;
 create policy "hr_candidate_talent_maps_select_own_company"
   on public.hr_candidate_talent_maps for select
   using (
@@ -213,6 +235,7 @@ create policy "hr_candidate_talent_maps_select_own_company"
     )
   );
 
+drop policy if exists "hr_candidate_talent_maps_insert_own_company" on public.hr_candidate_talent_maps;
 create policy "hr_candidate_talent_maps_insert_own_company"
   on public.hr_candidate_talent_maps for insert
   with check (
@@ -222,6 +245,7 @@ create policy "hr_candidate_talent_maps_insert_own_company"
     )
   );
 
+drop policy if exists "hr_candidate_talent_maps_update_own_company" on public.hr_candidate_talent_maps;
 create policy "hr_candidate_talent_maps_update_own_company"
   on public.hr_candidate_talent_maps for update
   using (
@@ -231,6 +255,7 @@ create policy "hr_candidate_talent_maps_update_own_company"
     )
   );
 
+drop policy if exists "hr_candidate_talent_maps_delete_own_company" on public.hr_candidate_talent_maps;
 create policy "hr_candidate_talent_maps_delete_own_company"
   on public.hr_candidate_talent_maps for delete
   using (

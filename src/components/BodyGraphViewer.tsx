@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import CanonicalBodyGraph from "./bodygraph/CanonicalBodyGraph";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -101,91 +102,6 @@ const CENTER_LABELS: Record<string, string> = {
   "Solar Plexus": "Солнечное сплетение",
   Spleen: "Селезёнка",
   Root: "Корень",
-};
-
-const CENTER_SUBLABELS: Record<string, string> = {
-  Head: "Вдохновение",
-  Ajna: "Мышление",
-  Throat: "Голос",
-  G: "Направление",
-  Ego: "Воля",
-  Sacral: "Энергия",
-  "Solar Plexus": "Эмоции",
-  Spleen: "Инстинкт",
-  Root: "Давление",
-};
-
-// SVG positions for 9 centers (cx, cy)
-const CENTER_POS: Record<string, [number, number]> = {
-  Head: [160, 36],
-  Ajna: [160, 100],
-  Throat: [160, 165],
-  G: [115, 228],
-  Ego: [218, 202],
-  Sacral: [115, 298],
-  "Solar Plexus": [218, 272],
-  Spleen: [50, 260],
-  Root: [115, 368],
-};
-
-// All possible center-to-center connections (from CHANNEL_CENTER_MAP collapsed to unique pairs)
-const CENTER_CONNECTIONS: Array<[string, string]> = [
-  ["Head", "Ajna"],
-  ["Ajna", "Throat"],
-  ["Throat", "Spleen"],
-  ["Throat", "Sacral"],
-  ["Throat", "Ego"],
-  ["Throat", "Solar Plexus"],
-  ["Throat", "G"],
-  ["G", "Ego"],
-  ["G", "Spleen"],
-  ["G", "Sacral"],
-  ["Ego", "Solar Plexus"],
-  ["Ego", "Spleen"],
-  ["Sacral", "Solar Plexus"],
-  ["Sacral", "Spleen"],
-  ["Sacral", "Root"],
-  ["Root", "Solar Plexus"],
-  ["Root", "Spleen"],
-];
-
-const CHANNEL_CENTER_MAP: Record<string, [string, string]> = {
-  "64-47": ["Head", "Ajna"],
-  "61-24": ["Head", "Ajna"],
-  "63-4": ["Head", "Ajna"],
-  "17-62": ["Ajna", "Throat"],
-  "43-23": ["Ajna", "Throat"],
-  "11-56": ["Ajna", "Throat"],
-  "16-48": ["Throat", "Spleen"],
-  "20-57": ["Throat", "Spleen"],
-  "20-34": ["Throat", "Sacral"],
-  "45-21": ["Throat", "Ego"],
-  "12-22": ["Throat", "Solar Plexus"],
-  "35-36": ["Throat", "Solar Plexus"],
-  "31-7": ["Throat", "G"],
-  "8-1": ["Throat", "G"],
-  "33-13": ["Throat", "G"],
-  "10-20": ["Throat", "G"],
-  "25-51": ["G", "Ego"],
-  "10-57": ["G", "Spleen"],
-  "10-34": ["G", "Sacral"],
-  "2-14": ["G", "Sacral"],
-  "5-15": ["G", "Sacral"],
-  "29-46": ["G", "Sacral"],
-  "40-37": ["Ego", "Solar Plexus"],
-  "26-44": ["Ego", "Spleen"],
-  "59-6": ["Sacral", "Solar Plexus"],
-  "27-50": ["Sacral", "Spleen"],
-  "34-57": ["Sacral", "Spleen"],
-  "3-60": ["Sacral", "Root"],
-  "42-53": ["Sacral", "Root"],
-  "9-52": ["Sacral", "Root"],
-  "19-49": ["Root", "Solar Plexus"],
-  "39-55": ["Root", "Solar Plexus"],
-  "41-30": ["Root", "Solar Plexus"],
-  "18-58": ["Root", "Spleen"],
-  "28-38": ["Root", "Spleen"],
-  "32-54": ["Root", "Spleen"],
 };
 
 const PLANET_LABELS: Record<string, string> = {
@@ -348,114 +264,6 @@ function OutdatedWarning({
         )}
       </div>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// SVG Bodygraph
-// ---------------------------------------------------------------------------
-
-function BodygraphSVG({
-  normalizedChart,
-}: {
-  normalizedChart: NormalizedChart;
-}): JSX.Element {
-  const definedCenters = new Set(normalizedChart.definedCenters ?? []);
-  const activeChannels = new Set(normalizedChart.channelsShort ?? []);
-
-  // Determine which center pairs have active channels
-  const activeConnections = new Set<string>();
-  for (const ch of activeChannels) {
-    const mapped = CHANNEL_CENTER_MAP[ch];
-    if (mapped) {
-      const key = [mapped[0], mapped[1]].sort().join("|");
-      activeConnections.add(key);
-    }
-  }
-
-  const connectionKey = (a: string, b: string) => [a, b].sort().join("|");
-
-  return (
-    <svg
-      className="bodygraph-svg"
-      viewBox="0 0 320 420"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-label="Схема центров Human Design"
-      role="img"
-    >
-      {/* Inactive channel lines (background) */}
-      {CENTER_CONNECTIONS.map(([a, b]) => {
-        const posA = CENTER_POS[a];
-        const posB = CENTER_POS[b];
-        if (!posA || !posB) return null;
-        const key = connectionKey(a, b);
-        const isActive = activeConnections.has(key);
-        if (isActive) return null;
-        return (
-          <line
-            key={`line-bg-${a}-${b}`}
-            x1={posA[0]}
-            y1={posA[1]}
-            x2={posB[0]}
-            y2={posB[1]}
-            className="bodygraph-channel"
-          />
-        );
-      })}
-
-      {/* Active channel lines (foreground) */}
-      {CENTER_CONNECTIONS.map(([a, b]) => {
-        const posA = CENTER_POS[a];
-        const posB = CENTER_POS[b];
-        if (!posA || !posB) return null;
-        const key = connectionKey(a, b);
-        const isActive = activeConnections.has(key);
-        if (!isActive) return null;
-        return (
-          <line
-            key={`line-active-${a}-${b}`}
-            x1={posA[0]}
-            y1={posA[1]}
-            x2={posB[0]}
-            y2={posB[1]}
-            className="bodygraph-channel bodygraph-channel--active"
-          />
-        );
-      })}
-
-      {/* Center circles */}
-      {Object.entries(CENTER_POS).map(([name, [cx, cy]]) => {
-        const isDefined = definedCenters.has(name);
-        return (
-          <g key={name} className="bodygraph-center-group">
-            <circle
-              cx={cx}
-              cy={cy}
-              r={26}
-              className={`bodygraph-center ${isDefined ? "bodygraph-center--defined" : "bodygraph-center--open"}`}
-            />
-            <text
-              x={cx}
-              y={cy - 4}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              className="bodygraph-center-name"
-            >
-              {name === "Solar Plexus" ? "SP" : name}
-            </text>
-            <text
-              x={cx}
-              y={cy + 10}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              className="bodygraph-center-sublabel"
-            >
-              {CENTER_SUBLABELS[name]}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
   );
 }
 
@@ -807,12 +615,13 @@ export default function BodyGraphViewer({
       <div className="bodygraph-layout">
         {/* SVG bodygraph */}
         <div className="bodygraph-visual-card">
-          <BodygraphSVG normalizedChart={nc} />
+          <CanonicalBodyGraph normalizedChart={nc} />
 
-          {/* Center legend inside visual card */}
           <div className="bodygraph-svg-legend">
-            <span className="bodygraph-legend-item bodygraph-legend-item--defined">Определённый</span>
-            <span className="bodygraph-legend-item bodygraph-legend-item--open">Открытый</span>
+            <span className="bodygraph-legend-item bodygraph-legend-item--personality">Личность</span>
+            <span className="bodygraph-legend-item bodygraph-legend-item--design">Дизайн</span>
+            <span className="bodygraph-legend-item bodygraph-legend-item--both">Оба слоя</span>
+            <span className="bodygraph-legend-item bodygraph-legend-item--open-center">Открытый центр</span>
           </div>
         </div>
 

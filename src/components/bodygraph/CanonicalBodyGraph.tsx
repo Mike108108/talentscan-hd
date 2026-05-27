@@ -3,6 +3,7 @@ import type { NormalizedChart } from "../BodyGraphViewer";
 import {
   BODYGRAPH_VIEWBOX,
   CENTER_DEFINED_COLORS,
+  CENTER_DEFINED_STROKES,
   CENTER_ORDER,
   CENTER_SHAPES,
   CHANNELS,
@@ -22,7 +23,7 @@ import {
   type GateSource,
 } from "./bodygraphUtils";
 
-const GATE_RADIUS = 9;
+const GATE_RADIUS = 8;
 
 type CanonicalBodyGraphProps = {
   normalizedChart: NormalizedChart;
@@ -42,11 +43,7 @@ function CenterShapeElement({
 
   if (shape.type === "polygon") {
     const fill = defined ? CENTER_DEFINED_COLORS[centerKey] : undefined;
-    const stroke = defined
-      ? centerKey === "Ego"
-        ? "#94a3b8"
-        : CENTER_DEFINED_COLORS[centerKey]
-      : undefined;
+    const stroke = defined ? CENTER_DEFINED_STROKES[centerKey] : undefined;
     return (
       <polygon
         className={className}
@@ -58,7 +55,7 @@ function CenterShapeElement({
   }
 
   const fill = defined ? CENTER_DEFINED_COLORS[centerKey] : undefined;
-  const stroke = defined ? CENTER_DEFINED_COLORS[centerKey] : undefined;
+  const stroke = defined ? CENTER_DEFINED_STROKES[centerKey] : undefined;
   return (
     <rect
       className={className}
@@ -255,17 +252,11 @@ export default function CanonicalBodyGraph({
       <title>Бодиграф Human Design</title>
       <desc>Карта центров, ворот и каналов Human Design</desc>
 
-      <defs>
-        <filter id="bodygraph-center-shadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.12" />
-        </filter>
-      </defs>
-
       <g className="bodygraph-channels-bg">{channelElements.backgrounds}</g>
 
       <g className="bodygraph-channels-active">{channelElements.activeHalves}</g>
 
-      <g className="bodygraph-centers-layer" filter="url(#bodygraph-center-shadow)">
+      <g className="bodygraph-centers-layer">
         {CENTER_ORDER.map((centerKey) => (
           <CenterShapeElement
             key={centerKey}

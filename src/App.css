@@ -3801,11 +3801,11 @@
   background: #f8fafc;
   border: 1px solid rgba(148, 163, 184, 0.45);
   border-radius: 1rem;
-  padding: 1.25rem;
+  padding: 1.25rem 1rem 0.85rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.45rem;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
   color: #0f172a;
   overflow: hidden;
@@ -3813,7 +3813,7 @@
 
 .bodygraph-svg {
   width: 100%;
-  max-width: 380px;
+  max-width: 480px;
   height: auto;
   display: block;
 }
@@ -3835,17 +3835,25 @@
 }
 
 .bodygraph-channel-bg {
-  stroke: #d5dbe5;
-  stroke-width: 8;
-  stroke-linecap: round;
-  fill: none;
-  opacity: 0.9;
-}
-
-.bodygraph-channel-half {
+  stroke: #dce3ec;
   stroke-width: 6;
   stroke-linecap: round;
   fill: none;
+  opacity: 0.78;
+}
+
+.bodygraph-channel-half {
+  stroke-width: 5;
+  stroke-linecap: round;
+  fill: none;
+}
+
+.bodygraph-channel-half--both-under {
+  stroke-width: 6;
+}
+
+.bodygraph-channel-half--both-over {
+  stroke-width: 3.2;
 }
 
 .bodygraph-channel-half--personality {
@@ -3902,9 +3910,11 @@
 
 .bodygraph-svg-legend {
   display: flex;
-  gap: 0.85rem 1rem;
+  gap: 0.65rem 0.9rem;
   justify-content: center;
   flex-wrap: wrap;
+  margin-top: 0.1rem;
+  padding-bottom: 0.15rem;
 }
 
 .bodygraph-legend-item {
@@ -4693,25 +4703,27 @@
 
 .my-map-layer-bodygraph .bodygraph-visual-card {
   background: #f8fafc;
-  padding: 1.35rem 1.5rem;
+  padding: 1.1rem 0.85rem 0.65rem;
   min-height: min(58vh, 620px);
   justify-content: center;
+  gap: 0.35rem;
 }
 
 .my-map-layer-bodygraph .bodygraph-svg {
-  max-width: min(100%, 390px);
-  width: 100%;
+  width: min(100%, 500px);
+  max-width: 500px;
   height: auto;
 }
 
 @media (max-width: 640px) {
   .my-map-layer-bodygraph .bodygraph-visual-card {
     min-height: min(56vh, 560px);
-    padding: 1rem;
+    padding: 1rem 0.75rem 0.6rem;
   }
 
   .my-map-layer-bodygraph .bodygraph-svg {
-    max-width: min(100%, 330px);
+    width: min(100%, 340px);
+    max-width: 340px;
   }
 
   .my-map-layer-panel {

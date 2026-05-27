@@ -115,14 +115,12 @@ function ChannelHalf({
     return (
       <g key={`half-${channelKey}-${side}`}>
         <path
-          className="bodygraph-channel-half bodygraph-channel-half--design"
+          className="bodygraph-channel-half bodygraph-channel-half--design bodygraph-channel-half--both-under"
           d={d}
-          style={{ strokeWidth: 7 }}
         />
         <path
-          className="bodygraph-channel-half bodygraph-channel-half--personality"
+          className="bodygraph-channel-half bodygraph-channel-half--personality bodygraph-channel-half--both-over"
           d={d}
-          style={{ strokeWidth: 3.5 }}
         />
       </g>
     );

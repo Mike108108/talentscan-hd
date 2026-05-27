@@ -149,20 +149,20 @@ export const handler: Handler = async (
     event.headers["authorization"] ?? event.headers["Authorization"] ?? "";
   const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
   if (!bearerMatch) {
-    return jsonResponse(401, { error: "Требуется вход в личный кабинет.", source: "auth" });
+    return jsonResponse(401, { error: "Требуется вход.", source: "auth" });
   }
   const token = bearerMatch[1];
   try {
     const valid = await verifySupabaseToken(token);
     if (!valid) {
-      return jsonResponse(401, { error: "Требуется вход в личный кабинет.", source: "auth" });
+      return jsonResponse(401, { error: "Требуется вход.", source: "auth" });
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     if (msg === "supabase_not_configured") {
       return jsonResponse(500, { error: "Supabase не настроен.", source: "config" });
     }
-    return jsonResponse(401, { error: "Требуется вход в личный кабинет.", source: "auth" });
+    return jsonResponse(401, { error: "Требуется вход.", source: "auth" });
   }
 
   // ---- Parse query ---------------------------------------------------------

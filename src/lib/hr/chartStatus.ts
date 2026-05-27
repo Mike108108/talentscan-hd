@@ -9,11 +9,7 @@ export const CHART_STATUS_LABELS: Record<CandidateChartStatus, string> = {
   calculation_error: "Ошибка расчёта",
 };
 
-export function deriveChartStatus(candidate: Partial<HrCandidate>): CandidateChartStatus {
-  if (candidate.chart_status === "calculating") return "calculating";
-  if (candidate.chart_status === "calculated") return "calculated";
-  if (candidate.chart_status === "calculation_error") return "calculation_error";
-
+function statusFromBirthFields(candidate: Partial<HrCandidate>): CandidateChartStatus {
   const hasName = Boolean(candidate.name?.trim());
   const hasDate = Boolean(candidate.birth_date);
   const hasTime = Boolean(candidate.birth_time);
@@ -27,6 +23,19 @@ export function deriveChartStatus(candidate: Partial<HrCandidate>): CandidateCha
   if (!hasTime) return "birth_data_incomplete";
   if (!hasCoords) return "birth_data_incomplete";
   return "ready_to_calculate";
+}
+
+export function deriveChartStatus(candidate: Partial<HrCandidate>): CandidateChartStatus {
+  if (candidate.chart_status === "calculating") return "calculating";
+  if (candidate.chart_status === "calculation_error") return "calculation_error";
+
+  const fromFields = statusFromBirthFields(candidate);
+
+  if (candidate.chart_status === "calculated") {
+    return fromFields === "ready_to_calculate" ? "calculated" : fromFields;
+  }
+
+  return fromFields;
 }
 
 export function canCalculateChart(candidate: Partial<HrCandidate>): boolean {

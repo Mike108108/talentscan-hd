@@ -8,6 +8,7 @@ import type {
   TalentMapMetric,
   TalentMapRole,
 } from "../../lib/hr/types";
+import { formulaToSafeHtml } from "../../lib/safeHtml";
 import "../../hr.css";
 
 const SECTIONS = [
@@ -129,7 +130,7 @@ export default function CandidateTalentMapPage() {
     );
   }
 
-  const formulaHtml = (map.formula ?? "").replace(/<em>/g, "<em>").replace(/<\/em>/g, "</em>");
+  const formulaHtml = map.formula ? formulaToSafeHtml(map.formula) : "";
 
   return (
     <div className="hr-root hr-tm-page">

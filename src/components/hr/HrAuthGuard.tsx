@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { fetchHrProfile } from "../../lib/hr/api";
 
@@ -41,6 +41,12 @@ export default function HrAuthGuard({ children, requireProfile = true }: Props) 
     };
   }, [navigate, requireProfile]);
 
+  useEffect(() => {
+    if (!loading && hasSession && requireProfile && !hasProfile) {
+      navigate("/hr/setup", { replace: true });
+    }
+  }, [loading, hasSession, requireProfile, hasProfile, navigate]);
+
   if (loading) {
     return (
       <div className="hr-root hr-fork">
@@ -51,28 +57,7 @@ export default function HrAuthGuard({ children, requireProfile = true }: Props) 
 
   if (!hasSession) return null;
 
-  if (requireProfile && !hasProfile) {
-    return (
-      <div className="hr-root hr-fork">
-        <div className="hr-fork-inner">
-          <div className="hr-card" style={{ maxWidth: 520, margin: "0 auto", textAlign: "center" }}>
-            <h2 style={{ marginTop: 0 }}>HR-доступ не активирован</h2>
-            <p style={{ color: "var(--hr-muted)" }}>
-              У этого аккаунта нет HR-профиля. Создайте HR-кабинет или войдите с другим email.
-            </p>
-            <div className="hr-fork-actions" style={{ justifyContent: "center", marginTop: 20 }}>
-              <Link to="/hr/signup" className="hr-btn">
-                Создать HR-кабинет
-              </Link>
-              <Link to="/hr/login" className="hr-btn hr-btn--ghost">
-                Другой вход
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (requireProfile && !hasProfile) return null;
 
   return <>{children}</>;
 }

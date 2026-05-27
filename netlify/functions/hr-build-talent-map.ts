@@ -1,6 +1,6 @@
 /**
  * Deterministic HR talent map builder from normalized HD chart.
- * Server-side copy — keep in sync with src/lib/hr/buildCandidateTalentMap.ts
+ * Raw HD data stays in hr_candidate_charts; employer-facing copy uses HR language.
  */
 
 import type { NormalizedChart } from "./hd-normalize";
@@ -23,22 +23,28 @@ export type TalentMapPayload = {
   final_recommendation: string;
 };
 
-function pickWorkFormat(type: string, profile: string): string {
-  const t = type.toLowerCase();
-  if (t.includes("generator") || t.includes("генератор")) {
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function pickWorkFormat(chart: NormalizedChart): string {
+  const type = (chart.type ?? "").toLowerCase();
+  if (type.includes("generator") || type.includes("генератор")) {
     return "Ритмичная работа с видимым результатом и автономией в задачах";
   }
-  if (t.includes("projector") || t.includes("проектор")) {
+  if (type.includes("projector") || type.includes("проектор")) {
     return "Роль эксперта/координатора с доступом к людям и контексту";
   }
-  if (t.includes("manifestor") || t.includes("манифестор")) {
+  if (type.includes("manifestor") || type.includes("манифестор")) {
     return "Инициативные проекты с полномочиями запускать изменения";
   }
-  if (t.includes("reflector") || t.includes("рефлектор")) {
+  if (type.includes("reflector") || type.includes("рефлектор")) {
     return "Гибкий формат с временем на оценку среды и команды";
-  }
-  if (profile && profile !== "—") {
-    return `Формат, согласованный с профилем ${profile}: устойчивый темп и понятные ожидания`;
   }
   return "Смешанный формат: чередование глубокой работы и коротких синхронизаций";
 }
@@ -46,13 +52,13 @@ function pickWorkFormat(type: string, profile: string): string {
 function pickKeyTalent(chart: NormalizedChart): string {
   const channels = chart.channelsShort.filter(Boolean);
   if (channels.length > 0) {
-    return `Сильная связка каналов (${channels.slice(0, 2).join(", ")}): устойчивый паттерн действий`;
+    return "Устойчивый паттерн действий в связанных зонах ответственности — опора для роли";
   }
   const defined = chart.definedCenters.filter((c) => c && c !== "—");
   if (defined.length > 0) {
-    return `Выраженные центры (${defined.slice(0, 2).join(", ")}): опора на внутреннюю ясность`;
+    return "Внутренняя ясность в ключевых рабочих ситуациях при понятных ожиданиях";
   }
-  return "Гибкость к разным задачам при ясных рамках и обратной связи";
+  return "Гибкость к разным задачам при ясных рамках и регулярной обратной связи";
 }
 
 function pickMainRisk(chart: NormalizedChart): string {
@@ -61,9 +67,29 @@ function pickMainRisk(chart: NormalizedChart): string {
     return "Чувствительность к шуму среды и давлению чужих ожиданий — нужны границы";
   }
   if (chart.notSelfTheme && chart.notSelfTheme !== "—") {
-    return `Риск «не-себя»: ${chart.notSelfTheme} при перегрузе и спешке`;
+    return "Потеря качества решений при перегрузе, спешке и неясных приоритетах";
   }
   return "Перегруз многозадачностью без приоритизации — падает качество решений";
+}
+
+function dataCompleteness(chart: NormalizedChart): string {
+  const parts = [
+    chart.type !== "—",
+    chart.profile !== "—",
+    Boolean(chart.birthDateUtc),
+    chart.channelsShort.length > 0,
+    chart.definedCenters.some((c) => c && c !== "—"),
+  ].filter(Boolean).length;
+  if (parts >= 5) return "высокая";
+  if (parts >= 3) return "средняя";
+  return "базовая";
+}
+
+function hypothesisConfidence(chart: NormalizedChart): string {
+  const def = chart.definition && chart.definition !== "—" ? chart.definition : "";
+  if (def.toLowerCase().includes("single") || def.includes("един")) return "средняя–высокая";
+  if (def) return "средняя";
+  return "предварительная";
 }
 
 export function buildCandidateTalentMap(
@@ -71,79 +97,76 @@ export function buildCandidateTalentMap(
   chart: NormalizedChart,
   vacancyTitle?: string,
 ): TalentMapPayload {
-  const name = candidateName.trim() || "Кандидат";
-  const type = chart.type !== "—" ? chart.type : "тип уточняется";
-  const profile = chart.profile !== "—" ? chart.profile : "";
-  const strategy = chart.strategy !== "—" ? chart.strategy : "";
-  const authority = chart.authority !== "—" ? chart.authority : "";
+  const name = escapeHtml(candidateName.trim() || "Кандидат");
+  const vacancyBit = vacancyTitle?.trim()
+    ? ` для роли «${escapeHtml(vacancyTitle.trim())}»`
+    : "";
 
-  const best_work_format = pickWorkFormat(type, profile);
+  const best_work_format = pickWorkFormat(chart);
   const key_talent = pickKeyTalent(chart);
   const main_risk = pickMainRisk(chart);
 
-  const vacancyBit = vacancyTitle?.trim()
-    ? ` для роли «${vacancyTitle.trim()}»`
-    : "";
-
   const summary =
-    `${name}: предварительная карта по Human Design (${type}` +
-    (profile ? `, профиль ${profile}` : "") +
-    `). Это гипотезы${vacancyBit}, а не финальное решение о найме.`;
+    `${name}: предварительная карта талантов по данным рождения` +
+    `${vacancyBit}. Это рабочие гипотезы для HR, а не финальное решение о найме.`;
 
   const formula =
     `${name} сильнее раскрывается там, где есть <em>ясная зона ответственности</em>, ` +
     `<strong>регулярная обратная связь</strong> и возможность работать в ритме, ` +
-    `близком к ${best_work_format.toLowerCase()}.`;
+    `близком к ${escapeHtml(best_work_format.toLowerCase())}.`;
 
   const metrics = [
-    { label: "Тип", value: type, hint: "базовый паттерн энергии" },
-    { label: "Профиль", value: profile || "—", hint: "стиль взаимодействия" },
-    { label: "Авторитет", value: authority || "—", hint: "как принимает решения" },
+    { label: "Полнота данных", value: dataCompleteness(chart), hint: "дата, время, место" },
     {
-      label: "Определённость",
-      value: chart.definition && chart.definition !== "—" ? chart.definition : "—",
-      hint: "связность центров",
+      label: "Уверенность гипотезы",
+      value: hypothesisConfidence(chart),
+      hint: "до интервью и кейсов",
+    },
+    { label: "Рабочий формат", value: best_work_format.slice(0, 48) + (best_work_format.length > 48 ? "…" : ""), hint: "предварительно" },
+    {
+      label: "Что проверить",
+      value: "кейс + встреча",
+      hint: "структурированная проверка",
     },
   ];
 
   const talents = [
+    { title: "Ключевой талант", body: key_talent },
     {
-      title: "Ключевой талант",
-      body: key_talent,
+      title: "Стиль взаимодействия",
+      body:
+        chart.strategy !== "—" && chart.strategy
+          ? `Предпочтительный ритм: ${chart.strategy}. Уточнить на испытательном периоде.`
+          : "Уточнить через рабочие ситуации и обратную связь на испытательном периоде.",
     },
     {
-      title: "Стратегия",
-      body: strategy || "Уточнить через рабочие ситуации и обратную связь на испытательном периоде.",
-    },
-    {
-      title: "Каналы",
+      title: "Зоны силы в задачах",
       body:
         chart.channelsShort.length > 0
-          ? chart.channelsShort.join("; ")
-          : "Каналы требуют дополнительной проверки в реальных задачах.",
+          ? "Есть устойчивые связки компетенций — проверить на реальных задачах роли."
+          : "Сильные стороны проявятся в кейсах — зафиксировать на интервью.",
     },
   ];
 
   const strengths = [
     {
       title: "Сильные стороны",
-      body: `Опора на ${authority || "внутренний ритм"} при принятии решений; ` +
-        `определённые центры: ${chart.definedCenters.slice(0, 4).join(", ") || "уточняются"}.`,
+      body:
+        chart.authority !== "—" && chart.authority
+          ? `Опора на внутренний ритм решений; предпочтительно давать время на обдумывание.`
+          : "Стабильность при понятных критериях успеха и предсказуемом темпе.",
     },
-    {
-      title: "Рабочий формат",
-      body: best_work_format,
-    },
+    { title: "Рабочий формат", body: best_work_format },
   ];
 
   const risks = [
     { title: "Главный риск", body: main_risk },
     {
-      title: "Открытые центры",
+      title: "Условия раскрытия",
       body:
         chart.openCenters.length > 0
-          ? `Могут усиливать впечатления от среды: ${chart.openCenters.slice(0, 4).join(", ")}.`
-          : "Среда и темп команды — ключевые факторы устойчивости.",
+          ? "Среда и темп команды сильно влияют на продуктивность — проверить на стажировке."
+          : "Ключевые факторы: ясные приоритеты, уважение к границам, предсказуемый ритм встреч.",
     },
   ];
 
@@ -171,7 +194,7 @@ export function buildCandidateTalentMap(
     {
       role: vacancyTitle?.trim() || "Целевая роль",
       fit: "предварительно",
-      note: `Сопоставить с типом ${type} и форматом: ${best_work_format.slice(0, 80)}…`,
+      note: `Сопоставить с рабочим форматом: ${best_work_format.slice(0, 80)}${best_work_format.length > 80 ? "…" : ""}`,
     },
     {
       role: "Смежные роли",
@@ -185,7 +208,7 @@ export function buildCandidateTalentMap(
       title: "Среда",
       body:
         chart.environment && chart.environment !== "—"
-          ? `По карте: ${chart.environment}. Подтвердить на интервью и стажировке.`
+          ? `Предпочтительная среда по карте требует проверки на интервью и стажировке.`
           : "Спокойная среда с уважением к границам и предсказуемым ритмом встреч.",
     },
     {
@@ -205,7 +228,7 @@ export function buildCandidateTalentMap(
     },
     {
       title: "Проверка 3",
-      body: "Референсы + уточнение времени рождения, если есть сомнения в точности карты.",
+      body: "Референсы + уточнение времени рождения, если есть сомнения в точности данных.",
     },
   ];
 

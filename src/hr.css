@@ -644,6 +644,123 @@
   --hr-tm-max: 1180px;
 }
 
+.hr-tm-page--compact {
+  max-width: var(--hr-tm-max);
+  margin: 0 auto;
+}
+
+.hr-tm-header {
+  padding: 4px 0 12px;
+}
+
+.hr-tm-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.hr-tm-back {
+  color: var(--hr-muted);
+  text-decoration: none;
+}
+
+.hr-tm-back:hover {
+  color: var(--hr-text);
+}
+
+.hr-tm-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.hr-tm-title {
+  margin: 0;
+  letter-spacing: -0.03em;
+  font-size: clamp(1.35rem, 2.4vw, 1.85rem);
+}
+
+.hr-tm-subtitle {
+  margin-top: 6px;
+  color: var(--hr-muted);
+  line-height: 1.4;
+}
+
+.hr-tm-lede {
+  margin: 10px 0 0;
+  color: var(--hr-muted);
+  line-height: 1.55;
+  max-width: 980px;
+}
+
+.hr-tm-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.hr-tm-main-takeaway {
+  margin-top: 12px;
+}
+
+.hr-tm-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 90;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--hr-line);
+  background: var(--hr-panel);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.hr-tm-tab {
+  flex: 0 0 auto;
+  padding: 0.5rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--hr-line);
+  background: var(--hr-panel-2);
+  color: var(--hr-muted);
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+
+.hr-tm-tab:hover {
+  color: var(--hr-text);
+}
+
+.hr-tm-tab--active {
+  color: var(--hr-text);
+  border-color: rgba(16, 212, 142, 0.5);
+  box-shadow: 0 0 0 1px rgba(16, 212, 142, 0.18) inset;
+}
+
+.hr-tm-panel {
+  padding-top: 12px;
+}
+
+.hr-tm-next-steps {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hr-line);
+}
+
+.hr-tm-next-steps-title {
+  margin: 0 0 6px;
+  color: var(--hr-soft);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
 .hr-tm-hero {
   padding: 1.5rem 0 1.25rem;
 }
@@ -814,6 +931,7 @@
   .hr-grid-4,
   .hr-layout,
   .hr-tm-identity-row,
+  .hr-tm-summary-grid,
   .hr-tm-metric-row {
     grid-template-columns: 1fr;
   }

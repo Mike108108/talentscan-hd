@@ -49,6 +49,7 @@ export default function HrCandidateDetailPage() {
   if (!candidate) return <p>Загрузка…</p>;
 
   const status = deriveChartStatus(candidate);
+  const primaryVacancy = vacancies.length === 1 ? vacancies[0] : null;
 
   return (
     <div>
@@ -148,20 +149,37 @@ export default function HrCandidateDetailPage() {
         >
           Дополнить данные
         </Link>
+        {primaryVacancy && (
+          <Link to={`/hr/company/${companyId}/vacancies/${primaryVacancy.id}`} className="hr-btn hr-btn--ghost">
+            К вакансии
+          </Link>
+        )}
         {status === "ready_to_calculate" && (
           <button type="button" className="hr-btn" disabled={calculating} onClick={onCalculate}>
             {calculating ? "Считаем…" : "Рассчитать карту"}
           </button>
         )}
-        <button type="button" className="hr-btn hr-btn--secondary" disabled title="Скоро">
-          Оценить под вакансию (следующий этап)
-        </button>
-        <button type="button" className="hr-btn hr-btn--secondary" disabled title="Скоро">
-          Сравнить — позже
-        </button>
-        <button type="button" className="hr-btn hr-btn--secondary" disabled title="Скоро">
-          TeamScan — позже
-        </button>
+      </div>
+
+      <div className="hr-card" style={{ marginTop: 14 }}>
+        <h3 style={{ marginTop: 0 }}>Следующие этапы</h3>
+        <p style={{ margin: "6px 0 0", color: "var(--hr-muted)" }}>
+          Эти функции появятся позже — сейчас фокус на карте талантов, данных кандидата и контексте вакансии.
+        </p>
+        <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          <div className="hr-pill" style={{ justifyContent: "space-between" }}>
+            <span>Оценка под вакансию</span>
+            <span style={{ color: "var(--hr-muted)" }}>скоро</span>
+          </div>
+          <div className="hr-pill" style={{ justifyContent: "space-between" }}>
+            <span>Сравнение кандидатов</span>
+            <span style={{ color: "var(--hr-muted)" }}>скоро</span>
+          </div>
+          <div className="hr-pill" style={{ justifyContent: "space-between" }}>
+            <span>TeamScan</span>
+            <span style={{ color: "var(--hr-muted)" }}>скоро</span>
+          </div>
+        </div>
       </div>
     </div>
   );

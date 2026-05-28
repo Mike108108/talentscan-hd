@@ -3,21 +3,27 @@ import { Link, useParams } from "react-router-dom";
 import {
   calculateCandidateChart,
   fetchCandidate,
+  fetchCandidateVacancies,
   fetchTalentMap,
 } from "../../lib/hr/api";
 import { CHART_STATUS_LABELS, deriveChartStatus } from "../../lib/hr/chartStatus";
-import type { HrCandidate, HrCandidateTalentMap } from "../../lib/hr/types";
+import type { HrCandidate, HrCandidateTalentMap, HrVacancy } from "../../lib/hr/types";
 
 export default function HrCandidateDetailPage() {
   const { companyId, candidateId } = useParams<{ companyId: string; candidateId: string }>();
   const [candidate, setCandidate] = useState<HrCandidate | null>(null);
   const [talentMap, setTalentMap] = useState<HrCandidateTalentMap | null>(null);
+  const [vacancies, setVacancies] = useState<HrVacancy[]>([]);
   const [calculating, setCalculating] = useState(false);
 
   const load = async () => {
     if (!companyId || !candidateId) return;
-    const c = await fetchCandidate(companyId, candidateId);
+    const [c, links] = await Promise.all([
+      fetchCandidate(companyId, candidateId),
+      fetchCandidateVacancies(companyId, candidateId),
+    ]);
     setCandidate(c);
+    setVacancies((links ?? []).map((l: any) => l.vacancy).filter(Boolean) as HrVacancy[]);
     if (c?.chart_status === "calculated") {
       setTalentMap((await fetchTalentMap(companyId, candidateId)) as HrCandidateTalentMap | null);
     }
@@ -79,9 +85,52 @@ export default function HrCandidateDetailPage() {
           <b>{status === "calculated" ? "Достаточно для карты" : "Требуется уточнение"}</b>
         </div>
         <div className="hr-card">
-          <p style={{ margin: 0, color: "var(--hr-muted)" }}>Уверенность предварительной оценки</p>
-          <b>{status === "calculated" ? "Средняя (MVP)" : "—"}</b>
+          <p style={{ margin: 0, color: "var(--hr-muted)" }}>Вакансии кандидата</p>
+          {vacancies.length === 0 ? (
+            <b>Кандидат пока не привязан к вакансии</b>
+          ) : (
+            <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {vacancies.map((v) => (
+                <Link
+                  key={v.id}
+                  to={`/hr/company/${companyId}/vacancies/${v.id}`}
+                  className="hr-btn hr-btn--ghost"
+                >
+                  {v.title}
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
+      </div>
+
+      <div className="hr-card" style={{ marginBottom: 14 }}>
+        <h3 style={{ marginTop: 0 }}>Вакансии кандидата</h3>
+        {vacancies.length === 0 ? (
+          <p style={{ margin: 0, color: "var(--hr-muted)" }}>Кандидат пока не привязан к вакансии.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            {vacancies.map((v) => (
+              <div key={v.id} className="hr-card" style={{ background: "rgba(255,255,255,0.02)" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between" }}>
+                  <div>
+                    <h4 style={{ margin: "0 0 4px" }}>{v.title}</h4>
+                    <p style={{ margin: 0, color: "var(--hr-muted)" }}>
+                      Статус: <strong>{v.status}</strong>
+                      {v.department ? <> · Отдел: {v.department}</> : null}
+                      {v.work_format ? <> · Формат: {v.work_format}</> : null}
+                    </p>
+                  </div>
+                  <div className="hr-fork-actions">
+                    <Link to={`/hr/company/${companyId}/vacancies/${v.id}`} className="hr-btn">
+                      Открыть вакансию
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="hr-fork-actions">
@@ -105,7 +154,7 @@ export default function HrCandidateDetailPage() {
           </button>
         )}
         <button type="button" className="hr-btn hr-btn--secondary" disabled title="Скоро">
-          Оценить под вакансию — позже
+          Оценить под вакансию (следующий этап)
         </button>
         <button type="button" className="hr-btn hr-btn--secondary" disabled title="Скоро">
           Сравнить — позже

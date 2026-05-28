@@ -89,6 +89,56 @@ export type HrCandidateTalentMap = {
   updated_at: string;
 };
 
+export type HrVacancyStatus = "draft" | "active" | "paused" | "closed";
+
+export type HrVacancy = {
+  id: string;
+  company_id: string;
+  created_by_user_id: string | null;
+  title: string;
+  status: HrVacancyStatus;
+  source: string;
+  department: string | null;
+  employment_format: string | null;
+  work_format: string | null;
+  location: string | null;
+  schedule: string | null;
+  salary_range: string | null;
+  role_description: string | null;
+  responsibilities: string | null;
+  kpi: string | null;
+  must_have: string | null;
+  nice_to_have: string | null;
+  working_conditions: string | null;
+  manager_context: string | null;
+  team_context: string | null;
+  hiring_priorities: string | null;
+  risks_to_check: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrVacancyCandidateStage = "new" | "screening" | "interview" | "offer" | "hired" | "rejected";
+export type HrVacancyCandidateStatus = "active" | "archived";
+
+export type HrVacancyCandidate = {
+  id: string;
+  company_id: string;
+  vacancy_id: string;
+  candidate_id: string;
+  stage: string;
+  status: string;
+  source: string;
+  recruiter_comment: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HrVacancyCandidateWithCandidate = HrVacancyCandidate & {
+  candidate: HrCandidate;
+  talent_map?: Pick<HrCandidateTalentMap, "id" | "report_status" | "key_talent" | "main_risk"> | null;
+};
+
 export type GeocodeSuggestion = {
   id: string;
   label: string;
@@ -112,4 +162,25 @@ export type CandidateFormData = {
   birth_place_lat: number | null;
   birth_place_lon: number | null;
   birth_timezone: string;
+};
+
+export type VacancyFormData = {
+  title: string;
+  status: HrVacancyStatus;
+  department: string;
+  employment_format: string;
+  work_format: string;
+  location: string;
+  schedule: string;
+  salary_range: string;
+  role_description: string;
+  responsibilities: string;
+  kpi: string;
+  must_have: string;
+  nice_to_have: string;
+  working_conditions: string;
+  manager_context: string;
+  team_context: string;
+  hiring_priorities: string;
+  risks_to_check: string;
 };

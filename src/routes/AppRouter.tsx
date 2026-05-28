@@ -14,6 +14,11 @@ import HrLandingPage from "../pages/hr/HrLandingPage";
 import HrLoginPage from "../pages/hr/HrLoginPage";
 import HrSignupPage from "../pages/hr/HrSignupPage";
 import HrSetupPage from "../pages/hr/HrSetupPage";
+import HrVacanciesPage from "../pages/hr/HrVacanciesPage";
+import HrVacancyDetailPage from "../pages/hr/HrVacancyDetailPage";
+import HrVacancyFormPage from "../pages/hr/HrVacancyFormPage";
+import HrReportsPage from "../pages/hr/HrReportsPage";
+import HrCompanyDataPage from "../pages/hr/HrCompanyDataPage";
 
 export default function AppRouter() {
   return (
@@ -47,6 +52,12 @@ export default function AppRouter() {
           }
         >
           <Route index element={<HrCompanyOverviewPage />} />
+          <Route path="vacancies" element={<HrVacanciesPage />} />
+          <Route path="vacancies/new" element={<HrVacancyFormPage />} />
+          <Route path="vacancies/:vacancyId" element={<HrVacancyDetailPage />} />
+          <Route path="vacancies/:vacancyId/edit" element={<HrVacancyFormPage />} />
+          <Route path="reports" element={<HrReportsPage />} />
+          <Route path="company" element={<HrCompanyDataPage />} />
           <Route path="candidates" element={<HrCandidatesPage />} />
           <Route path="candidates/new" element={<HrCandidateFormPage />} />
           <Route path="candidates/:candidateId/edit" element={<HrCandidateFormPage />} />

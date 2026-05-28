@@ -4,10 +4,10 @@ import "../../hr.css";
 
 const NAV = [
   { path: "", label: "Обзор", hint: "Главный экран", enabled: true },
-  { path: "candidates", label: "Кандидаты", hint: "Карты талантов", enabled: true },
-  { path: "people", label: "Люди", hint: "Скоро", enabled: false },
-  { path: "vacancies", label: "Вакансии", hint: "Скоро", enabled: false },
-  { path: "data", label: "Данные", hint: "Скоро", enabled: false },
+  { path: "vacancies", label: "Вакансии", hint: "Роли и позиции", enabled: true },
+  { path: "candidates", label: "Кандидаты", hint: "Пул кандидатов", enabled: true },
+  { path: "reports", label: "Разборы", hint: "Карты талантов", enabled: true },
+  { path: "company", label: "Моя компания", hint: "Контекст и данные", enabled: true },
 ];
 
 const ROADMAP = ["Сравнения", "TeamScan", "Интервью", "Адаптация"];

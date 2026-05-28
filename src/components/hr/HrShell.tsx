@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import "../../hr.css";
+import ThemeToggleSwitch from "../shell/ThemeToggleSwitch";
 
 const NAV = [
   { path: "", label: "Обзор", hint: "Главный экран", enabled: true },
@@ -10,13 +11,19 @@ const NAV = [
   { path: "company", label: "Моя компания", hint: "Контекст и данные", enabled: true },
 ];
 
-const ROADMAP = ["Сравнения", "TeamScan", "Интервью", "Адаптация"];
-
 export default function HrShell() {
   const { companyId } = useParams<{ companyId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
   const base = `/hr/company/${companyId}`;
+
+  const savedTheme = localStorage.getItem("talentscan-theme");
+  const theme: "dark" | "light" = savedTheme === "light" ? "light" : "dark";
+  const toggleTheme = () => {
+    const next: "dark" | "light" = theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem("talentscan-theme", next);
+  };
 
   const signOut = async () => {
     await supabase?.auth.signOut();
@@ -30,20 +37,18 @@ export default function HrShell() {
       <div className="hr-shell">
         <aside className="hr-sidebar" aria-label="HR-меню">
           <div className="hr-sidebar-brand">
-            <span className="hr-sidebar-logo">TalentScan</span>
-            <span className="hr-sidebar-tagline">Кабинет</span>
-          </div>
-
-          <div className="hr-workspace-switch">
-            <span className="hr-workspace-label">Рабочее пространство</span>
-            <div className="hr-workspace-modes">
-              <span className="hr-workspace-mode hr-workspace-mode--active" aria-current="true">
-                HR
-              </span>
-              <Link to="/app" className="hr-workspace-mode">
-                Личный
-              </Link>
+            <div className="hr-sidebar-brand-row">
+              <span className="hr-sidebar-logo">TalentScan</span>
+              <div className="ts-cabinet-switch" aria-label="Переключение кабинета">
+                <Link to="/app" className="ts-cabinet-switch-btn" aria-label="Перейти в личный кабинет">
+                  ЛК
+                </Link>
+                <span className="ts-cabinet-switch-btn ts-cabinet-switch-btn--active" aria-current="true">
+                  HR
+                </span>
+              </div>
             </div>
+            <span className="hr-sidebar-tagline">Рабочий кабинет работодателя</span>
           </div>
 
           <div className="hr-sidebar-main">
@@ -76,39 +81,45 @@ export default function HrShell() {
             </nav>
           </div>
 
-          <div className="hr-sidebar-roadmap">
-            <p className="hr-sidebar-roadmap-title">Дорожная карта</p>
-            {ROADMAP.map((label) => (
-              <div key={label} className="hr-sidebar-roadmap-item">
-                {label}
-              </div>
-            ))}
-          </div>
+          <footer className="hr-sidebar-footer" aria-label="Настройки">
+            <Link to={`${base}/company`} className="hr-sidebar-footer-btn">
+              <span className="hr-sidebar-footer-icon" aria-hidden="true">
+                ⚙
+              </span>
+              <span className="hr-sidebar-footer-text">
+                <span className="hr-sidebar-footer-label">Настройки</span>
+                <span className="hr-sidebar-footer-meta">Компания</span>
+              </span>
+            </Link>
+            <div className="hr-sidebar-footer-row">
+              <span className="hr-sidebar-footer-icon" aria-hidden="true">
+                {theme === "dark" ? "☀" : "☾"}
+              </span>
+              <span className="hr-sidebar-footer-label">Тема</span>
+              <ThemeToggleSwitch theme={theme} onToggle={toggleTheme} className="ts-sidebar-footer-switch" />
+            </div>
+            <button
+              type="button"
+              className="hr-sidebar-footer-btn hr-sidebar-footer-btn--danger"
+              onClick={signOut}
+            >
+              <span className="hr-sidebar-footer-icon" aria-hidden="true">
+                ⎋
+              </span>
+              <span className="hr-sidebar-footer-label">Выйти</span>
+            </button>
+          </footer>
         </aside>
 
         <div className="hr-app-area">
           <header className="hr-topbar">
-            <div className="hr-brand">
-              <div className="hr-logo" aria-hidden />
-              <div>
-                <h1>TalentScan HR</h1>
-                <p>Рабочий кабинет работодателя</p>
-              </div>
-            </div>
             <div className="hr-topbar-actions">
-              <Link to="/app" className="hr-btn hr-btn--ghost">
-                Личный кабинет
+              <Link to={`${base}/candidates/new`} className="hr-btn">
+                + Кандидат
               </Link>
-              <Link to="/hr/companies" className="hr-btn hr-btn--ghost">
-                Компании
+              <Link to={`${base}/vacancies/new`} className="hr-btn hr-btn--ghost">
+                + Вакансия
               </Link>
-              <span className="hr-pill">
-                <span className="hr-dot" />
-                HR-доступ
-              </span>
-              <button type="button" className="hr-btn hr-btn--secondary" onClick={signOut}>
-                Выйти
-              </button>
             </div>
           </header>
 

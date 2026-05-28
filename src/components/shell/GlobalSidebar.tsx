@@ -1,4 +1,6 @@
 import { MAIN_NAV_ITEMS, type AppSection, type MainNavSection } from "./shellTypes";
+import { Link, useLocation } from "react-router-dom";
+import ThemeToggleSwitch from "./ThemeToggleSwitch";
 
 type GlobalSidebarProps = {
   activeSection: AppSection;
@@ -31,12 +33,38 @@ export default function GlobalSidebar({
 }: GlobalSidebarProps) {
   const sidebarActive = getSidebarActiveId(activeSection);
   const profileLabel = displayName || userEmail || "Профиль";
+  const location = useLocation();
+  const inHr = location.pathname.startsWith("/hr");
+  const cabinetStatus = inHr ? "HR-кабинет" : "Личный кабинет";
 
   return (
     <aside className={`ts-sidebar ${className}`.trim()} aria-label="Главное меню">
       <div className="ts-sidebar-brand">
-        <span className="ts-sidebar-logo">TalentScan</span>
-        <span className="ts-sidebar-tagline">Кабинет</span>
+        <div className="ts-sidebar-brand-row">
+          <span className="ts-sidebar-logo">TalentScan</span>
+          <div className="ts-cabinet-switch" aria-label="Переключение кабинета">
+            {inHr ? (
+              <>
+                <Link to="/app" className="ts-cabinet-switch-btn" aria-label="Перейти в личный кабинет">
+                  ЛК
+                </Link>
+                <span className="ts-cabinet-switch-btn ts-cabinet-switch-btn--active" aria-current="true">
+                  HR
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="ts-cabinet-switch-btn ts-cabinet-switch-btn--active" aria-current="true">
+                  ЛК
+                </span>
+                <Link to="/hr/companies" className="ts-cabinet-switch-btn" aria-label="Перейти в HR-кабинет">
+                  HR
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+        <span className="ts-sidebar-tagline">{cabinetStatus}</span>
       </div>
 
       <div className="ts-sidebar-main">
@@ -78,21 +106,13 @@ export default function GlobalSidebar({
             <span className="ts-sidebar-footer-meta">{profileLabel}</span>
           </span>
         </button>
-        <button
-          type="button"
-          className="ts-sidebar-footer-btn ts-sidebar-footer-btn--compact"
-          onClick={onToggleTheme}
-          aria-label={
-            theme === "dark"
-              ? "Переключить на светлую тему"
-              : "Переключить на тёмную тему"
-          }
-        >
+        <div className="ts-sidebar-footer-row">
           <span className="ts-sidebar-item-icon" aria-hidden="true">
             {theme === "dark" ? "☀" : "☾"}
           </span>
           <span className="ts-sidebar-footer-label">Тема</span>
-        </button>
+          <ThemeToggleSwitch theme={theme} onToggle={onToggleTheme} className="ts-sidebar-footer-switch" />
+        </div>
         <button
           type="button"
           className="ts-sidebar-footer-btn ts-sidebar-footer-btn--compact ts-sidebar-footer-btn--danger"

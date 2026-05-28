@@ -80,37 +80,106 @@
   justify-content: flex-end;
 }
 
-.hr-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+.hr-topbar-context {
+  flex: 1 1 auto;
   min-width: 0;
+  color: var(--hr-muted);
+  font-size: 0.9rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.hr-logo {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 8px;
-  background: rgba(16, 212, 142, 0.15);
-  border: 1px solid rgba(16, 212, 142, 0.35);
-  flex: 0 0 auto;
-}
-
-.hr-brand h1 {
-  margin: 0;
-  font-size: 1.05rem;
-  line-height: 1.2;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+.hr-btn--quick {
+  border-color: rgba(16, 212, 142, 0.35);
+  background: rgba(16, 212, 142, 0.12);
   color: var(--hr-green);
 }
 
-.hr-brand p {
-  margin: 0.15rem 0 0;
+.hr-btn--quick:hover {
+  background: rgba(16, 212, 142, 0.2);
+  border-color: var(--hr-green);
+}
+
+.hr-company-dropdown {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.hr-company-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.55rem 0.5rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--hr-muted);
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-weight: 650;
+  font-size: 0.86rem;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.hr-company-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--hr-text);
+}
+
+.hr-company-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.hr-company-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  min-width: 260px;
+  max-width: min(360px, calc(100vw - 32px));
+  border-radius: 14px;
+  border: 1px solid var(--hr-line);
+  background: var(--hr-panel);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  z-index: 200;
+}
+
+.hr-company-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.7rem 0.85rem;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: var(--hr-text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.86rem;
+}
+
+.hr-company-item:hover {
+  background: var(--hr-panel-2);
+}
+
+.hr-company-item--active {
+  background: rgba(16, 212, 142, 0.12);
+  color: var(--hr-green);
+}
+
+.hr-company-item--add {
+  border-bottom: 0;
+  color: var(--hr-green);
+  font-weight: 650;
+}
+
+.hr-company-sep {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .hr-pill {
@@ -291,6 +360,13 @@
   border-bottom: 1px solid var(--hr-line);
 }
 
+.hr-sidebar-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .hr-sidebar-logo {
   display: block;
   font-size: 1.05rem;
@@ -306,54 +382,6 @@
   color: var(--hr-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-}
-
-.hr-workspace-switch {
-  flex: 0 0 auto;
-  padding: 0.85rem 1rem;
-  border-bottom: 1px solid var(--hr-line);
-}
-
-.hr-workspace-label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--hr-muted);
-}
-
-.hr-workspace-modes {
-  display: flex;
-  gap: 0.35rem;
-}
-
-.hr-workspace-mode {
-  flex: 1;
-  padding: 0.45rem 0.5rem;
-  border-radius: 8px;
-  border: 1px solid var(--hr-line);
-  background: transparent;
-  color: var(--hr-muted);
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-align: center;
-  text-decoration: none;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.hr-workspace-mode:hover {
-  color: var(--hr-text);
-  background: var(--hr-panel-2);
-}
-
-.hr-workspace-mode--active {
-  color: var(--hr-text);
-  background: var(--hr-panel-2);
-  border-color: var(--hr-line);
-  box-shadow: inset 3px 0 0 var(--hr-green);
-  cursor: default;
 }
 
 .hr-sidebar-main {
@@ -419,28 +447,69 @@
   font-size: 0.88rem;
 }
 
-.hr-sidebar-roadmap {
+.hr-sidebar-footer {
   flex: 0 0 auto;
   margin-top: auto;
-  padding: 0.65rem 1rem 1rem;
+  padding: 0.75rem 0.5rem 1rem;
   border-top: 1px solid var(--hr-line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
 }
 
-.hr-sidebar-roadmap-title {
-  margin: 0 0 0.35rem;
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.hr-sidebar-footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
   color: var(--hr-muted);
-  opacity: 0.85;
+  font-family: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  text-decoration: none;
 }
 
-.hr-sidebar-roadmap-item {
-  padding: 0.35rem 0;
-  font-size: 0.78rem;
+.hr-sidebar-footer-btn:hover {
+  color: var(--hr-text);
+  background: var(--hr-panel-2);
+}
+
+.hr-sidebar-footer-btn--danger:hover {
+  color: var(--hr-coral);
+}
+
+/* Theme switch temporarily removed */
+.hr-sidebar-footer-icon {
+  width: 1.25rem;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+
+.hr-sidebar-footer-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.hr-sidebar-footer-label {
+  font-weight: 500;
+  color: var(--hr-text);
+}
+
+.hr-sidebar-footer-meta {
+  font-size: 0.72rem;
   color: var(--hr-muted);
-  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hr-form {

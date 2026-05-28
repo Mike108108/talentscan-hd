@@ -8,7 +8,7 @@ import HrCabinetRedirect from "../pages/hr/HrCabinetRedirect";
 import HrCandidateDetailPage from "../pages/hr/HrCandidateDetailPage";
 import HrCandidateFormPage from "../pages/hr/HrCandidateFormPage";
 import HrCandidatesPage from "../pages/hr/HrCandidatesPage";
-import HrCompaniesPage from "../pages/hr/HrCompaniesPage";
+import HrCompanyCreatePage from "../pages/hr/HrCompanyCreatePage";
 import HrCompanyOverviewPage from "../pages/hr/HrCompanyOverviewPage";
 import HrLandingPage from "../pages/hr/HrLandingPage";
 import HrLoginPage from "../pages/hr/HrLoginPage";
@@ -31,6 +31,7 @@ export default function AppRouter() {
         <Route path="/hr/login" element={<HrLoginPage />} />
         <Route path="/hr/signup" element={<HrSignupPage />} />
         <Route path="/hr/setup" element={<HrSetupPage />} />
+        <Route path="/hr/company/new" element={<HrCompanyCreatePage />} />
         <Route
           path="/hr/cabinet"
           element={
@@ -39,10 +40,7 @@ export default function AppRouter() {
             </HrAuthGuard>
           }
         />
-        <Route
-          path="/hr/companies"
-          element={<HrCompaniesPage />}
-        />
+        <Route path="/hr/companies" element={<Navigate to="/hr/cabinet" replace />} />
         <Route
           path="/hr/company/:companyId"
           element={

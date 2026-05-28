@@ -4,6 +4,9 @@ import type {
   CandidateFormData,
   GeocodeSuggestion,
   HrCandidate,
+  HrVacancy,
+  HrVacancyCandidate,
+  VacancyFormData,
   HrCompany,
   HrProfile,
 } from "./types";
@@ -135,6 +138,160 @@ export async function fetchCandidate(
   return data as HrCandidate | null;
 }
 
+function vacancyFormToRow(companyId: string, form: VacancyFormData, userId: string | undefined) {
+  return {
+    company_id: companyId,
+    created_by_user_id: userId ?? null,
+    title: form.title.trim(),
+    status: form.status,
+    department: form.department.trim() || null,
+    employment_format: form.employment_format.trim() || null,
+    work_format: form.work_format.trim() || null,
+    location: form.location.trim() || null,
+    schedule: form.schedule.trim() || null,
+    salary_range: form.salary_range.trim() || null,
+    role_description: form.role_description.trim() || null,
+    responsibilities: form.responsibilities.trim() || null,
+    kpi: form.kpi.trim() || null,
+    must_have: form.must_have.trim() || null,
+    nice_to_have: form.nice_to_have.trim() || null,
+    working_conditions: form.working_conditions.trim() || null,
+    manager_context: form.manager_context.trim() || null,
+    team_context: form.team_context.trim() || null,
+    hiring_priorities: form.hiring_priorities.trim() || null,
+    risks_to_check: form.risks_to_check.trim() || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export async function fetchVacancies(companyId: string): Promise<HrVacancy[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("hr_vacancies")
+    .select("*")
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: false });
+  if (error) return [];
+  return (data ?? []) as HrVacancy[];
+}
+
+export async function fetchVacancy(companyId: string, vacancyId: string): Promise<HrVacancy | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("hr_vacancies")
+    .select("*")
+    .eq("company_id", companyId)
+    .eq("id", vacancyId)
+    .maybeSingle();
+  if (error) return null;
+  return data as HrVacancy | null;
+}
+
+export async function createVacancy(companyId: string, form: VacancyFormData): Promise<HrVacancy> {
+  if (!supabase) throw new Error("Supabase не настроен");
+  const { data: { user } } = await supabase.auth.getUser();
+  const row = vacancyFormToRow(companyId, form, user?.id);
+  const { data, error } = await supabase.from("hr_vacancies").insert(row).select().single();
+  if (error) throw new Error(error.message);
+  return data as HrVacancy;
+}
+
+export async function updateVacancy(
+  companyId: string,
+  vacancyId: string,
+  form: VacancyFormData,
+): Promise<HrVacancy> {
+  if (!supabase) throw new Error("Supabase не настроен");
+  const row = vacancyFormToRow(companyId, form, undefined);
+  const { data, error } = await supabase
+    .from("hr_vacancies")
+    .update(row)
+    .eq("company_id", companyId)
+    .eq("id", vacancyId)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data as HrVacancy;
+}
+
+export async function fetchVacancyCandidates(companyId: string, vacancyId: string) {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("hr_vacancy_candidates")
+    .select("*, candidate:hr_candidates(*)")
+    .eq("company_id", companyId)
+    .eq("vacancy_id", vacancyId)
+    .order("created_at", { ascending: false });
+  if (error) return [];
+  return (data ?? []) as Array<HrVacancyCandidate & { candidate: HrCandidate }>;
+}
+
+export async function fetchCandidateVacancies(companyId: string, candidateId: string) {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("hr_vacancy_candidates")
+    .select("*, vacancy:hr_vacancies(*)")
+    .eq("company_id", companyId)
+    .eq("candidate_id", candidateId)
+    .order("created_at", { ascending: false });
+  if (error) return [];
+  return (data ?? []) as Array<HrVacancyCandidate & { vacancy: HrVacancy }>;
+}
+
+export async function linkCandidateToVacancy(
+  companyId: string,
+  vacancyId: string,
+  candidateId: string,
+  payload?: Partial<Pick<HrVacancyCandidate, "stage" | "status" | "source" | "recruiter_comment">>,
+): Promise<HrVacancyCandidate | null> {
+  if (!supabase) return null;
+  const row = {
+    company_id: companyId,
+    vacancy_id: vacancyId,
+    candidate_id: candidateId,
+    stage: payload?.stage ?? "new",
+    status: payload?.status ?? "active",
+    source: payload?.source ?? "manual",
+    recruiter_comment: payload?.recruiter_comment ?? null,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase
+    .from("hr_vacancy_candidates")
+    .upsert(row, { onConflict: "vacancy_id,candidate_id" })
+    .select()
+    .maybeSingle();
+  if (error) {
+    console.error("[hr] vacancy link:", error.message);
+    return null;
+  }
+  return data as HrVacancyCandidate | null;
+}
+
+export async function unlinkCandidateFromVacancy(
+  companyId: string,
+  vacancyId: string,
+  candidateId: string,
+): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from("hr_vacancy_candidates")
+    .delete()
+    .eq("company_id", companyId)
+    .eq("vacancy_id", vacancyId)
+    .eq("candidate_id", candidateId);
+  return !error;
+}
+
+export async function fetchVacancyCandidateLinks(companyId: string): Promise<HrVacancyCandidate[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("hr_vacancy_candidates")
+    .select("*")
+    .eq("company_id", companyId);
+  if (error) return [];
+  return (data ?? []) as HrVacancyCandidate[];
+}
+
 function formToRow(companyId: string, form: CandidateFormData, userId: string | undefined) {
   const chart_status = deriveChartStatus({
     name: form.name,
@@ -166,12 +323,28 @@ function formToRow(companyId: string, form: CandidateFormData, userId: string | 
 export async function saveCandidate(
   companyId: string,
   form: CandidateFormData,
+  opts?: { vacancyId?: string | null },
 ): Promise<HrCandidate> {
   if (!supabase) throw new Error("Supabase не настроен");
   const { data: { user } } = await supabase.auth.getUser();
-  const row = formToRow(companyId, form, user?.id);
+  const vacancyId = opts?.vacancyId ?? null;
+  let vacancyTitle: string | null = null;
+  if (vacancyId) {
+    const vacancy = await fetchVacancy(companyId, vacancyId);
+    vacancyTitle = vacancy?.title ?? null;
+  }
+  const row = formToRow(
+    companyId,
+    { ...form, vacancy_title: vacancyTitle ?? form.vacancy_title },
+    user?.id,
+  );
   const { data, error } = await supabase.from("hr_candidates").insert(row).select().single();
   if (error) throw new Error(error.message);
+  if (vacancyId) {
+    await linkCandidateToVacancy(companyId, vacancyId, (data as HrCandidate).id, {
+      source: "manual",
+    });
+  }
   return data as HrCandidate;
 }
 
@@ -244,7 +417,7 @@ export async function fetchTalentMapsForCompany(companyId: string) {
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("hr_candidate_talent_maps")
-    .select("candidate_id, best_work_format, key_talent, main_risk")
+    .select("id, candidate_id, report_status, best_work_format, key_talent, main_risk, created_at, updated_at")
     .eq("company_id", companyId);
   if (error) return [];
   return data ?? [];

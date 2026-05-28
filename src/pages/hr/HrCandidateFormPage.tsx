@@ -1,14 +1,15 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import BirthPlaceField from "../../components/hr/BirthPlaceField";
 import {
   calculateCandidateChart,
   fetchCandidate,
+  fetchVacancies,
   saveCandidate,
   updateCandidate,
 } from "../../lib/hr/api";
 import { canCalculateChart } from "../../lib/hr/chartStatus";
-import type { CandidateFormData } from "../../lib/hr/types";
+import type { CandidateFormData, HrVacancy } from "../../lib/hr/types";
 
 const EMPTY: CandidateFormData = {
   name: "",
@@ -27,12 +28,16 @@ const EMPTY: CandidateFormData = {
 export default function HrCandidateFormPage() {
   const { companyId, candidateId } = useParams<{ companyId: string; candidateId?: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isEdit = Boolean(candidateId);
   const [form, setForm] = useState<CandidateFormData>(EMPTY);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [vacancies, setVacancies] = useState<HrVacancy[]>([]);
+  const [selectedVacancyId, setSelectedVacancyId] = useState<string>("");
 
   useEffect(() => {
+    if (!companyId) return;
     if (!candidateId || !companyId) return;
     (async () => {
       const c = await fetchCandidate(companyId, candidateId);
@@ -53,6 +58,18 @@ export default function HrCandidateFormPage() {
     })();
   }, [candidateId, companyId]);
 
+  useEffect(() => {
+    if (!companyId) return;
+    (async () => {
+      const list = await fetchVacancies(companyId);
+      setVacancies(list);
+      if (!isEdit) {
+        const preselect = searchParams.get("vacancyId");
+        if (preselect) setSelectedVacancyId(preselect);
+      }
+    })();
+  }, [companyId, isEdit, searchParams]);
+
   const set = (key: keyof CandidateFormData, value: string | number | null) => {
     setForm((f) => ({ ...f, [key]: value }));
   };
@@ -71,7 +88,7 @@ export default function HrCandidateFormPage() {
     if (isEdit && candidateId) {
       return updateCandidate(companyId, candidateId, form);
     }
-    return saveCandidate(companyId, form);
+    return saveCandidate(companyId, form, { vacancyId: selectedVacancyId || null });
   };
 
   const onSave = async (e: FormEvent) => {
@@ -137,8 +154,33 @@ export default function HrCandidateFormPage() {
           </div>
         </div>
         <div className="hr-field">
-          <label>Вакансия / роль</label>
-          <input value={form.vacancy_title} onChange={(e) => set("vacancy_title", e.target.value)} />
+          <label>Вакансия</label>
+          {vacancies.length === 0 ? (
+            <p style={{ margin: "6px 0 0", color: "var(--hr-muted)", fontSize: 13 }}>
+              Вакансий пока нет — кандидата можно сохранить без привязки.
+            </p>
+          ) : (
+            <select
+              value={selectedVacancyId}
+              onChange={(e) => setSelectedVacancyId(e.target.value)}
+              disabled={isEdit}
+            >
+              <option value="">Не привязывать к вакансии</option>
+              {vacancies.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.title} ({v.status})
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        <div className="hr-field">
+          <label>Роль (legacy-поле для совместимости)</label>
+          <input
+            value={form.vacancy_title}
+            onChange={(e) => set("vacancy_title", e.target.value)}
+            placeholder="Если выбранная вакансия есть, поле заполнится автоматически при сохранении"
+          />
         </div>
         <div className="hr-field">
           <label>Комментарий HR</label>

@@ -480,16 +480,16 @@ type AuthUser = { id: string; email?: string };
 export default function App() {
   // ---- Theme ----------------------------------------------------------------
   const [theme, setTheme] = useState<"dark" | "light">(() => {
-    const saved = localStorage.getItem("talentscan-theme");
-    const initial: "dark" | "light" = saved === "light" ? "light" : "dark";
-    document.documentElement.dataset.theme = initial;
-    return initial;
+    document.documentElement.dataset.theme = "dark";
+    localStorage.setItem("talentscan-theme", "dark");
+    return "dark";
   });
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem("talentscan-theme", theme);
-  }, [theme]);
+    // Keep only dark theme enabled for now.
+    document.documentElement.dataset.theme = "dark";
+    localStorage.setItem("talentscan-theme", "dark");
+  }, []);
 
   // ---- Active section -------------------------------------------------------
   const [activeSection, setActiveSection] = useState<AppSection>("today");

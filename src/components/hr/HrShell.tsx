@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import "../../hr.css";
-import ThemeToggleSwitch from "../shell/ThemeToggleSwitch";
 import { fetchHrCompanies } from "../../lib/hr/api";
 import type { HrCompany } from "../../lib/hr/types";
 
@@ -26,14 +25,6 @@ export default function HrShell() {
   const activeCompany = useMemo(() => {
     return companies.find((c) => c.id === companyId) || null;
   }, [companies, companyId]);
-
-  const savedTheme = localStorage.getItem("talentscan-theme");
-  const theme: "dark" | "light" = savedTheme === "light" ? "light" : "dark";
-  const toggleTheme = () => {
-    const next: "dark" | "light" = theme === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    localStorage.setItem("talentscan-theme", next);
-  };
 
   const signOut = async () => {
     await supabase?.auth.signOut();
@@ -126,12 +117,6 @@ export default function HrShell() {
                 <span className="hr-sidebar-footer-meta">Компания</span>
               </span>
             </Link>
-            <div className="hr-sidebar-footer-row" aria-label="Тема">
-              <span className="hr-sidebar-footer-icon hr-sidebar-footer-icon--placeholder" aria-hidden="true">
-                ⚙
-              </span>
-              <ThemeToggleSwitch theme={theme} onToggle={toggleTheme} className="ts-sidebar-footer-switch" />
-            </div>
             <button
               type="button"
               className="hr-sidebar-footer-btn hr-sidebar-footer-btn--danger"

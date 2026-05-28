@@ -5282,23 +5282,7 @@
   cursor: default;
 }
 
-.ts-sidebar-footer-row {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  width: 100%;
-  padding: 0.55rem 0.75rem;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: var(--ts-muted);
-}
-
-.ts-sidebar-footer-switch {
-}
-
-.ts-sidebar-item-icon--placeholder {
-  visibility: hidden;
-}
+/* Theme switch temporarily removed */
 
 .ts-theme-switch {
   display: inline-flex;

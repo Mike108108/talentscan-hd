@@ -484,20 +484,7 @@
   color: var(--hr-coral);
 }
 
-.hr-sidebar-footer-row {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  width: 100%;
-  padding: 0.55rem 0.75rem;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: var(--hr-muted);
-}
-
-.hr-sidebar-footer-icon--placeholder {
-  visibility: hidden;
-}
+/* Theme switch temporarily removed */
 .hr-sidebar-footer-icon {
   width: 1.25rem;
   flex-shrink: 0;

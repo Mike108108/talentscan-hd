@@ -1,6 +1,5 @@
 import { MAIN_NAV_ITEMS, type AppSection, type MainNavSection } from "./shellTypes";
 import { Link, useLocation } from "react-router-dom";
-import ThemeToggleSwitch from "./ThemeToggleSwitch";
 
 type GlobalSidebarProps = {
   activeSection: AppSection;
@@ -25,8 +24,8 @@ export default function GlobalSidebar({
   onSectionChange,
   displayName,
   userEmail,
-  theme,
-  onToggleTheme,
+  theme: _theme,
+  onToggleTheme: _onToggleTheme,
   onSettings,
   onSignOut,
   className = "",
@@ -106,12 +105,6 @@ export default function GlobalSidebar({
             <span className="ts-sidebar-footer-meta">{profileLabel}</span>
           </span>
         </button>
-        <div className="ts-sidebar-footer-row" aria-label="Тема">
-          <span className="ts-sidebar-item-icon ts-sidebar-item-icon--placeholder" aria-hidden="true">
-            ⚙
-          </span>
-          <ThemeToggleSwitch theme={theme} onToggle={onToggleTheme} className="ts-sidebar-footer-switch" />
-        </div>
         <button
           type="button"
           className="ts-sidebar-footer-btn ts-sidebar-footer-btn--compact ts-sidebar-footer-btn--danger"

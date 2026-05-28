@@ -154,7 +154,7 @@ export default function CandidateTalentMapPage() {
   const formulaHtml = map.formula ? formulaToSafeHtml(map.formula) : "";
 
   return (
-    <div className="hr-tm-page hr-tm-page--compact">
+    <div className="hr-tm-page">
       <div className="hr-tm-header">
         <div className="hr-tm-header-top">
           <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
@@ -193,7 +193,8 @@ export default function CandidateTalentMapPage() {
             <b>Главный риск</b>
             <span>{normalizeHrMaybe(map.main_risk) ?? "—"}</span>
           </div>
-          <div className="hr-tm-identity-card hr-tm-identity-card--takeaway">
+          <div className="hr-tm-identity-card hr-tm-summary-card--primary">
+            <div className="hr-tm-summary-card-badge">Главное</div>
             <b>Главный вывод</b>
             <span>{normalizeHrMaybe(map.summary) ?? "—"}</span>
           </div>
@@ -259,21 +260,29 @@ export default function CandidateTalentMapPage() {
               </div>
               <div className="hr-card">
                 <h3 style={{ marginTop: 0 }}>Где раскрывается</h3>
-                <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                  Лучше всего проявляет себя в задачах с понятным результатом, прозрачными ожиданиями
-                  и регулярной обратной связью. Условия ниже — гипотезы, их важно подтвердить в работе.
-                </p>
+                {map.formula ? (
+                  <div
+                    className="hr-tm-overview-formula"
+                    dangerouslySetInnerHTML={{ __html: formulaHtml }}
+                  />
+                ) : (
+                  <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
+                    Лучше всего проявляет себя в задачах с понятным результатом, прозрачными ожиданиями
+                    и регулярной обратной связью.
+                  </p>
+                )}
               </div>
             </div>
 
-            <h3 style={{ margin: "14px 0 10px" }}>Таланты</h3>
-            <ItemCards items={map.talents} />
+            <div className="hr-tm-block">
+              <h3 className="hr-tm-block-title">Ключевые таланты</h3>
+              <ItemCards items={(map.talents ?? []).slice(0, 3)} />
+            </div>
 
-            <h3 style={{ margin: "14px 0 10px" }}>Сильные стороны</h3>
-            <ItemCards items={map.strengths} />
-
-            <h3 style={{ margin: "14px 0 10px" }}>Подходящие направления</h3>
-            <ItemCards items={map.directions} />
+            <div className="hr-tm-block">
+              <h3 className="hr-tm-block-title">Подходящие направления</h3>
+              <ItemCards items={(map.directions ?? []).slice(0, 2)} />
+            </div>
           </section>
         )}
 
@@ -281,26 +290,41 @@ export default function CandidateTalentMapPage() {
           <section>
             <div className="hr-grid-2">
               <div className="hr-card">
-                <h3 style={{ marginTop: 0 }}>Главный риск</h3>
+                <h3 style={{ marginTop: 0 }}>Что может мешать</h3>
                 <p style={{ margin: 0, lineHeight: 1.6 }}>{normalizeHrMaybe(map.main_risk) ?? "—"}</p>
               </div>
               <div className="hr-card">
-                <h3 style={{ marginTop: 0 }}>Условия раскрытия</h3>
+                <h3 style={{ marginTop: 0 }}>Какие условия нужны</h3>
                 <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                  Это блок про среду, стиль управления и ограничения. Цель — снизить риски и заранее
-                  настроить формат взаимодействия.
+                  Снизить риск помогают: ясные ожидания, договорённости письменно, предсказуемый ритм встреч
+                  и регулярная обратная связь по фактам.
                 </p>
               </div>
             </div>
 
-            <h3 style={{ margin: "14px 0 10px" }}>Риски</h3>
-            <ItemCards items={map.risks} />
+            <div className="hr-grid-2" style={{ marginTop: 12 }}>
+              <div className="hr-card">
+                <h3 style={{ marginTop: 0 }}>Как управлять</h3>
+                <ul className="hr-tm-bullets">
+                  <li>Фиксировать цель, критерии и сроки заранее.</li>
+                  <li>Снижать хаос: приоритеты, “одна главная задача” на спринт/неделю.</li>
+                  <li>Обратная связь короткими циклами: что ок / что улучшить / следующий шаг.</li>
+                </ul>
+              </div>
+              <div className="hr-card">
+                <h3 style={{ marginTop: 0 }}>Красные флаги на стажировке</h3>
+                <ul className="hr-tm-bullets">
+                  <li>Резкое падение качества на фоне срочности и многозадачности.</li>
+                  <li>Перегруз встречами без пауз на фокусную работу.</li>
+                  <li>Сильная реакция на давление ожиданий и “пожары”.</li>
+                </ul>
+              </div>
+            </div>
 
-            <h3 style={{ margin: "14px 0 10px" }}>Спорные зоны</h3>
-            <ItemCards items={map.not_fit_directions} />
-
-            <h3 style={{ margin: "14px 0 10px" }}>Среда и менеджмент</h3>
-            <ItemCards items={map.conditions} />
+            <div className="hr-tm-block">
+              <h3 className="hr-tm-block-title">Среда и менеджмент</h3>
+              <ItemCards items={(map.conditions ?? []).slice(0, 2)} />
+            </div>
           </section>
         )}
 
@@ -310,21 +334,51 @@ export default function CandidateTalentMapPage() {
               <div className="hr-card">
                 <h3 style={{ marginTop: 0 }}>Что проверить</h3>
                 <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                  Фокус — наблюдаемые поведенческие признаки и качество решений в рабочих сценариях,
-                  а не “общие впечатления”.
+                  Качество решений в рабочих сценариях: как уточняет задачу, выбирает приоритеты, держит темп
+                  и коммуницирует ожидания.
                 </p>
               </div>
               <div className="hr-card">
-                <h3 style={{ marginTop: 0 }}>Формат</h3>
+                <h3 style={{ marginTop: 0 }}>Формат проверки</h3>
                 <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                  Оптимально: структурированное интервью + короткий кейс + разбор решения. Если есть
-                  сомнения в данных — уточнить входные параметры.
+                  Интервью + короткий кейс (2–3 часа) + разбор решения. При сомнениях в данных — уточнить входные параметры.
                 </p>
               </div>
             </div>
 
-            <h3 style={{ margin: "14px 0 10px" }}>Проверка на интервью и задачах</h3>
-            <ItemCards items={map.tests} />
+            <div className="hr-tm-block">
+              <h3 className="hr-tm-block-title">План проверки</h3>
+              <div className="hr-grid-2">
+                <div className="hr-card hr-tm-step">
+                  <p className="hr-tm-step-kicker">Шаг 1</p>
+                  <h4 style={{ margin: "0 0 6px" }}>Интервью</h4>
+                  <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
+                    Уточнить примеры решений, реакции на срочность и опыт работы в команде/под давлением.
+                  </p>
+                </div>
+                <div className="hr-card hr-tm-step">
+                  <p className="hr-tm-step-kicker">Шаг 2</p>
+                  <h4 style={{ margin: "0 0 6px" }}>Рабочий кейс</h4>
+                  <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
+                    Кейс на 2–3 часа с реальной задачей роли + короткий разбор решения.
+                  </p>
+                </div>
+                <div className="hr-card hr-tm-step">
+                  <p className="hr-tm-step-kicker">Шаг 3</p>
+                  <h4 style={{ margin: "0 0 6px" }}>Наблюдение</h4>
+                  <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
+                    Как реагирует на шум, ожидания, многозадачность и быстрые переключения.
+                  </p>
+                </div>
+                <div className="hr-card hr-tm-step">
+                  <p className="hr-tm-step-kicker">Шаг 4</p>
+                  <h4 style={{ margin: "0 0 6px" }}>Уточнение данных</h4>
+                  <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
+                    Референсы и уточнение входных данных, если есть сомнения в точности.
+                  </p>
+                </div>
+              </div>
+            </div>
           </section>
         )}
 
@@ -332,38 +386,43 @@ export default function CandidateTalentMapPage() {
           <section>
             <div className="hr-grid-2">
               <div className="hr-card">
-                <h3 style={{ marginTop: 0 }}>Предварительно подходящие роли</h3>
-                <RolesTable roles={map.roles} />
-              </div>
-              <div className="hr-card">
-                <h3 style={{ marginTop: 0 }}>Вакансии кандидата</h3>
+                <h3 style={{ marginTop: 0 }}>Связанные вакансии</h3>
                 {vacancies.length === 0 ? (
-                  <p style={{ margin: 0, color: "var(--hr-muted)" }}>
-                    Кандидат пока не привязан к вакансии. Точная оценка под конкретную вакансию —
-                    следующий этап.
-                  </p>
+                  <p style={{ margin: 0, color: "var(--hr-muted)" }}>Кандидат пока не привязан к вакансии.</p>
                 ) : (
-                  <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <div style={{ display: "grid", gap: 10 }}>
                     {vacancies.map((v) => (
-                      <Link
-                        key={v.id}
-                        to={`/hr/company/${companyId}/vacancies/${v.id}`}
-                        className="hr-btn hr-btn--ghost"
-                      >
-                        {v.title}
-                      </Link>
+                      <div key={v.id} className="hr-card" style={{ background: "rgba(255,255,255,0.02)" }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "space-between" }}>
+                          <div>
+                            <h4 style={{ margin: "0 0 4px" }}>{v.title}</h4>
+                            <p style={{ margin: 0, color: "var(--hr-muted)" }}>
+                              Статус: <strong>{v.status}</strong>
+                            </p>
+                          </div>
+                          <div className="hr-fork-actions">
+                            <Link to={`/hr/company/${companyId}/vacancies/${v.id}`} className="hr-btn">
+                              Открыть вакансию
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}
-
-                <div className="hr-tm-next-steps">
-                  <p className="hr-tm-next-steps-title">Важно</p>
-                  <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                    Сейчас карта даёт общий профиль и гипотезы. Оценка “под вакансию” (с учётом требований,
-                    команды и KPI) будет следующим этапом продукта.
-                  </p>
-                </div>
               </div>
+              <div className="hr-card">
+                <h3 style={{ marginTop: 0 }}>Следующий этап</h3>
+                <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
+                  Точная оценка под конкретную вакансию будет отдельным разбором. Сейчас карта показывает рабочий
+                  профиль кандидата и гипотезы, которые важно проверить на интервью и кейсе.
+                </p>
+              </div>
+            </div>
+
+            <div className="hr-tm-block">
+              <h3 className="hr-tm-block-title">Предварительно подходящие роли</h3>
+              <RolesTable roles={map.roles} />
             </div>
           </section>
         )}

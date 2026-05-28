@@ -62,15 +62,8 @@ export default function AppRouter() {
           <Route path="candidates/new" element={<HrCandidateFormPage />} />
           <Route path="candidates/:candidateId/edit" element={<HrCandidateFormPage />} />
           <Route path="candidates/:candidateId" element={<HrCandidateDetailPage />} />
+          <Route path="candidates/:candidateId/talent-map" element={<CandidateTalentMapPage />} />
         </Route>
-        <Route
-          path="/hr/company/:companyId/candidates/:candidateId/talent-map"
-          element={
-            <HrAuthGuard>
-              <CandidateTalentMapPage />
-            </HrAuthGuard>
-          }
-        />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

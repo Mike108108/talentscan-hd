@@ -194,7 +194,6 @@ export default function CandidateTalentMapPage() {
             <span>{normalizeHrMaybe(map.main_risk) ?? "—"}</span>
           </div>
           <div className="hr-tm-identity-card hr-tm-summary-card--primary">
-            <div className="hr-tm-summary-card-badge">Главное</div>
             <b>Главный вывод</b>
             <span>{normalizeHrMaybe(map.summary) ?? "—"}</span>
           </div>

@@ -57,7 +57,7 @@ export default function GlobalSidebar({
                 <span className="ts-cabinet-switch-btn ts-cabinet-switch-btn--active" aria-current="true">
                   ЛК
                 </span>
-                <Link to="/hr/companies" className="ts-cabinet-switch-btn" aria-label="Перейти в HR-кабинет">
+                <Link to="/hr/cabinet" className="ts-cabinet-switch-btn" aria-label="Перейти в HR-кабинет">
                   HR
                 </Link>
               </>
@@ -106,11 +106,7 @@ export default function GlobalSidebar({
             <span className="ts-sidebar-footer-meta">{profileLabel}</span>
           </span>
         </button>
-        <div className="ts-sidebar-footer-row">
-          <span className="ts-sidebar-item-icon" aria-hidden="true">
-            {theme === "dark" ? "☀" : "☾"}
-          </span>
-          <span className="ts-sidebar-footer-label">Тема</span>
+        <div className="ts-sidebar-footer-row" aria-label="Тема">
           <ThemeToggleSwitch theme={theme} onToggle={onToggleTheme} className="ts-sidebar-footer-switch" />
         </div>
         <button

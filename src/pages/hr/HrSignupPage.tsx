@@ -50,9 +50,10 @@ export default function HrSignupPage() {
       });
       setLoading(false);
       if (company) {
+        localStorage.setItem("talentscan-hr-active-company-id", company.id);
         navigate(`/hr/company/${company.id}`, { replace: true });
       } else {
-        navigate("/hr/companies", { replace: true });
+        navigate("/hr/cabinet", { replace: true });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка создания HR-профиля");

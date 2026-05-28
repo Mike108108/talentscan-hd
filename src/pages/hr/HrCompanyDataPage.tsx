@@ -71,9 +71,9 @@ export default function HrCompanyDataPage() {
               базовые данные компании и структуру вакансий.
             </p>
             <div className="hr-fork-actions">
-              <Link to="/hr/companies" className="hr-btn hr-btn--ghost">
-                Управление компаниями
-              </Link>
+                <Link to="/hr/cabinet" className="hr-btn hr-btn--ghost">
+                  Перейти в кабинет
+                </Link>
             </div>
           </div>
 

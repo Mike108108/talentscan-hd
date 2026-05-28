@@ -41,10 +41,12 @@ export default function HrSetupPage() {
       if (profile) {
         const companies = await fetchHrCompanies();
         if (cancelled) return;
-        if (companies.length === 1) {
-          navigate(`/hr/company/${companies[0].id}`, { replace: true });
+        if (companies.length > 0) {
+          const nextId = companies[0].id;
+          localStorage.setItem("talentscan-hr-active-company-id", nextId);
+          navigate(`/hr/company/${nextId}`, { replace: true });
         } else {
-          navigate("/hr/companies", { replace: true });
+          navigate("/hr/cabinet", { replace: true });
         }
         return;
       }
@@ -70,9 +72,10 @@ export default function HrSetupPage() {
         industry: industry || undefined,
       });
       if (company) {
+        localStorage.setItem("talentscan-hr-active-company-id", company.id);
         navigate(`/hr/company/${company.id}`, { replace: true });
       } else {
-        navigate("/hr/companies", { replace: true });
+        navigate("/hr/cabinet", { replace: true });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка настройки HR-кабинета");

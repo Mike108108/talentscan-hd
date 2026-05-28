@@ -31,7 +31,7 @@ export default function HrLoginPage() {
       navigate("/hr/setup", { replace: true });
       return;
     }
-    navigate("/hr/companies", { replace: true });
+    navigate("/hr/cabinet", { replace: true });
   };
 
   return (

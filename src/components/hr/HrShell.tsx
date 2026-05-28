@@ -1,7 +1,10 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import "../../hr.css";
 import ThemeToggleSwitch from "../shell/ThemeToggleSwitch";
+import { fetchHrCompanies } from "../../lib/hr/api";
+import type { HrCompany } from "../../lib/hr/types";
 
 const NAV = [
   { path: "", label: "Обзор", hint: "Главный экран", enabled: true },
@@ -16,6 +19,13 @@ export default function HrShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const base = `/hr/company/${companyId}`;
+  const [companies, setCompanies] = useState<HrCompany[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(true);
+  const [companyMenuOpen, setCompanyMenuOpen] = useState(false);
+
+  const activeCompany = useMemo(() => {
+    return companies.find((c) => c.id === companyId) || null;
+  }, [companies, companyId]);
 
   const savedTheme = localStorage.getItem("talentscan-theme");
   const theme: "dark" | "light" = savedTheme === "light" ? "light" : "dark";
@@ -29,6 +39,31 @@ export default function HrShell() {
     await supabase?.auth.signOut();
     navigate("/hr/login");
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setCompaniesLoading(true);
+      const list = await fetchHrCompanies();
+      if (cancelled) return;
+      setCompanies(list);
+      setCompaniesLoading(false);
+
+      if (!companyId) {
+        navigate("/hr/cabinet", { replace: true });
+        return;
+      }
+      const exists = list.some((c) => c.id === companyId);
+      if (!exists) {
+        navigate("/hr/cabinet", { replace: true });
+        return;
+      }
+      localStorage.setItem("talentscan-hr-active-company-id", companyId);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, navigate]);
 
   const sectionPath = location.pathname.replace(base, "").replace(/^\//, "") || "";
 
@@ -48,7 +83,7 @@ export default function HrShell() {
                 </span>
               </div>
             </div>
-            <span className="hr-sidebar-tagline">Рабочий кабинет работодателя</span>
+            <span className="hr-sidebar-tagline">HR-кабинет</span>
           </div>
 
           <div className="hr-sidebar-main">
@@ -91,11 +126,7 @@ export default function HrShell() {
                 <span className="hr-sidebar-footer-meta">Компания</span>
               </span>
             </Link>
-            <div className="hr-sidebar-footer-row">
-              <span className="hr-sidebar-footer-icon" aria-hidden="true">
-                {theme === "dark" ? "☀" : "☾"}
-              </span>
-              <span className="hr-sidebar-footer-label">Тема</span>
+            <div className="hr-sidebar-footer-row" aria-label="Тема">
               <ThemeToggleSwitch theme={theme} onToggle={toggleTheme} className="ts-sidebar-footer-switch" />
             </div>
             <button
@@ -120,6 +151,54 @@ export default function HrShell() {
               <Link to={`${base}/vacancies/new`} className="hr-btn hr-btn--ghost">
                 + Вакансия
               </Link>
+              <Link to="/hr/company/new" className="hr-btn hr-btn--ghost">
+                + Компания
+              </Link>
+              <div className="hr-company-dropdown" aria-label="Выбор компании">
+                <button
+                  type="button"
+                  className="hr-company-btn"
+                  onClick={() => setCompanyMenuOpen((v) => !v)}
+                  aria-haspopup="listbox"
+                  aria-expanded={companyMenuOpen}
+                  disabled={companiesLoading}
+                >
+                  {activeCompany?.name || "Компания"} <span aria-hidden="true">▾</span>
+                </button>
+                {companyMenuOpen && (
+                  <div className="hr-company-menu" role="listbox">
+                    {companies.map((c) => {
+                      const isActive = c.id === companyId;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className={`hr-company-item${isActive ? " hr-company-item--active" : ""}`}
+                          onClick={() => {
+                            localStorage.setItem("talentscan-hr-active-company-id", c.id);
+                            setCompanyMenuOpen(false);
+                            navigate(`/hr/company/${c.id}`);
+                          }}
+                          aria-selected={isActive}
+                        >
+                          {c.name}
+                        </button>
+                      );
+                    })}
+                    <div className="hr-company-sep" aria-hidden="true" />
+                    <button
+                      type="button"
+                      className="hr-company-item hr-company-item--add"
+                      onClick={() => {
+                        setCompanyMenuOpen(false);
+                        navigate("/hr/company/new");
+                      }}
+                    >
+                      + Добавить компанию
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 

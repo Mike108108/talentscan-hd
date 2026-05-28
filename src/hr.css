@@ -80,6 +80,80 @@
   justify-content: flex-end;
 }
 
+.hr-company-dropdown {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.hr-company-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.55rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid var(--hr-line);
+  background: var(--hr-panel-2);
+  color: var(--hr-text);
+  font-weight: 600;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.hr-company-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.hr-company-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  min-width: 260px;
+  max-width: min(360px, calc(100vw - 32px));
+  border-radius: 14px;
+  border: 1px solid var(--hr-line);
+  background: var(--hr-panel);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  z-index: 200;
+}
+
+.hr-company-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.7rem 0.85rem;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: var(--hr-text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.86rem;
+}
+
+.hr-company-item:hover {
+  background: var(--hr-panel-2);
+}
+
+.hr-company-item--active {
+  background: rgba(16, 212, 142, 0.12);
+  color: var(--hr-green);
+}
+
+.hr-company-item--add {
+  border-bottom: 0;
+  color: var(--hr-green);
+  font-weight: 650;
+}
+
+.hr-company-sep {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .hr-pill {
   display: inline-flex;
   align-items: center;

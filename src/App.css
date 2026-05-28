@@ -5291,6 +5291,7 @@
   border: 1px solid transparent;
   border-radius: 8px;
   color: var(--ts-muted);
+  justify-content: flex-end;
 }
 
 .ts-sidebar-footer-switch {

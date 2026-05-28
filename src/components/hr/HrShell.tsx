@@ -11,7 +11,7 @@ const NAV = [
   { path: "vacancies", label: "Вакансии", hint: "Роли и позиции", enabled: true },
   { path: "candidates", label: "Кандидаты", hint: "Пул кандидатов", enabled: true },
   { path: "reports", label: "Разборы", hint: "Карты талантов", enabled: true },
-  { path: "company", label: "Моя компания", hint: "Контекст и данные", enabled: true },
+  { path: "company", label: "Данные о компании", hint: "Контекст и данные", enabled: true },
 ];
 
 export default function HrShell() {
@@ -144,14 +144,19 @@ export default function HrShell() {
 
         <div className="hr-app-area">
           <header className="hr-topbar">
+            {activeCompany?.name && (
+              <div className="hr-topbar-context" title={activeCompany.name}>
+                {activeCompany.name}
+              </div>
+            )}
             <div className="hr-topbar-actions">
-              <Link to={`${base}/candidates/new`} className="hr-btn">
+              <Link to={`${base}/candidates/new`} className="hr-btn hr-btn--quick" aria-disabled={!activeCompany}>
                 + Кандидат
               </Link>
-              <Link to={`${base}/vacancies/new`} className="hr-btn hr-btn--ghost">
+              <Link to={`${base}/vacancies/new`} className="hr-btn hr-btn--quick" aria-disabled={!activeCompany}>
                 + Вакансия
               </Link>
-              <Link to="/hr/company/new" className="hr-btn hr-btn--ghost">
+              <Link to="/hr/company/new" className="hr-btn hr-btn--quick">
                 + Компания
               </Link>
               <div className="hr-company-dropdown" aria-label="Выбор компании">
@@ -163,7 +168,7 @@ export default function HrShell() {
                   aria-expanded={companyMenuOpen}
                   disabled={companiesLoading}
                 >
-                  {activeCompany?.name || "Компания"} <span aria-hidden="true">▾</span>
+                  {activeCompany?.name || "Компания не выбрана"} <span aria-hidden="true">▾</span>
                 </button>
                 {companyMenuOpen && (
                   <div className="hr-company-menu" role="listbox">

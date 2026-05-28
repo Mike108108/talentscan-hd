@@ -61,7 +61,7 @@
 .hr-topbar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 1rem;
   min-height: 64px;
   padding: 0.75rem 1.5rem;
@@ -80,6 +80,29 @@
   justify-content: flex-end;
 }
 
+.hr-topbar-context {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--hr-muted);
+  font-size: 0.9rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hr-btn--quick {
+  border-color: rgba(16, 212, 142, 0.35);
+  background: rgba(16, 212, 142, 0.12);
+  color: var(--hr-green);
+}
+
+.hr-btn--quick:hover {
+  background: rgba(16, 212, 142, 0.2);
+  border-color: var(--hr-green);
+}
+
 .hr-company-dropdown {
   position: relative;
   flex: 0 0 auto;
@@ -89,16 +112,21 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 0.55rem 0.9rem;
+  padding: 0.55rem 0.5rem;
   border-radius: 10px;
-  border: 1px solid var(--hr-line);
-  background: var(--hr-panel-2);
-  color: var(--hr-text);
-  font-weight: 600;
-  font-size: 0.85rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--hr-muted);
+  font-weight: 650;
+  font-size: 0.86rem;
   font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
+}
+
+.hr-company-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--hr-text);
 }
 
 .hr-company-btn:disabled {
@@ -465,6 +493,7 @@
   border: 1px solid transparent;
   border-radius: 8px;
   color: var(--hr-muted);
+  justify-content: flex-end;
 }
 
 .hr-sidebar-footer-icon {

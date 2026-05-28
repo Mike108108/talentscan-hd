@@ -721,18 +721,28 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.hr-tm-summary-card--primary {
-  border-color: rgba(16, 212, 142, 0.3);
-  background: linear-gradient(180deg, rgba(16, 212, 142, 0.12), rgba(16, 212, 142, 0.04));
+/* Summary primary card — must override base .hr-tm-identity-card */
+.hr-tm-identity-card.hr-tm-summary-card--primary {
+  background:
+    linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(20, 184, 166, 0.1)),
+    rgba(17, 24, 39, 0.98);
+  border-color: rgba(16, 185, 129, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 0 1px rgba(16, 185, 129, 0.12);
 }
 
-.hr-tm-summary-card--primary::before {
+.hr-tm-identity-card.hr-tm-summary-card--primary::before {
   content: "";
   position: absolute;
-  inset: 0;
-  border-radius: var(--hr-radius-md);
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 2px;
+  border-radius: var(--hr-radius-md) 0 0 var(--hr-radius-md);
+  background: linear-gradient(180deg, rgba(16, 212, 142, 0.8), rgba(16, 212, 142, 0.12));
   pointer-events: none;
-  box-shadow: inset 0 2px 0 rgba(16, 212, 142, 0.34);
+  opacity: 0.8;
 }
 
 .hr-tm-bullets {

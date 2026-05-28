@@ -93,17 +93,17 @@ function RolesTable({ roles }: { roles: TalentMapRole[] | null | undefined }) {
   );
 }
 
-function MetricsRow({ metrics }: { metrics: TalentMapMetric[] | null | undefined }) {
-  if (!metrics?.length) return null;
+function MetricsList({ metrics }: { metrics: TalentMapMetric[] | null | undefined }) {
+  if (!metrics?.length) return <p className="hr-muted">Нет данных</p>;
   return (
-    <div className="hr-tm-metric-row">
+    <div className="hr-tm-metrics-list">
       {metrics.map((m) => (
-        <div key={m.label} className="hr-tm-metric">
-          <b>{m.value}</b>
-          <span>
+        <div key={m.label} className="hr-tm-metrics-item">
+          <span className="hr-tm-metrics-label">
             {m.label}
-            {m.hint ? ` · ${m.hint}` : ""}
+            {m.hint ? <span className="hr-tm-metrics-hint"> · {m.hint}</span> : null}
           </span>
+          <b className="hr-tm-metrics-value">{m.value}</b>
         </div>
       ))}
     </div>
@@ -152,6 +152,7 @@ export default function CandidateTalentMapPage() {
   }
 
   const formulaHtml = map.formula ? formulaToSafeHtml(map.formula) : "";
+  const primaryVacancy = vacancies.length === 1 ? vacancies[0] : null;
 
   return (
     <div className="hr-tm-page hr-tm-page--compact">
@@ -178,7 +179,7 @@ export default function CandidateTalentMapPage() {
           интервью. Это рабочие гипотезы — уточняются по опыту, кейсам и реальной вакансии.
         </p>
 
-        <div className="hr-tm-summary-grid">
+        <div className="hr-tm-summary-grid hr-tm-summary-grid--2x2">
           <div className="hr-tm-identity-card">
             <b>Лучший рабочий формат</b>
             <span>{normalizeHrMaybe(map.best_work_format) ?? "—"}</span>
@@ -191,44 +192,51 @@ export default function CandidateTalentMapPage() {
             <b>Главный риск</b>
             <span>{normalizeHrMaybe(map.main_risk) ?? "—"}</span>
           </div>
-        </div>
-
-        <div className="hr-card hr-tm-main-takeaway">
-          <p style={{ margin: 0, lineHeight: 1.6 }}>
-            <b>Главный вывод.</b> {normalizeHrMaybe(map.summary) ?? "—"}
-          </p>
+          <div className="hr-tm-identity-card hr-tm-identity-card--takeaway">
+            <b>Главный вывод</b>
+            <span>{normalizeHrMaybe(map.summary) ?? "—"}</span>
+          </div>
         </div>
       </div>
 
-      <div className="hr-tm-tabs" role="tablist" aria-label="Вкладки карты талантов">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={tab === t.id ? "hr-tm-tab hr-tm-tab--active" : "hr-tm-tab"}
-            onClick={() => setTab(t.id)}
-            role="tab"
-            aria-selected={tab === t.id}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <div className="hr-tm-tab-dock">
+        <div className="hr-tm-tabs" role="tablist" aria-label="Вкладки карты талантов">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={tab === t.id ? "hr-tm-tab hr-tm-tab--active" : "hr-tm-tab"}
+              onClick={() => setTab(t.id)}
+              role="tab"
+              aria-selected={tab === t.id}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
 
-      <div className="hr-tm-panel">
+        <div className="hr-tm-panel">
         {tab === "overview" && (
           <section>
             <div className="hr-grid-2">
               <div className="hr-card">
                 <h3 style={{ marginTop: 0 }}>Показатели</h3>
-                <MetricsRow metrics={map.metrics} />
+                <MetricsList metrics={map.metrics} />
               </div>
               <div className="hr-card">
                 <h3 style={{ marginTop: 0 }}>Что делать дальше</h3>
-                <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                  Проведите структурированное интервью и короткий кейс на реальные задачи роли. Ниже
-                  — список гипотез и что важно проверить до решения.
-                </p>
+                <ul className="hr-tm-next-list">
+                  <li>Провести структурированное интервью по реальным кейсам роли.</li>
+                  <li>Дать короткий рабочий кейс (2–3 часа) и разобрать решение.</li>
+                  <li>Проверить реакцию на срочность, шум и давление ожиданий.</li>
+                </ul>
+                {primaryVacancy && (
+                  <div style={{ marginTop: 10 }}>
+                    <Link to={`/hr/company/${companyId}/vacancies/${primaryVacancy.id}`} className="hr-btn hr-btn--ghost">
+                      К вакансии
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -364,6 +372,7 @@ export default function CandidateTalentMapPage() {
             </div>
           </section>
         )}
+      </div>
       </div>
     </div>
   );

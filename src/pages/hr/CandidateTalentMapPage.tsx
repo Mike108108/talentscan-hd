@@ -152,7 +152,6 @@ export default function CandidateTalentMapPage() {
   }
 
   const formulaHtml = map.formula ? formulaToSafeHtml(map.formula) : "";
-  const primaryVacancy = vacancies.length === 1 ? vacancies[0] : null;
 
   return (
     <div className="hr-tm-page hr-tm-page--compact">
@@ -161,12 +160,14 @@ export default function CandidateTalentMapPage() {
           <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
             ← К кандидату
           </Link>
-          <span className="hr-status hr-status--ok">Карта рассчитана</span>
         </div>
 
         <div className="hr-tm-title-row">
           <div>
-            <h2 className="hr-tm-title">Карта талантов</h2>
+            <div className="hr-tm-title-line">
+              <h2 className="hr-tm-title">Карта талантов</h2>
+              <span className="hr-status hr-status--ok">Карта рассчитана</span>
+            </div>
             <div className="hr-tm-subtitle">
               <b>{candidate.name}</b>
               {candidate.vacancy_title ? <span> · {candidate.vacancy_title}</span> : null}
@@ -224,29 +225,23 @@ export default function CandidateTalentMapPage() {
                 <MetricsList metrics={map.metrics} />
               </div>
               <div className="hr-card">
-                <h3 style={{ marginTop: 0 }}>Что делать дальше</h3>
-                <ul className="hr-tm-next-list">
-                  <li>Провести структурированное интервью по реальным кейсам роли.</li>
-                  <li>Дать короткий рабочий кейс (2–3 часа) и разобрать решение.</li>
-                  <li>Проверить реакцию на срочность, шум и давление ожиданий.</li>
-                </ul>
-                {primaryVacancy && (
-                  <div style={{ marginTop: 10 }}>
-                    <Link to={`/hr/company/${companyId}/vacancies/${primaryVacancy.id}`} className="hr-btn hr-btn--ghost">
-                      К вакансии
-                    </Link>
-                  </div>
+                <h3 style={{ marginTop: 0 }}>Условия раскрытия</h3>
+                {map.formula ? (
+                  <div
+                    className="hr-tm-overview-formula"
+                    dangerouslySetInnerHTML={{ __html: formulaHtml }}
+                  />
+                ) : (
+                  <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
+                    Нет данных для формулировки условий раскрытия.
+                  </p>
                 )}
               </div>
             </div>
 
-            {map.formula && (
-              <div className="hr-tm-formula" dangerouslySetInnerHTML={{ __html: formulaHtml }} />
-            )}
-
             {map.final_recommendation && (
               <div className="hr-card" style={{ marginTop: 12 }}>
-                <h3 style={{ marginTop: 0 }}>Короткая рекомендация</h3>
+                <h3 style={{ marginTop: 0 }}>Рекомендация HR</h3>
                 <p style={{ margin: 0, lineHeight: 1.6 }}>
                   {normalizeHrCopy(map.final_recommendation)}
                 </p>

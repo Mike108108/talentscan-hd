@@ -650,15 +650,22 @@
 }
 
 .hr-tm-header {
-  padding: 4px 0 12px;
+  padding: 2px 0 10px;
 }
 
 .hr-tm-header-top {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+}
+
+.hr-tm-title-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .hr-tm-back {
@@ -690,7 +697,7 @@
 }
 
 .hr-tm-lede {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   color: var(--hr-muted);
   line-height: 1.55;
   max-width: 980px;
@@ -709,6 +716,20 @@
 
 .hr-tm-identity-card--takeaway b {
   color: var(--hr-green);
+}
+
+.hr-tm-identity-card--takeaway {
+  border-color: rgba(16, 212, 142, 0.24);
+  background: linear-gradient(180deg, rgba(16, 212, 142, 0.08), rgba(16, 212, 142, 0.03));
+}
+
+.hr-tm-identity-card--takeaway::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--hr-radius-md);
+  pointer-events: none;
+  box-shadow: inset 0 2px 0 rgba(16, 212, 142, 0.28);
 }
 
 .hr-tm-main-takeaway {
@@ -804,15 +825,19 @@
   white-space: nowrap;
 }
 
-.hr-tm-next-list {
-  margin: 8px 0 0;
-  padding-left: 18px;
+.hr-tm-overview-formula {
+  margin-top: 8px;
   color: var(--hr-muted);
   line-height: 1.55;
 }
 
-.hr-tm-next-list li {
-  margin: 6px 0;
+.hr-tm-overview-formula em {
+  color: var(--hr-green);
+  font-style: normal;
+}
+
+.hr-tm-overview-formula strong {
+  color: var(--hr-text);
 }
 
 .hr-tm-next-steps {

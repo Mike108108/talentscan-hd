@@ -107,6 +107,9 @@ export default function GlobalSidebar({
           </span>
         </button>
         <div className="ts-sidebar-footer-row" aria-label="Тема">
+          <span className="ts-sidebar-item-icon ts-sidebar-item-icon--placeholder" aria-hidden="true">
+            ⚙
+          </span>
           <ThemeToggleSwitch theme={theme} onToggle={onToggleTheme} className="ts-sidebar-footer-switch" />
         </div>
         <button

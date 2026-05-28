@@ -493,9 +493,11 @@
   border: 1px solid transparent;
   border-radius: 8px;
   color: var(--hr-muted);
-  justify-content: flex-end;
 }
 
+.hr-sidebar-footer-icon--placeholder {
+  visibility: hidden;
+}
 .hr-sidebar-footer-icon {
   width: 1.25rem;
   flex-shrink: 0;

@@ -127,6 +127,9 @@ export default function HrShell() {
               </span>
             </Link>
             <div className="hr-sidebar-footer-row" aria-label="Тема">
+              <span className="hr-sidebar-footer-icon hr-sidebar-footer-icon--placeholder" aria-hidden="true">
+                ⚙
+              </span>
               <ThemeToggleSwitch theme={theme} onToggle={toggleTheme} className="ts-sidebar-footer-switch" />
             </div>
             <button

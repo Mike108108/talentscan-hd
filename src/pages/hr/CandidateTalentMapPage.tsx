@@ -14,12 +14,15 @@ import {
   canParseReportContent,
   getReportContentRoot,
   isReadyTalentMapReport,
+  logNormalizedWorkspaceContent,
   logReportContentShape,
   normalizeAiReportContent,
 } from "../../lib/hr/normalizeAiReport";
 import {
+  ensureArray,
   extractCompletenessPercent,
   formatReportDate,
+  getText,
 } from "../../lib/hr/talentMapUiHelpers";
 import type { HrCandidate, HrPersonTalentMapV1, HrReport, HrVacancy, TalentMapRole } from "../../lib/hr/types";
 import { formulaToSafeHtml } from "../../lib/safeHtml";
@@ -132,8 +135,8 @@ function buildGenerationFailureMessage(
   return `Отчёт создан, но пока не готов к отображению. Статус: ${r.report_status}`;
 }
 
-function normalizeHrCopy(text: string | null | undefined): string {
-  const t = (text ?? "").trim();
+function normalizeHrCopy(text: unknown): string {
+  const t = getText(text);
   if (!t) return "";
   return t
     .replaceAll(
@@ -143,9 +146,9 @@ function normalizeHrCopy(text: string | null | undefined): string {
     .replaceAll(/Invitation/gi, "ясный запрос");
 }
 
-function normalizeHrMaybe(text: string | null | undefined): string | null {
-  if (!text) return null;
-  return normalizeHrCopy(text);
+function normalizeHrMaybe(text: unknown): string | null {
+  const t = normalizeHrCopy(text);
+  return t || null;
 }
 
 function CompactRow({
@@ -153,15 +156,17 @@ function CompactRow({
   subtitle,
   onClick,
 }: {
-  title: string;
-  subtitle?: string;
+  title: unknown;
+  subtitle?: unknown;
   onClick?: () => void;
 }) {
+  const safeTitle = getText(title, "—");
+  const safeSubtitle = subtitle != null && getText(subtitle) ? getText(subtitle) : null;
   const body = (
     <>
       <span className="hr-tm-row-body">
-        <span className="hr-tm-row-title">{title}</span>
-        {subtitle ? <span className="hr-tm-row-sub">{subtitle}</span> : null}
+        <span className="hr-tm-row-title">{safeTitle}</span>
+        {safeSubtitle ? <span className="hr-tm-row-sub">{safeSubtitle}</span> : null}
       </span>
       {onClick ? <span className="hr-tm-row-chevron" aria-hidden>→</span> : null}
     </>
@@ -212,10 +217,10 @@ function RolesTable({ roles }: { roles: TalentMapRole[] }) {
         </thead>
         <tbody>
           {roles.map((r, idx) => (
-            <tr key={`${r.role}-${idx}`}>
-              <td>{r.role}</td>
-              <td>{r.fit}</td>
-              <td>{normalizeHrCopy(r.note ?? "")}</td>
+            <tr key={`${getText(r.role)}-${idx}`}>
+              <td>{getText(r.role)}</td>
+              <td>{getText(r.fit)}</td>
+              <td>{normalizeHrCopy(r.note)}</td>
             </tr>
           ))}
         </tbody>
@@ -264,7 +269,26 @@ function TalentMapWorkspace({
     normalizeHrMaybe,
   };
 
-  const lists = useMemo(() => buildReportLists(ctx), [aiContent, rawAiContent, vacancies]);
+  const lists = useMemo(() => {
+    try {
+      return buildReportLists(ctx);
+    } catch (err) {
+      console.error("[TalentMapWorkspace] buildReportLists failed", err);
+      return {
+        risks: [],
+        interviews: [],
+        tests: [],
+        talents: [],
+        strengths: [],
+        directions: [],
+        questionable: [],
+        workEnv: [],
+        mgmt: [],
+        roles: [],
+        onboardingPhases: [],
+      };
+    }
+  }, [aiContent, rawAiContent, vacancies]);
 
   const hero = aiContent.hero;
   const bestWorkFormat = normalizeHrMaybe(hero?.best_work_format);
@@ -274,11 +298,10 @@ function TalentMapWorkspace({
     aiContent.executive_summary?.text ?? hero?.headline,
   );
   const finalRec = normalizeHrMaybe(aiContent.final_hr_recommendation?.text);
-  const formulaText =
-    typeof aiContent.working_formula?.text === "string" ? aiContent.working_formula.text : "";
+  const formulaText = getText(aiContent.working_formula?.text);
   const formulaHtml = formulaText ? formulaToSafeHtml(formulaText) : "";
 
-  const metrics = aiContent.data_quality?.metrics ?? [];
+  const metrics = ensureArray(aiContent.data_quality?.metrics);
   const completenessPct = extractCompletenessPercent(
     aiContent.data_quality?.completeness,
     metrics,
@@ -481,9 +504,9 @@ function TalentMapWorkspace({
         ) : (
           lists.onboardingPhases.map((phase, i) => (
             <CompactRow
-              key={`${phase.label}-${i}`}
-              title={phase.label}
-              subtitle={phase.summary ?? phase.focus ?? "Открыть этап"}
+              key={`${getText(phase.label, "phase")}-${i}`}
+              title={getText(phase.label, "Этап")}
+              subtitle={getText(phase.summary ?? phase.focus, "Открыть этап")}
               onClick={() =>
                 setDetail({ kind: "onboarding", phase: onboardingPhaseKey(phase, i) })
               }
@@ -649,7 +672,11 @@ function TalentMapWorkspace({
           <h3 className="hr-tm-section-panel-title">
             {NAV_SECTIONS.find((s) => s.id === section)?.label}
           </h3>
-          {renderSection()}
+          <SectionErrorBoundary
+            title={NAV_SECTIONS.find((s) => s.id === section)?.label ?? section}
+          >
+            {renderSection()}
+          </SectionErrorBoundary>
         </div>
       </div>
 
@@ -660,17 +687,19 @@ function TalentMapWorkspace({
         description="Детали для проверки на интервью"
       >
         {detail ? (
-          <ItemDetailPanel
-            detail={detail}
-            ctx={ctx}
-            risks={lists.risks}
-            interviews={lists.interviews}
-            tests={lists.tests}
-            talents={lists.talents}
-            strengths={lists.strengths}
-            directions={lists.directions}
-            roles={lists.roles}
-          />
+          <SectionErrorBoundary title="Детали">
+            <ItemDetailPanel
+              detail={detail}
+              ctx={ctx}
+              risks={lists.risks}
+              interviews={lists.interviews}
+              tests={lists.tests}
+              talents={lists.talents}
+              strengths={lists.strengths}
+              directions={lists.directions}
+              roles={lists.roles}
+            />
+          </SectionErrorBoundary>
         ) : null}
       </HrSidePanel>
     </div>
@@ -685,7 +714,29 @@ type BrokenReportDiagnostic = {
   topLevelKeys?: string[] | null;
   parseError?: string | null;
   renderError?: string | null;
+  renderErrorName?: string;
+  renderErrorMessage?: string;
+  renderErrorStack?: string[];
+  componentStack?: string | null;
 };
+
+function buildRenderDiagnostic(
+  error: Error | null,
+  errorInfo: ErrorInfo | null,
+  base: Omit<
+    BrokenReportDiagnostic,
+    "renderErrorName" | "renderErrorMessage" | "renderErrorStack" | "componentStack"
+  >,
+): BrokenReportDiagnostic {
+  return {
+    ...base,
+    renderError: error?.message ?? "Неизвестная ошибка render",
+    renderErrorName: error?.name,
+    renderErrorMessage: error?.message,
+    renderErrorStack: error?.stack?.split("\n").slice(0, 8),
+    componentStack: errorInfo?.componentStack ?? null,
+  };
+}
 
 function BrokenReportState({
   candidate,
@@ -746,27 +797,74 @@ function BrokenReportState({
 
 type WorkspaceErrorBoundaryProps = {
   children: ReactNode;
-  fallback: ReactNode;
+  fallback: (error: Error | null, errorInfo: ErrorInfo | null) => ReactNode;
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
 };
 
-type WorkspaceErrorBoundaryState = { hasError: boolean };
+type WorkspaceErrorBoundaryState = {
+  hasError: boolean;
+  error: Error | null;
+  errorInfo: ErrorInfo | null;
+};
 
 class WorkspaceErrorBoundary extends Component<
   WorkspaceErrorBoundaryProps,
   WorkspaceErrorBoundaryState
 > {
-  state: WorkspaceErrorBoundaryState = { hasError: false };
+  state: WorkspaceErrorBoundaryState = {
+    hasError: false,
+    error: null,
+    errorInfo: null,
+  };
 
-  static getDerivedStateFromError(): WorkspaceErrorBoundaryState {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): Partial<WorkspaceErrorBoundaryState> {
+    return { hasError: true, error };
   }
 
   componentDidCatch(error: unknown, info: ErrorInfo) {
-    console.error("[hr] talent map workspace render failed", error, info.componentStack);
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error("[WorkspaceErrorBoundary]", err, info);
+    this.setState({ error: err, errorInfo: info });
+    this.props.onError?.(err, info);
   }
 
   render() {
-    if (this.state.hasError) return this.props.fallback;
+    if (this.state.hasError) {
+      return this.props.fallback(this.state.error, this.state.errorInfo);
+    }
+    return this.props.children;
+  }
+}
+
+type SectionErrorBoundaryProps = {
+  title: string;
+  children: ReactNode;
+};
+
+type SectionErrorBoundaryState = { hasError: boolean; message: string | null };
+
+class SectionErrorBoundary extends Component<
+  SectionErrorBoundaryProps,
+  SectionErrorBoundaryState
+> {
+  state: SectionErrorBoundaryState = { hasError: false, message: null };
+
+  static getDerivedStateFromError(error: Error): SectionErrorBoundaryState {
+    return { hasError: true, message: error.message };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error(`[SectionErrorBoundary:${this.props.title}]`, error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <p className="hr-muted" style={{ margin: 0 }}>
+          Не удалось отобразить раздел «{this.props.title}»: {this.state.message}
+        </p>
+      );
+    }
     return this.props.children;
   }
 }
@@ -1141,26 +1239,27 @@ export default function CandidateTalentMapPage() {
       );
     }
 
-    const brokenFallback = (
-      <BrokenReportState
-        candidate={candidate}
-        companyId={companyId}
-        candidateId={candidateId}
-        onRegenerate={() => onGenerate(true)}
-        generating={generating}
-        diagnostic={{
-          reportId: aiReport.id,
-          reportStatus: aiReport.report_status,
-          reportType: aiReport.report_type,
-          contentType: typeof aiReport.content_json,
-          topLevelKeys: contentKeys,
-          renderError: "Ошибка отображения workspace — см. консоль",
-        }}
-      />
-    );
+    const diagnosticBase = {
+      reportId: aiReport.id,
+      reportStatus: aiReport.report_status,
+      reportType: aiReport.report_type,
+      contentType: typeof aiReport.content_json,
+      topLevelKeys: contentKeys,
+    };
+
+    logNormalizedWorkspaceContent(safeContent);
 
     return (
-      <WorkspaceErrorBoundary fallback={brokenFallback}>
+      <WorkspaceErrorBoundary
+        fallback={(error, errorInfo) => (
+          <BrokenReportState
+            candidate={candidate}
+            companyId={companyId}
+            candidateId={candidateId}
+            diagnostic={buildRenderDiagnostic(error, errorInfo, diagnosticBase)}
+          />
+        )}
+      >
         <TalentMapWorkspace
           candidate={candidate}
           companyId={companyId}

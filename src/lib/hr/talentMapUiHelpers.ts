@@ -71,6 +71,11 @@ export function isNonEmptyArray(value: unknown): boolean {
   return Array.isArray(value) && value.length > 0;
 }
 
+/** Guarantee array for `.map` / spread / `for..of` in workspace UI. */
+export function ensureArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 /** Coerce disclaimers / string lists from DB (array or single string). */
 export function coerceStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
@@ -239,15 +244,16 @@ export function parseOnboardingTimeline(
 }
 
 export function extractCompletenessPercent(
-  completeness?: string,
-  metrics?: { label: string; value: string }[],
+  completeness?: unknown,
+  metrics?: unknown,
 ): number | null {
-  const fromStr = completeness?.match(/(\d{1,3})\s*%/);
+  const completenessStr = getText(completeness);
+  const fromStr = completenessStr.match(/(\d{1,3})\s*%/);
   if (fromStr) {
     const n = Number(fromStr[1]);
     if (Number.isFinite(n)) return Math.min(100, Math.max(0, n));
   }
-  for (const m of metrics ?? []) {
+  for (const m of ensureArray<{ label: string; value: string }>(metrics)) {
     const match = `${m.label} ${m.value}`.match(/(\d{1,3})\s*%/);
     if (match) {
       const n = Number(match[1]);

@@ -3,6 +3,7 @@ import type { HrPersonTalentMapV1, HrVacancy, TalentMapRole } from "../../lib/hr
 import {
   coerceRolesList,
   coerceStringArray,
+  ensureArray,
   getList,
   getText,
   mergeFlexibleItems,
@@ -17,8 +18,8 @@ export type ReportContentCtx = {
   aiContent: HrPersonTalentMapV1;
   rawContent?: unknown;
   vacancies: HrVacancy[];
-  normalizeHrCopy: (text: string) => string;
-  normalizeHrMaybe: (text: string | null | undefined) => string | null;
+  normalizeHrCopy: (text: unknown) => string;
+  normalizeHrMaybe: (text: unknown) => string | null;
 };
 
 export type DetailPanelState =
@@ -82,7 +83,7 @@ export function DataQualitySection({ ctx }: { ctx: ReportContentCtx }) {
   const dq = aiContent.data_quality;
   const raw = asRec(rawContent);
   const dqRaw = asRec(raw.data_quality);
-  const metrics = dq?.metrics ?? [];
+  const metrics = ensureArray<{ label: string; value: string; hint?: string }>(dq?.metrics);
   const missing = getList(dqRaw.missing);
   const reduces = getText(dqRaw.reduces_accuracy);
   const toAdd = getList(dqRaw.add_data ?? dqRaw.suggested_data);
@@ -371,18 +372,18 @@ export function buildReportLists(ctx: ReportContentCtx) {
   const { aiContent, rawContent } = ctx;
   const raw = asRec(rawContent);
   return {
-    risks: mergeFlexibleItems(aiContent.risks ?? [], raw.risks),
-    interviews: mergeFlexibleItems(aiContent.interview_questions ?? [], raw.interview_questions),
-    tests: mergeFlexibleItems(aiContent.test_tasks ?? [], raw.test_tasks),
-    talents: mergeFlexibleItems(aiContent.talents ?? [], raw.talents),
-    strengths: mergeFlexibleItems(aiContent.strengths ?? [], raw.strengths),
-    directions: mergeFlexibleItems(aiContent.suitable_directions ?? [], raw.suitable_directions),
+    risks: mergeFlexibleItems(ensureArray(aiContent.risks), raw.risks),
+    interviews: mergeFlexibleItems(ensureArray(aiContent.interview_questions), raw.interview_questions),
+    tests: mergeFlexibleItems(ensureArray(aiContent.test_tasks), raw.test_tasks),
+    talents: mergeFlexibleItems(ensureArray(aiContent.talents), raw.talents),
+    strengths: mergeFlexibleItems(ensureArray(aiContent.strengths), raw.strengths),
+    directions: mergeFlexibleItems(ensureArray(aiContent.suitable_directions), raw.suitable_directions),
     questionable: mergeFlexibleItems(
-      aiContent.questionable_directions ?? [],
+      ensureArray(aiContent.questionable_directions),
       raw.questionable_directions,
     ),
-    workEnv: mergeFlexibleItems(aiContent.work_environment ?? [], raw.work_environment),
-    mgmt: mergeFlexibleItems(aiContent.management_style ?? [], raw.management_style),
+    workEnv: mergeFlexibleItems(ensureArray(aiContent.work_environment), raw.work_environment),
+    mgmt: mergeFlexibleItems(ensureArray(aiContent.management_style), raw.management_style),
     roles: coerceRolesList(aiContent.roles ?? raw.roles),
     onboardingPhases: parseOnboardingTimeline(aiContent.onboarding_7_30_90, rawContent),
   };

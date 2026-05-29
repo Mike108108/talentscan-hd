@@ -286,6 +286,21 @@ function buildNormalizedContent(root: Record<string, unknown>): HrPersonTalentMa
   };
 }
 
+export function logNormalizedWorkspaceContent(content: HrPersonTalentMapV1): void {
+  console.info("[HR normalized workspace content]", {
+    hero: content.hero,
+    executiveSummaryType: typeof content.executive_summary,
+    executiveSummaryTextType: typeof content.executive_summary?.text,
+    talentsIsArray: Array.isArray(content.talents),
+    risksIsArray: Array.isArray(content.risks),
+    rolesIsArray: Array.isArray(content.roles),
+    interviewIsArray: Array.isArray(content.interview_questions),
+    testTasksIsArray: Array.isArray(content.test_tasks),
+    metricsIsArray: Array.isArray(content.data_quality?.metrics),
+    onboarding: content.onboarding_7_30_90,
+  });
+}
+
 /** Defensive normalization so incomplete AI JSON does not break the UI. */
 export function normalizeAiReportContent(raw: unknown): HrPersonTalentMapV1 {
   try {

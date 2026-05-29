@@ -13,6 +13,12 @@ function asObject(value: unknown): Record<string, unknown> {
   return {};
 }
 
+function textFromField(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return asString(asObject(value).text);
+}
+
 function normalizeItems(raw: unknown): HrPersonTalentMapV1["talents"] {
   if (!Array.isArray(raw)) return [];
   return raw.map((item) => {
@@ -51,15 +57,58 @@ function normalizeMetrics(raw: unknown): HrPersonTalentMapV1["data_quality"]["me
   });
 }
 
+/** Parse DB/API content_json (object or JSON string). */
+export function parseReportContentJson(raw: unknown): Record<string, unknown> | null {
+  if (raw == null) return null;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof raw === "object" && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  return null;
+}
+
 /** Defensive normalization so incomplete AI JSON does not break the UI. */
 export function normalizeAiReportContent(raw: unknown): HrPersonTalentMapV1 {
-  const root = asObject(raw);
+  const root = parseReportContentJson(raw) ?? {};
   const hero = asObject(root.hero);
-  const dataQuality = asObject(root.data_quality);
-  const executive = asObject(root.executive_summary);
-  const workingFormula = asObject(root.working_formula);
+  const dataQuality = asObject(
+    typeof root.data_quality === "object" && root.data_quality && !Array.isArray(root.data_quality)
+      ? root.data_quality
+      : {},
+  );
+  const executiveRaw = root.executive_summary;
+  const executive = asObject(
+    typeof executiveRaw === "object" && executiveRaw && !Array.isArray(executiveRaw)
+      ? executiveRaw
+      : {},
+  );
+  const workingFormulaRaw = root.working_formula;
+  const workingFormula = asObject(
+    typeof workingFormulaRaw === "object" &&
+      workingFormulaRaw &&
+      !Array.isArray(workingFormulaRaw)
+      ? workingFormulaRaw
+      : {},
+  );
   const onboarding = asObject(root.onboarding_7_30_90);
-  const finalRec = asObject(root.final_hr_recommendation);
+  const finalRecRaw = root.final_hr_recommendation;
+  const finalRec = asObject(
+    typeof finalRecRaw === "object" && finalRecRaw && !Array.isArray(finalRecRaw)
+      ? finalRecRaw
+      : {},
+  );
   const qaMeta = asObject(root.qa_meta);
 
   const fitScoreRaw = executive.fit_score;
@@ -89,10 +138,12 @@ export function normalizeAiReportContent(raw: unknown): HrPersonTalentMapV1 {
       metrics: normalizeMetrics(dataQuality.metrics),
     },
     executive_summary: {
-      text: asString(executive.text),
+      text: textFromField(executiveRaw) || asString(executive.text),
       ...(fitScore !== undefined ? { fit_score: fitScore } : {}),
     },
-    working_formula: { text: asString(workingFormula.text) },
+    working_formula: {
+      text: textFromField(workingFormulaRaw) || asString(workingFormula.text),
+    },
     talents: normalizeItems(root.talents),
     strengths: normalizeItems(root.strengths),
     risks: normalizeItems(root.risks),
@@ -109,7 +160,9 @@ export function normalizeAiReportContent(raw: unknown): HrPersonTalentMapV1 {
       day_90: asString(onboarding.day_90),
       items: normalizeItems(onboarding.items),
     },
-    final_hr_recommendation: { text: asString(finalRec.text) },
+    final_hr_recommendation: {
+      text: textFromField(finalRecRaw) || asString(finalRec.text),
+    },
     qa_meta: {
       hypothesis_level: asString(qaMeta.hypothesis_level),
       disclaimers,

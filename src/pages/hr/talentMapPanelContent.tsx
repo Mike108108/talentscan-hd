@@ -303,7 +303,7 @@ export function ItemDetailPanel({
           <p className="hr-tm-panel-lead">{r.role}</p>
         </SectionBlock>
         <MetaRow label="Соответствие" value={r.fit} />
-        <MetaRow label="Заметка" value={normalizeHrCopy(r.note)} />
+        <MetaRow label="Заметка" value={normalizeHrCopy(r.note ?? "")} />
       </>
     );
   }

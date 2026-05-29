@@ -172,24 +172,25 @@ export function parseOnboardingPhase(
 }
 
 export function parseOnboardingTimeline(
-  onboarding: HrPersonTalentMapV1["onboarding_7_30_90"],
+  onboarding: HrPersonTalentMapV1["onboarding_7_30_90"] | undefined,
   rawRoot?: unknown,
 ): OnboardingPhase[] {
   const raw = asObject(rawRoot);
   const ob = asObject(raw.onboarding_7_30_90 ?? rawRoot);
+  const safeOnboarding = onboarding ?? { day_7: "", day_30: "", day_90: "", items: [] };
 
   const phases: OnboardingPhase[] = [];
 
-  const d7 = parseOnboardingPhase(ob.day_7 ?? onboarding.day_7, "Первые 7 дней");
-  const d30 = parseOnboardingPhase(ob.day_30 ?? onboarding.day_30, "Первые 30 дней");
-  const d90 = parseOnboardingPhase(ob.day_90 ?? onboarding.day_90, "Первые 90 дней");
+  const d7 = parseOnboardingPhase(ob.day_7 ?? safeOnboarding.day_7, "Первые 7 дней");
+  const d30 = parseOnboardingPhase(ob.day_30 ?? safeOnboarding.day_30, "Первые 30 дней");
+  const d90 = parseOnboardingPhase(ob.day_90 ?? safeOnboarding.day_90, "Первые 90 дней");
 
   if (d7) phases.push(d7);
   if (d30) phases.push(d30);
   if (d90) phases.push(d90);
 
-  if (phases.length === 0 && onboarding.items?.length) {
-    for (const item of onboarding.items) {
+  if (phases.length === 0 && safeOnboarding.items?.length) {
+    for (const item of safeOnboarding.items) {
       phases.push({
         label: item.title,
         summary: item.body,

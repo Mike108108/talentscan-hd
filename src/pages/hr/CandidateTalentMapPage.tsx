@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { Component, useEffect, useMemo, useState } from "react";
+import type { ErrorInfo, ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { HrSidePanel } from "../../components/hr/HrSidePanel";
 import {
@@ -7,7 +8,10 @@ import {
   fetchLatestCandidateReport,
   generateCandidateReport,
 } from "../../lib/hr/api";
-import { normalizeAiReportContent } from "../../lib/hr/normalizeAiReport";
+import {
+  normalizeAiReportContent,
+  parseReportContentJson,
+} from "../../lib/hr/normalizeAiReport";
 import {
   extractCompletenessPercent,
   formatReportDate,
@@ -48,9 +52,14 @@ const NAV_SECTIONS: Array<{ id: SectionId; label: string; hint?: string }> = [
   { id: "roles", label: "Роли и вакансии" },
 ];
 
-function normalizeHrCopy(text: string): string {
-  const t = text.trim();
-  if (!t) return t;
+function isReadyTalentMapReport(report: HrReport | null): boolean {
+  if (!report || report.report_status !== "ready") return false;
+  return parseReportContentJson(report.content_json) != null;
+}
+
+function normalizeHrCopy(text: string | null | undefined): string {
+  const t = (text ?? "").trim();
+  if (!t) return "";
   return t
     .replaceAll(
       /Wait for the Invitation/gi,
@@ -131,7 +140,7 @@ function RolesTable({ roles }: { roles: TalentMapRole[] }) {
             <tr key={`${r.role}-${idx}`}>
               <td>{r.role}</td>
               <td>{r.fit}</td>
-              <td>{normalizeHrCopy(r.note)}</td>
+              <td>{normalizeHrCopy(r.note ?? "")}</td>
             </tr>
           ))}
         </tbody>
@@ -168,6 +177,10 @@ function TalentMapWorkspace({
   const [section, setSection] = useState<SectionId>("overview");
   const [detail, setDetail] = useState<DetailPanelState | null>(null);
 
+  useEffect(() => {
+    if (generating) setDetail(null);
+  }, [generating]);
+
   const ctx: ReportContentCtx = {
     aiContent,
     rawContent: rawAiContent,
@@ -186,9 +199,9 @@ function TalentMapWorkspace({
     aiContent.executive_summary?.text ?? hero?.headline,
   );
   const finalRec = normalizeHrMaybe(aiContent.final_hr_recommendation?.text);
-  const formulaHtml = aiContent.working_formula?.text
-    ? formulaToSafeHtml(aiContent.working_formula.text)
-    : "";
+  const formulaText =
+    typeof aiContent.working_formula?.text === "string" ? aiContent.working_formula.text : "";
+  const formulaHtml = formulaText ? formulaToSafeHtml(formulaText) : "";
 
   const metrics = aiContent.data_quality?.metrics ?? [];
   const completenessPct = extractCompletenessPercent(
@@ -428,7 +441,7 @@ function TalentMapWorkspace({
               <CompactRow
                 key={`${r.role}-${i}`}
                 title={r.role}
-                subtitle={`${r.fit} · ${normalizeHrCopy(r.note)}`}
+                subtitle={`${r.fit ?? "—"} · ${normalizeHrCopy(r.note ?? "")}`}
                 onClick={() => setDetail({ kind: "role", index: i })}
               />
             ))}
@@ -588,6 +601,74 @@ function TalentMapWorkspace({
   );
 }
 
+function BrokenReportState({
+  candidate,
+  companyId,
+  candidateId,
+  onRegenerate,
+  generating,
+}: {
+  candidate: HrCandidate;
+  companyId: string;
+  candidateId: string;
+  onRegenerate: () => void;
+  generating: boolean;
+}) {
+  return (
+    <div className="hr-tm-page">
+      <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
+        ← К кандидату
+      </Link>
+      <h2 className="hr-tm-title">Карта талантов</h2>
+      <p className="hr-tm-subtitle">
+        <b>{candidate.name}</b>
+      </p>
+      <div className="hr-card hr-tm-empty-card">
+        <p className="hr-tm-empty-title">Разбор создан, но отобразить его не удалось</p>
+        <p className="hr-muted" style={{ lineHeight: 1.55, maxWidth: 520 }}>
+          Данные отчёта пришли в неожиданном формате. Попробуйте перегенерировать карту.
+        </p>
+        <button
+          type="button"
+          className="hr-btn"
+          style={{ marginTop: 16 }}
+          disabled={generating}
+          onClick={onRegenerate}
+        >
+          {generating ? "Генерируем карту…" : "Перегенерировать карту"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type WorkspaceErrorBoundaryProps = {
+  children: ReactNode;
+  fallback: ReactNode;
+};
+
+type WorkspaceErrorBoundaryState = { hasError: boolean };
+
+class WorkspaceErrorBoundary extends Component<
+  WorkspaceErrorBoundaryProps,
+  WorkspaceErrorBoundaryState
+> {
+  state: WorkspaceErrorBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError(): WorkspaceErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo) {
+    console.error("[hr] talent map workspace render failed", error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
+
 function EmptyReportState({
   candidate,
   companyId,
@@ -654,9 +735,9 @@ export default function CandidateTalentMapPage() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = async (opts?: { silent?: boolean }) => {
     if (!companyId || !candidateId) return;
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     const [c, links, report] = await Promise.all([
       fetchCandidate(companyId, candidateId),
       fetchCandidateVacancies(companyId, candidateId),
@@ -665,7 +746,7 @@ export default function CandidateTalentMapPage() {
     setCandidate(c);
     setVacancies((links ?? []).map((l: { vacancy: HrVacancy }) => l.vacancy).filter(Boolean));
     setAiReport(report);
-    setLoading(false);
+    if (!opts?.silent) setLoading(false);
   };
 
   useEffect(() => {
@@ -678,17 +759,33 @@ export default function CandidateTalentMapPage() {
     setGenError(null);
     try {
       const primaryVacancyId = vacancies.length === 1 ? vacancies[0].id : null;
-      const report = await generateCandidateReport(companyId, candidateId, {
+      await generateCandidateReport(companyId, candidateId, {
         vacancyId: primaryVacancyId,
         reportType: "hr_person_talent_map",
         forceRegenerate,
       });
-      setAiReport(report);
-      if (report.report_status !== "ready") {
-        await load();
+      const latest = await fetchLatestCandidateReport(
+        companyId,
+        candidateId,
+        "hr_person_talent_map",
+      );
+      setAiReport(latest);
+      if (!isReadyTalentMapReport(latest)) {
+        await load({ silent: true });
       }
     } catch (err) {
+      console.error("[hr] generate talent map failed", err);
       setGenError(err instanceof Error ? err.message : "Не удалось сгенерировать карту");
+      try {
+        const latest = await fetchLatestCandidateReport(
+          companyId,
+          candidateId,
+          "hr_person_talent_map",
+        );
+        if (latest) setAiReport(latest);
+      } catch {
+        /* keep previous report state */
+      }
     } finally {
       setGenerating(false);
     }
@@ -698,25 +795,56 @@ export default function CandidateTalentMapPage() {
     return <p>Загрузка…</p>;
   }
 
-  const hasReadyReport =
-    aiReport &&
-    aiReport.report_status === "ready" &&
-    aiReport.content_json &&
-    typeof aiReport.content_json === "object";
+  const parsedContent = aiReport ? parseReportContentJson(aiReport.content_json) : null;
+  const hasReadyReport = isReadyTalentMapReport(aiReport);
 
-  if (hasReadyReport) {
-    return (
-      <TalentMapWorkspace
+  let safeContent: HrPersonTalentMapV1 | null = null;
+  if (hasReadyReport && parsedContent) {
+    try {
+      safeContent = normalizeAiReportContent(parsedContent);
+    } catch (err) {
+      console.error("[hr] normalize talent map content failed", err);
+      safeContent = null;
+    }
+  }
+
+  if (hasReadyReport && safeContent && aiReport) {
+    const brokenFallback = (
+      <BrokenReportState
         candidate={candidate}
         companyId={companyId}
         candidateId={candidateId}
-        vacancies={vacancies}
-        aiContent={normalizeAiReportContent(aiReport.content_json)}
-        rawAiContent={aiReport.content_json}
-        aiReport={aiReport}
         onRegenerate={() => onGenerate(true)}
         generating={generating}
-        genError={genError}
+      />
+    );
+
+    return (
+      <WorkspaceErrorBoundary fallback={brokenFallback}>
+        <TalentMapWorkspace
+          candidate={candidate}
+          companyId={companyId}
+          candidateId={candidateId}
+          vacancies={vacancies}
+          aiContent={safeContent}
+          rawAiContent={parsedContent}
+          aiReport={aiReport}
+          onRegenerate={() => onGenerate(true)}
+          generating={generating}
+          genError={genError}
+        />
+      </WorkspaceErrorBoundary>
+    );
+  }
+
+  if (hasReadyReport && !safeContent) {
+    return (
+      <BrokenReportState
+        candidate={candidate}
+        companyId={companyId}
+        candidateId={candidateId}
+        onRegenerate={() => onGenerate(true)}
+        generating={generating}
       />
     );
   }

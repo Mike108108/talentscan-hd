@@ -496,9 +496,22 @@ export async function generateCandidateReport(
       force_regenerate: opts?.forceRegenerate ?? false,
     }),
   });
-  const data = (await resp.json()) as { error?: string; report?: HrReport };
+
+  const rawBody = await resp.text();
+  let data: { error?: string; report?: HrReport; source?: string } = {};
+  if (rawBody) {
+    try {
+      data = JSON.parse(rawBody) as { error?: string; report?: HrReport; source?: string };
+    } catch {
+      const preview = rawBody.replace(/\s+/g, " ").slice(0, 160);
+      throw new Error(
+        `Сервер вернул не-JSON ответ (${resp.status}). ${preview || "Пустое тело ответа."}`,
+      );
+    }
+  }
+
   if (!resp.ok) {
-    throw new Error(data.error ?? "Ошибка генерации отчёта");
+    throw new Error(data.error ?? `Ошибка генерации отчёта (${resp.status})`);
   }
   if (!data.report) throw new Error("Пустой ответ сервера");
   return data.report;

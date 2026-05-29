@@ -10,8 +10,29 @@ import {
 
 const PROMPT_VERSION = "hr_person_talent_map_v1";
 const DEFAULT_REPORT_TYPE = "hr_person_talent_map";
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type ReportType = "hr_person_talent_map";
+
+class ConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConfigError";
+  }
+}
+
+function logCaughtError(context: string, err: unknown) {
+  if (err instanceof Error) {
+    console.error(`[hr-generate-candidate-report] ${context}`, {
+      name: err.name,
+      message: err.message,
+      stack: err.stack,
+    });
+    return;
+  }
+  console.error(`[hr-generate-candidate-report] ${context}`, err);
+}
 
 function jsonResponse(statusCode: number, body: unknown) {
   return {
@@ -25,6 +46,73 @@ function asString(value: unknown, fallback = ""): string {
   if (typeof value === "string" && value.trim()) return value.trim();
   if (typeof value === "number") return String(value);
   return fallback;
+}
+
+function resolveSupabaseConfig(): { url: string; anonKey: string } {
+  const urlRaw = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
+  const keyRaw = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!urlRaw?.trim()) {
+    throw new ConfigError("Missing SUPABASE_URL");
+  }
+  if (!keyRaw?.trim()) {
+    throw new ConfigError("Missing SUPABASE_ANON_KEY");
+  }
+
+  const url = urlRaw.trim();
+  const anonKey = keyRaw.trim();
+
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new ConfigError("Invalid SUPABASE_URL");
+    }
+  } catch (err) {
+    if (err instanceof ConfigError) throw err;
+    throw new ConfigError("Invalid SUPABASE_URL");
+  }
+
+  if (anonKey.length < 20) {
+    throw new ConfigError("Invalid SUPABASE_ANON_KEY");
+  }
+
+  return { url, anonKey };
+}
+
+function resolveOpenAiApiKey(): string {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new ConfigError("Missing OPENAI_API_KEY");
+  }
+  return apiKey;
+}
+
+function requireUuid(value: string, fieldName: string): string {
+  if (!value) {
+    throw new Error(`Missing ${fieldName}`);
+  }
+  if (!UUID_RE.test(value)) {
+    throw new Error(`Invalid ${fieldName}`);
+  }
+  return value;
+}
+
+function createSupabaseClient(url: string, anonKey: string, token?: string) {
+  if (!url.trim() || !anonKey.trim()) {
+    throw new ConfigError("Missing Supabase configuration");
+  }
+
+  try {
+    return createClient(url, anonKey, {
+      auth: { persistSession: false },
+      ...(token
+        ? { global: { headers: { Authorization: `Bearer ${token}` } } }
+        : {}),
+    });
+  } catch (err) {
+    logCaughtError("createSupabaseClient", err);
+    throw new ConfigError("Invalid Supabase client configuration");
+  }
 }
 
 function stableStringify(value: unknown): string {
@@ -340,6 +428,7 @@ export const handler: Handler = async (
   event: HandlerEvent,
   _context: HandlerContext,
 ) => {
+  try {
   if (event.httpMethod !== "POST") {
     return jsonResponse(405, { error: "Разрешён только метод POST." });
   }
@@ -350,18 +439,24 @@ export const handler: Handler = async (
   if (!bearerMatch) {
     return jsonResponse(401, { error: "Требуется вход.", source: "auth" });
   }
-  const token = bearerMatch[1];
-
-  const supabaseUrl =
-    process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
-  const supabaseAnonKey =
-    process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? "";
-
-  if (!supabaseUrl.trim() || !supabaseAnonKey.trim()) {
-    return jsonResponse(500, { error: "Supabase не настроен на сервере.", source: "config" });
+  const token = bearerMatch[1].trim();
+  if (!token) {
+    return jsonResponse(401, { error: "Требуется вход.", source: "auth" });
   }
 
-  const authClient = createClient(supabaseUrl, supabaseAnonKey);
+  let supabaseUrl: string;
+  let supabaseAnonKey: string;
+  try {
+    ({ url: supabaseUrl, anonKey: supabaseAnonKey } = resolveSupabaseConfig());
+  } catch (err) {
+    logCaughtError("resolveSupabaseConfig", err);
+    if (err instanceof ConfigError) {
+      return jsonResponse(500, { error: err.message, source: "config" });
+    }
+    return jsonResponse(500, { error: "Invalid Supabase configuration.", source: "config" });
+  }
+
+  const authClient = createSupabaseClient(supabaseUrl, supabaseAnonKey);
   const { data: authData, error: authErr } = await authClient.auth.getUser(token);
   if (authErr || !authData.user) {
     return jsonResponse(401, { error: "Требуется вход.", source: "auth" });
@@ -376,28 +471,31 @@ export const handler: Handler = async (
   };
   try {
     body = event.body ? JSON.parse(event.body) : {};
-  } catch {
+  } catch (err) {
+    logCaughtError("parse_request_body", err);
     return jsonResponse(400, { error: "Некорректный JSON.", source: "validation" });
   }
 
-  const companyId = asString(body.company_id);
-  const candidateId = asString(body.candidate_id);
-  const vacancyId = body.vacancy_id ? asString(body.vacancy_id) : null;
+  let companyId: string;
+  let candidateId: string;
+  let vacancyId: string | null = null;
+  try {
+    companyId = requireUuid(asString(body.company_id), "company_id");
+    candidateId = requireUuid(asString(body.candidate_id), "candidate_id");
+    if (body.vacancy_id) {
+      vacancyId = requireUuid(asString(body.vacancy_id), "vacancy_id");
+    }
+  } catch (err) {
+    logCaughtError("validate_request_ids", err);
+    const message = err instanceof Error ? err.message : "Invalid request IDs.";
+    return jsonResponse(400, { error: message, source: "validation" });
+  }
+
   const reportType: ReportType =
     body.report_type === "hr_person_talent_map" ? body.report_type : DEFAULT_REPORT_TYPE;
   const forceRegenerate = body.force_regenerate === true;
 
-  if (!companyId || !candidateId) {
-    return jsonResponse(400, {
-      error: "Укажите company_id и candidate_id.",
-      source: "validation",
-    });
-  }
-
-  const db = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: { persistSession: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
+  const db = createSupabaseClient(supabaseUrl, supabaseAnonKey, token);
 
   const { data: company, error: companyErr } = await db
     .from("hr_companies")
@@ -478,15 +576,18 @@ export const handler: Handler = async (
     }
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return jsonResponse(500, {
-      error: "Ключ OpenAI не настроен (OPENAI_API_KEY).",
-      source: "config",
-    });
+  let apiKey: string;
+  try {
+    apiKey = resolveOpenAiApiKey();
+  } catch (err) {
+    logCaughtError("resolveOpenAiApiKey", err);
+    if (err instanceof ConfigError) {
+      return jsonResponse(500, { error: err.message, source: "config" });
+    }
+    return jsonResponse(500, { error: "Missing OPENAI_API_KEY", source: "config" });
   }
 
-  const model = process.env.OPENAI_MODEL ?? "gpt-4o";
+  const model = process.env.OPENAI_MODEL?.trim() || "gpt-4o";
   const now = new Date().toISOString();
 
   let rawContentJson: Record<string, unknown>;
@@ -498,6 +599,7 @@ export const handler: Handler = async (
       buildUserPrompt(analysisPacket, reportType),
     );
   } catch (err) {
+    logCaughtError("openai_generate", err);
     const message = err instanceof Error ? err.message : "Ошибка генерации отчёта.";
     return jsonResponse(502, { error: message, source: "openai" });
   }
@@ -508,7 +610,7 @@ export const handler: Handler = async (
       rawContentJson = await cleanupBannedTerms(apiKey, model, rawContentJson, banned);
       banned = findBannedClientTerms(rawContentJson);
     } catch (err) {
-      console.error("Banned terms cleanup failed:", err);
+      logCaughtError("openai_cleanup", err);
     }
   }
 
@@ -590,4 +692,13 @@ export const handler: Handler = async (
   }
 
   return jsonResponse(200, { report: saved });
+  } catch (err) {
+    logCaughtError("handler", err);
+    if (err instanceof ConfigError) {
+      return jsonResponse(500, { error: err.message, source: "config" });
+    }
+    const message =
+      err instanceof Error ? err.message : "Внутренняя ошибка сервера.";
+    return jsonResponse(500, { error: message, source: "server" });
+  }
 };

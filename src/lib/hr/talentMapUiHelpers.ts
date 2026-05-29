@@ -28,6 +28,25 @@ export type OnboardingPhase = {
   summary?: string;
 };
 
+const TEXT_KEYS = [
+  "text",
+  "summary",
+  "description",
+  "body",
+  "value",
+  "title",
+  "label",
+  "content",
+  "message",
+  "recommendation",
+  "headline",
+] as const;
+
+const LIST_KEYS = ["items", "list", "points", "values", "data", "entries"] as const;
+
+const MAX_TEXT_DEPTH = 5;
+const MAX_ARRAY_ITEMS = 20;
+
 function asObject(value: unknown): Record<string, unknown> {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, unknown>;
@@ -35,34 +54,86 @@ function asObject(value: unknown): Record<string, unknown> {
   return {};
 }
 
-export function getText(value: unknown, fallback = ""): string {
+function pickFirst(...values: unknown[]): unknown {
+  for (const v of values) {
+    if (v != null && v !== "") return v;
+  }
+  return undefined;
+}
+
+function primitiveText(value: unknown): string {
+  if (value == null) return "";
   if (typeof value === "string") return value.trim();
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  if (Array.isArray(value)) {
-    const parts = value.map((v) => getText(v)).filter(Boolean);
-    return parts.join("\n");
+  if (typeof value === "boolean") return value ? "да" : "нет";
+  return "";
+}
+
+function shallowObjectText(obj: Record<string, unknown>): string {
+  const parts: string[] = [];
+  for (const [key, val] of Object.entries(obj)) {
+    if (TEXT_KEYS.includes(key as (typeof TEXT_KEYS)[number])) continue;
+    const t = primitiveText(val);
+    if (t) parts.push(t);
+    if (parts.length >= 3) break;
   }
-  const obj = asObject(value);
-  for (const key of ["text", "summary", "description", "body", "value", "title"]) {
-    const t = getText(obj[key]);
+  return parts.join(" · ");
+}
+
+/** Safe text extraction — no infinite recursion on circular objects. */
+export function getText(
+  value: unknown,
+  fallback = "",
+  depth = 0,
+  seen: WeakSet<object> = new WeakSet(),
+): string {
+  const prim = primitiveText(value);
+  if (prim) return prim;
+
+  if (depth >= MAX_TEXT_DEPTH) return fallback;
+
+  if (Array.isArray(value)) {
+    const parts = value
+      .slice(0, MAX_ARRAY_ITEMS)
+      .map((v) => getText(v, "", depth + 1, seen))
+      .filter(Boolean);
+    return parts.join("\n") || fallback;
+  }
+
+  if (typeof value !== "object" || value === null) return fallback;
+
+  if (seen.has(value)) return fallback;
+  seen.add(value);
+
+  const obj = value as Record<string, unknown>;
+  for (const key of TEXT_KEYS) {
+    const child = obj[key];
+    if (child === value) continue;
+    const t = getText(child, "", depth + 1, seen);
     if (t) return t;
   }
-  return fallback;
+
+  const shallow = shallowObjectText(obj);
+  return shallow || fallback;
 }
 
 export function getList(value: unknown): string[] {
   if (!value) return [];
   if (Array.isArray(value)) {
     return value
+      .slice(0, MAX_ARRAY_ITEMS)
       .map((item) => {
         if (typeof item === "string") return item.trim();
         const obj = asObject(item);
-        return getText(obj.text ?? obj.title ?? obj.body ?? item);
+        return getText(pickFirst(obj.text, obj.title, obj.body));
       })
       .filter(Boolean);
   }
   const obj = asObject(value);
-  if (Array.isArray(obj.items)) return getList(obj.items);
+  for (const key of LIST_KEYS) {
+    const nested = obj[key];
+    if (nested != null) return getList(nested);
+  }
   const single = getText(value);
   return single ? [single] : [];
 }
@@ -73,7 +144,17 @@ export function isNonEmptyArray(value: unknown): boolean {
 
 /** Guarantee array for `.map` / spread / `for..of` in workspace UI. */
 export function ensureArray<T>(value: unknown): T[] {
-  return Array.isArray(value) ? value : [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    const t = value.trim();
+    return t ? ([t] as unknown as T[]) : [];
+  }
+  const obj = asObject(value);
+  for (const key of LIST_KEYS) {
+    const nested = obj[key];
+    if (nested != null) return ensureArray<T>(nested);
+  }
+  return [];
 }
 
 /** Coerce disclaimers / string lists from DB (array or single string). */
@@ -86,15 +167,15 @@ export function coerceStringArray(value: unknown): string[] {
 }
 
 export function coerceRolesList(value: unknown): HrPersonTalentMapV1["roles"] {
-  if (!Array.isArray(value)) return [];
-  return value.map((item) => {
+  const rows = ensureArray<unknown>(value);
+  return rows.map((item) => {
     if (typeof item === "string") {
       const t = item.trim();
       return { role: t || "—", fit: "—", note: "" };
     }
     const rec = asObject(item);
     return {
-      role: getText(rec.role ?? rec.title ?? rec.name, "—"),
+      role: getText(pickFirst(rec.role, rec.title, rec.name), "—"),
       fit: getText(rec.fit, "—"),
       note: getText(rec.note),
     };
@@ -107,25 +188,20 @@ export function parseFlexibleItem(raw: unknown): FlexibleSectionItem | null {
     return t ? { title: "—", body: t } : null;
   }
   const rec = asObject(raw);
-  const title = getText(rec.title ?? rec.question ?? rec.task ?? rec.label, "—");
+  const title = getText(pickFirst(rec.title, rec.question, rec.task, rec.label), "—");
   const body = getText(
-    rec.body ??
-      rec.description ??
-      rec.summary ??
-      rec.text ??
-      rec.note ??
-      rec.content,
+    pickFirst(rec.body, rec.description, rec.summary, rec.text, rec.note),
   );
   const fit = getText(rec.fit);
-  const checks = getText(rec.checks ?? rec.what_to_check ?? rec.verifies ?? rec.check);
-  const goodAnswer = getText(rec.good_answer ?? rec.good ?? rec.positive_signal);
+  const checks = getText(pickFirst(rec.checks, rec.what_to_check, rec.verifies, rec.check));
+  const goodAnswer = getText(pickFirst(rec.good_answer, rec.good, rec.positive_signal));
   const warningSign = getText(
-    rec.warning_sign ?? rec.red_flag ?? rec.bad_answer ?? rec.concern,
+    pickFirst(rec.warning_sign, rec.red_flag, rec.bad_answer, rec.concern),
   );
-  const howToEvaluate = getText(rec.how_to_evaluate ?? rec.evaluation ?? rec.scoring);
-  const timeEstimate = getText(rec.time ?? rec.duration ?? rec.time_estimate);
-  const criteria = getText(rec.criteria ?? rec.success_criteria);
-  const nextStep = getText(rec.next_step ?? rec.follow_up);
+  const howToEvaluate = getText(pickFirst(rec.how_to_evaluate, rec.evaluation, rec.scoring));
+  const timeEstimate = getText(pickFirst(rec.time, rec.duration, rec.time_estimate));
+  const criteria = getText(pickFirst(rec.criteria, rec.success_criteria));
+  const nextStep = getText(pickFirst(rec.next_step, rec.follow_up));
 
   if (!title && !body && !checks) return null;
 
@@ -149,17 +225,20 @@ export function parseFlexibleItems(raw: unknown): FlexibleSectionItem[] {
     return raw.map(parseFlexibleItem).filter((x): x is FlexibleSectionItem => x !== null);
   }
   const obj = asObject(raw);
-  if (Array.isArray(obj.items)) return parseFlexibleItems(obj.items);
+  for (const key of LIST_KEYS) {
+    if (Array.isArray(obj[key])) return parseFlexibleItems(obj[key]);
+  }
   const single = parseFlexibleItem(raw);
   return single ? [single] : [];
 }
 
-export function itemsFromTalentMapItems(items: HrTalentMapSectionItem[] | TalentMapItem[]): FlexibleSectionItem[] {
+export function itemsFromTalentMapItems(
+  items: HrTalentMapSectionItem[] | TalentMapItem[],
+): FlexibleSectionItem[] {
   if (!Array.isArray(items)) return [];
   return items.map((item) => {
     if (!item || typeof item !== "object") {
-      const t = getText(item);
-      return { title: "—", body: t };
+      return { title: "—", body: getText(item) };
     }
     return {
       title: getText(item.title, "—"),
@@ -188,11 +267,11 @@ export function parseOnboardingPhase(
     return s ? { label, summary: s } : null;
   }
   const rec = asObject(raw);
-  const summary = getText(rec.summary ?? rec.text ?? rec.body);
+  const summary = getText(pickFirst(rec.summary, rec.text, rec.body));
   const focus = getText(rec.focus);
-  const give = getText(rec.give ?? rec.provide);
-  const verify = getText(rec.verify ?? rec.check);
-  const successSignal = getText(rec.success_signal ?? rec.success);
+  const give = getText(pickFirst(rec.give, rec.provide));
+  const verify = getText(pickFirst(rec.verify, rec.check));
+  const successSignal = getText(pickFirst(rec.success_signal, rec.success));
   const risk = getText(rec.risk);
 
   if (!summary && !focus && !give && !verify) return null;
@@ -213,15 +292,24 @@ export function parseOnboardingTimeline(
   rawRoot?: unknown,
 ): OnboardingPhase[] {
   const raw = asObject(rawRoot);
-  const ob = asObject(raw.onboarding_7_30_90 ?? rawRoot);
+  const ob = asObject(raw.onboarding_7_30_90);
   const safeItems = Array.isArray(onboarding?.items) ? onboarding.items : [];
   const safeOnboarding = onboarding ?? { day_7: "", day_30: "", day_90: "", items: safeItems };
 
   const phases: OnboardingPhase[] = [];
 
-  const d7 = parseOnboardingPhase(ob.day_7 ?? safeOnboarding.day_7, "Первые 7 дней");
-  const d30 = parseOnboardingPhase(ob.day_30 ?? safeOnboarding.day_30, "Первые 30 дней");
-  const d90 = parseOnboardingPhase(ob.day_90 ?? safeOnboarding.day_90, "Первые 90 дней");
+  const d7 = parseOnboardingPhase(
+    pickFirst(ob.day_7, safeOnboarding.day_7),
+    "Первые 7 дней",
+  );
+  const d30 = parseOnboardingPhase(
+    pickFirst(ob.day_30, safeOnboarding.day_30),
+    "Первые 30 дней",
+  );
+  const d90 = parseOnboardingPhase(
+    pickFirst(ob.day_90, safeOnboarding.day_90),
+    "Первые 90 дней",
+  );
 
   if (d7) phases.push(d7);
   if (d30) phases.push(d30);
@@ -230,12 +318,13 @@ export function parseOnboardingTimeline(
   const onboardingItems = safeOnboarding.items ?? [];
   if (phases.length === 0 && onboardingItems.length > 0) {
     for (const item of onboardingItems) {
-      const title = getText(item?.title ?? item, "Этап");
-      const body = getText(item?.body);
+      const rec = asObject(item);
+      const title = getText(pickFirst(rec.title), "Этап");
+      const body = getText(rec.body);
       phases.push({
         label: title,
         ...(body ? { summary: body } : {}),
-        ...(item?.fit ? { risk: getText(item.fit) } : {}),
+        ...(rec.fit ? { risk: getText(rec.fit) } : {}),
       });
     }
   }
@@ -254,7 +343,7 @@ export function extractCompletenessPercent(
     if (Number.isFinite(n)) return Math.min(100, Math.max(0, n));
   }
   for (const m of ensureArray<{ label: string; value: string }>(metrics)) {
-    const match = `${m.label} ${m.value}`.match(/(\d{1,3})\s*%/);
+    const match = `${getText(m.label)} ${getText(m.value)}`.match(/(\d{1,3})\s*%/);
     if (match) {
       const n = Number(match[1]);
       if (Number.isFinite(n)) return Math.min(100, Math.max(0, n));

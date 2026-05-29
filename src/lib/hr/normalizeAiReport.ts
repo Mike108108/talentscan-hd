@@ -45,12 +45,18 @@ function asObject(value: unknown): Record<string, unknown> {
   return {};
 }
 
-function textFromField(value: unknown): string {
+function textFromField(value: unknown, depth = 0, seen: WeakSet<object> = new WeakSet()): string {
+  if (depth > 5) return "";
   if (typeof value === "string") return value.trim();
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  const rec = asObject(value);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return "";
+  if (seen.has(value)) return "";
+  seen.add(value);
+  const rec = value as Record<string, unknown>;
   for (const key of ["text", "summary", "description", "body", "value", "headline"]) {
-    const t = textFromField(rec[key]);
+    const child = rec[key];
+    if (child === value) continue;
+    const t = textFromField(child, depth + 1, seen);
     if (t) return t;
   }
   return "";

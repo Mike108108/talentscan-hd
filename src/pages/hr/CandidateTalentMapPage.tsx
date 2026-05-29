@@ -161,7 +161,7 @@ function CompactRow({
   onClick?: () => void;
 }) {
   const safeTitle = getText(title, "—");
-  const safeSubtitle = subtitle != null && getText(subtitle) ? getText(subtitle) : null;
+  const safeSubtitle = subtitle != null ? getText(subtitle) || null : null;
   const body = (
     <>
       <span className="hr-tm-row-body">
@@ -673,6 +673,7 @@ function TalentMapWorkspace({
             {NAV_SECTIONS.find((s) => s.id === section)?.label}
           </h3>
           <SectionErrorBoundary
+            key={section}
             title={NAV_SECTIONS.find((s) => s.id === section)?.label ?? section}
           >
             {renderSection()}
@@ -841,28 +842,73 @@ type SectionErrorBoundaryProps = {
   children: ReactNode;
 };
 
-type SectionErrorBoundaryState = { hasError: boolean; message: string | null };
+type SectionErrorBoundaryState = {
+  hasError: boolean;
+  message: string | null;
+  stack: string[] | null;
+  componentStack: string | null;
+};
 
 class SectionErrorBoundary extends Component<
   SectionErrorBoundaryProps,
   SectionErrorBoundaryState
 > {
-  state: SectionErrorBoundaryState = { hasError: false, message: null };
+  state: SectionErrorBoundaryState = {
+    hasError: false,
+    message: null,
+    stack: null,
+    componentStack: null,
+  };
 
   static getDerivedStateFromError(error: Error): SectionErrorBoundaryState {
-    return { hasError: true, message: error.message };
+    return {
+      hasError: true,
+      message: error.message,
+      stack: error.stack?.split("\n").slice(0, 8) ?? null,
+      componentStack: null,
+    };
   }
 
-  componentDidCatch(error: unknown) {
-    console.error(`[SectionErrorBoundary:${this.props.title}]`, error);
+  componentDidCatch(error: unknown, info: ErrorInfo) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error(`[SectionErrorBoundary:${this.props.title}]`, err, info.componentStack);
+    this.setState({
+      message: err.message,
+      stack: err.stack?.split("\n").slice(0, 8) ?? null,
+      componentStack: info.componentStack ?? null,
+    });
   }
 
   render() {
     if (this.state.hasError) {
       return (
-        <p className="hr-muted" style={{ margin: 0 }}>
-          Не удалось отобразить раздел «{this.props.title}»: {this.state.message}
-        </p>
+        <div className="hr-muted" style={{ margin: 0 }}>
+          <p style={{ margin: "0 0 8px" }}>
+            Не удалось отобразить раздел «{this.props.title}»: {this.state.message}
+          </p>
+          {this.state.stack?.length || this.state.componentStack ? (
+            <pre
+              style={{
+                margin: 0,
+                padding: 8,
+                fontSize: 11,
+                borderRadius: 6,
+                background: "rgba(0,0,0,0.2)",
+                overflow: "auto",
+              }}
+            >
+              {JSON.stringify(
+                {
+                  section: this.props.title,
+                  stack: this.state.stack,
+                  componentStack: this.state.componentStack,
+                },
+                null,
+                2,
+              )}
+            </pre>
+          ) : null}
+        </div>
       );
     }
     return this.props.children;

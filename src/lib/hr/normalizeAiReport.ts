@@ -82,9 +82,18 @@ export function parseReportContentJson(raw: unknown): Record<string, unknown> | 
 /** Whether the report can be shown in the talent map workspace. */
 export function isReadyTalentMapReport(report: HrReport | null): boolean {
   if (!report) return false;
-  if (report.report_type && report.report_type !== "hr_person_talent_map") return false;
-  if (report.report_status !== "ready") return false;
-  return parseReportContentJson(report.content_json) != null;
+  const status = String(report.report_status ?? "")
+    .trim()
+    .toLowerCase();
+  if (status !== "ready") return false;
+  const type = String(report.report_type ?? "hr_person_talent_map").trim();
+  if (type !== "hr_person_talent_map") return false;
+  return report.content_json != null;
+}
+
+/** Parsed content root for workspace (never throws). */
+export function getReportContentRoot(report: HrReport): Record<string, unknown> {
+  return parseReportContentJson(report.content_json) ?? {};
 }
 
 /** Defensive normalization so incomplete AI JSON does not break the UI. */

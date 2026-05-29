@@ -3,16 +3,17 @@ import type { ErrorInfo, ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { HrSidePanel } from "../../components/hr/HrSidePanel";
 import {
+  fetchBestReadyCandidateReport,
   fetchCandidate,
   fetchCandidateVacancies,
-  fetchLatestCandidateReport,
   fetchLatestHrReport,
   generateCandidateReport,
+  reportMatchesCandidate,
 } from "../../lib/hr/api";
 import {
+  getReportContentRoot,
   isReadyTalentMapReport,
   normalizeAiReportContent,
-  parseReportContentJson,
 } from "../../lib/hr/normalizeAiReport";
 import {
   extractCompletenessPercent,
@@ -54,21 +55,57 @@ const NAV_SECTIONS: Array<{ id: SectionId; label: string; hint?: string }> = [
   { id: "roles", label: "Роли и вакансии" },
 ];
 
-function logGenerate(step: string, report: HrReport | null) {
-  if (!import.meta.env.DEV) return;
-  console.info(`[HR report generate] ${step}`, {
-    id: report?.id ?? null,
-    status: report?.report_status ?? null,
-    hasContent: report?.content_json != null,
-    generationError: report?.generation_error ?? null,
-  });
+type ReportSnapshot = {
+  id?: string;
+  company_id?: string;
+  candidate_id?: string;
+  report_type?: string;
+  report_status?: string;
+  has_content_json?: boolean;
+  generation_error?: string | null;
+};
+
+function snapshotReport(report: HrReport | null): ReportSnapshot | null {
+  if (!report) return null;
+  return {
+    id: report.id,
+    company_id: report.company_id,
+    candidate_id: report.candidate_id ?? undefined,
+    report_type: report.report_type,
+    report_status: report.report_status,
+    has_content_json: report.content_json != null,
+    generation_error: report.generation_error || undefined,
+  };
 }
 
-function pickReadyReport(...candidates: Array<HrReport | null | undefined>): HrReport | null {
+function logReportStep(step: string, report: HrReport | null) {
+  console.info(`[CandidateTalentMapPage] ${step}`, snapshotReport(report));
+}
+
+function pickReadyReportForContext(
+  companyId: string,
+  candidateId: string,
+  ...candidates: Array<HrReport | null | undefined>
+): { report: HrReport | null; mismatch: HrReport | null } {
+  let mismatch: HrReport | null = null;
   for (const r of candidates) {
-    if (r && isReadyTalentMapReport(r)) return r;
+    if (!r) continue;
+    if (!reportMatchesCandidate(r, companyId, candidateId)) {
+      if (!mismatch && isReadyTalentMapReport(r)) mismatch = r;
+      continue;
+    }
+    if (isReadyTalentMapReport(r)) return { report: r, mismatch: null };
   }
-  return null;
+  return { report: null, mismatch };
+}
+
+function buildMismatchMessage(
+  companyId: string,
+  candidateId: string,
+  candidateName: string,
+  report: HrReport,
+): string {
+  return `Отчёт создан, но не совпал с текущим кандидатом. Текущий: ${candidateName} (${candidateId}). В отчёте: кандидат ${report.candidate_id}, компания ${report.company_id}. Ожидалась компания ${companyId}.`;
 }
 
 function buildGenerationFailureMessage(
@@ -79,7 +116,7 @@ function buildGenerationFailureMessage(
   if (!r) {
     return "Генерация завершилась, но готовый отчёт не найден. Попробуйте обновить страницу или повторить генерацию.";
   }
-  if (r.report_status === "ready" && !parseReportContentJson(r.content_json)) {
+  if (r.report_status === "ready" && r.content_json == null) {
     return "Разбор создан, но данные отчёта не удалось прочитать. Попробуйте перегенерировать карту.";
   }
   if (r.report_status === "error") {
@@ -705,6 +742,60 @@ class WorkspaceErrorBoundary extends Component<
   }
 }
 
+function DisplayDiagnosticBlock({
+  companyId,
+  candidateId,
+  candidateName,
+  fetchError,
+  debug,
+}: {
+  companyId: string;
+  candidateId: string;
+  candidateName: string;
+  fetchError: string | null;
+  debug: {
+    generated: ReportSnapshot | null;
+    refetchedReady: ReportSnapshot | null;
+    latestAny: ReportSnapshot | null;
+  } | null;
+}) {
+  if (!fetchError && !debug) return null;
+  return (
+    <div
+      className="hr-card"
+      style={{ marginTop: 12, fontSize: 13, color: "var(--hr-muted)", lineHeight: 1.5 }}
+    >
+      <p style={{ margin: "0 0 6px", color: "var(--hr-text)", fontWeight: 600 }}>
+        Диагностика отображения
+      </p>
+      <p style={{ margin: 0 }}>
+        Кандидат: <strong>{candidateName}</strong> · {candidateId}
+        <br />
+        Компания: {companyId}
+      </p>
+      {fetchError ? (
+        <p style={{ margin: "8px 0 0", color: "var(--hr-soft)" }}>
+          Ошибка чтения из Supabase: {fetchError}
+        </p>
+      ) : null}
+      {debug ? (
+        <pre
+          style={{
+            margin: "8px 0 0",
+            padding: 10,
+            borderRadius: 8,
+            background: "rgba(0,0,0,0.2)",
+            overflow: "auto",
+            fontSize: 11,
+          }}
+        >
+          {JSON.stringify(debug, null, 2)}
+        </pre>
+      ) : null}
+    </div>
+  );
+}
+
 function PendingReportState({
   candidate,
   companyId,
@@ -713,6 +804,8 @@ function PendingReportState({
   onGenerate,
   generating,
   error,
+  fetchError,
+  debug,
 }: {
   candidate: HrCandidate;
   companyId: string;
@@ -721,6 +814,12 @@ function PendingReportState({
   onGenerate: () => void;
   generating: boolean;
   error: string | null;
+  fetchError: string | null;
+  debug: {
+    generated: ReportSnapshot | null;
+    refetchedReady: ReportSnapshot | null;
+    latestAny: ReportSnapshot | null;
+  } | null;
 }) {
   return (
     <div className="hr-tm-page">
@@ -746,6 +845,13 @@ function PendingReportState({
             </>
           ) : null}
         </p>
+        <DisplayDiagnosticBlock
+          companyId={companyId}
+          candidateId={candidateId}
+          candidateName={candidate.name}
+          fetchError={fetchError}
+          debug={debug}
+        />
         <button
           type="button"
           className="hr-btn"
@@ -767,6 +873,8 @@ function EmptyReportState({
   onGenerate,
   generating,
   error,
+  fetchError,
+  debug,
 }: {
   candidate: HrCandidate;
   companyId: string;
@@ -774,6 +882,12 @@ function EmptyReportState({
   onGenerate: () => void;
   generating: boolean;
   error: string | null;
+  fetchError: string | null;
+  debug: {
+    generated: ReportSnapshot | null;
+    refetchedReady: ReportSnapshot | null;
+    latestAny: ReportSnapshot | null;
+  } | null;
 }) {
   return (
     <div className="hr-tm-page">
@@ -799,9 +913,16 @@ function EmptyReportState({
           </p>
           {error ? (
             <p className="hr-tm-banner hr-tm-banner--error" style={{ marginTop: 12 }}>
-              Не удалось сгенерировать карту. {error}
+              {error}
             </p>
           ) : null}
+          <DisplayDiagnosticBlock
+            companyId={companyId}
+            candidateId={candidateId}
+            candidateName={candidate.name}
+            fetchError={fetchError}
+            debug={debug}
+          />
           <button
             type="button"
             className="hr-btn"
@@ -825,19 +946,34 @@ export default function CandidateTalentMapPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [displayDebug, setDisplayDebug] = useState<{
+    generated: ReportSnapshot | null;
+    refetchedReady: ReportSnapshot | null;
+    latestAny: ReportSnapshot | null;
+  } | null>(null);
 
   const load = async (opts?: { silent?: boolean }) => {
     if (!companyId || !candidateId) return;
     if (!opts?.silent) setLoading(true);
-    const [c, links, report] = await Promise.all([
+    const [c, links, readyResult] = await Promise.all([
       fetchCandidate(companyId, candidateId),
       fetchCandidateVacancies(companyId, candidateId),
-      fetchLatestCandidateReport(companyId, candidateId, "hr_person_talent_map"),
+      fetchBestReadyCandidateReport(companyId, candidateId, "hr_person_talent_map"),
     ]);
     setCandidate(c);
     setVacancies((links ?? []).map((l: { vacancy: HrVacancy }) => l.vacancy).filter(Boolean));
-    setAiReport(report);
+    setAiReport(readyResult.report);
+    setFetchError(readyResult.error);
     if (!opts?.silent) setLoading(false);
+
+    console.info("[CandidateTalentMapPage] context", {
+      companyId,
+      candidateId,
+      candidateName: c?.name,
+      loadedReport: snapshotReport(readyResult.report),
+      fetchError: readyResult.error,
+    });
   };
 
   useEffect(() => {
@@ -849,6 +985,9 @@ export default function CandidateTalentMapPage() {
     const previousReady = isReadyTalentMapReport(aiReport) ? aiReport : null;
     setGenerating(true);
     setGenError(null);
+    setFetchError(null);
+    setDisplayDebug(null);
+
     try {
       const primaryVacancyId = vacancies.length === 1 ? vacancies[0].id : null;
       const generated = await generateCandidateReport(companyId, candidateId, {
@@ -856,47 +995,82 @@ export default function CandidateTalentMapPage() {
         reportType: "hr_person_talent_map",
         forceRegenerate,
       });
-      logGenerate("response", generated);
+      logReportStep("generated report", generated);
 
-      const refetchedReady = await fetchLatestCandidateReport(
+      const readyResult = await fetchBestReadyCandidateReport(
         companyId,
         candidateId,
         "hr_person_talent_map",
       );
-      logGenerate("refetched ready", refetchedReady);
+      logReportStep("refetched ready report", readyResult.report);
+      if (readyResult.error) setFetchError(readyResult.error);
 
-      const latestAny = await fetchLatestHrReport(companyId, candidateId, "hr_person_talent_map");
-      logGenerate("refetched any status", latestAny);
+      const latestAnyResult = await fetchLatestHrReport(
+        companyId,
+        candidateId,
+        "hr_person_talent_map",
+      );
+      logReportStep("latest any report", latestAnyResult.report);
+      if (latestAnyResult.error && !readyResult.error) {
+        setFetchError(latestAnyResult.error);
+      }
 
-      const resolved = pickReadyReport(generated, refetchedReady, latestAny);
+      setDisplayDebug({
+        generated: snapshotReport(generated),
+        refetchedReady: snapshotReport(readyResult.report),
+        latestAny: snapshotReport(latestAnyResult.report),
+      });
+
+      const { report: resolved, mismatch } = pickReadyReportForContext(
+        companyId,
+        candidateId,
+        generated,
+        readyResult.report,
+        latestAnyResult.report,
+      );
+
       if (resolved) {
         setAiReport(resolved);
         setGenError(null);
         return;
       }
 
-      setGenError(buildGenerationFailureMessage(generated, latestAny ?? refetchedReady));
+      if (mismatch && candidate) {
+        setGenError(buildMismatchMessage(companyId, candidateId, candidate.name, mismatch));
+      } else if (readyResult.error) {
+        setGenError(
+          `Не удалось прочитать отчёт из базы: ${readyResult.error}. Отчёт мог быть создан — попробуйте обновить страницу.`,
+        );
+      } else {
+        setGenError(buildGenerationFailureMessage(generated, latestAnyResult.report));
+      }
 
       if (forceRegenerate && previousReady) {
         setAiReport(previousReady);
       } else {
-        setAiReport(latestAny ?? generated ?? refetchedReady);
+        setAiReport(latestAnyResult.report ?? generated ?? readyResult.report);
       }
     } catch (err) {
       console.error("[hr] generate talent map failed", err);
       setGenError(err instanceof Error ? err.message : "Не удалось сгенерировать карту");
       try {
-        const latestAny = await fetchLatestHrReport(companyId, candidateId, "hr_person_talent_map");
-        const ready = pickReadyReport(
-          await fetchLatestCandidateReport(companyId, candidateId, "hr_person_talent_map"),
-          latestAny,
+        const readyResult = await fetchBestReadyCandidateReport(
+          companyId,
+          candidateId,
+          "hr_person_talent_map",
         );
-        if (ready) {
-          setAiReport(ready);
+        if (readyResult.error) setFetchError(readyResult.error);
+        const { report: resolved } = pickReadyReportForContext(
+          companyId,
+          candidateId,
+          readyResult.report,
+        );
+        if (resolved) {
+          setAiReport(resolved);
         } else if (forceRegenerate && previousReady) {
           setAiReport(previousReady);
-        } else if (latestAny) {
-          setAiReport(latestAny);
+        } else if (readyResult.report) {
+          setAiReport(readyResult.report);
         }
       } catch {
         if (forceRegenerate && previousReady) setAiReport(previousReady);
@@ -910,13 +1084,12 @@ export default function CandidateTalentMapPage() {
     return <p>Загрузка…</p>;
   }
 
-  const parsedContent = aiReport ? parseReportContentJson(aiReport.content_json) : null;
   const hasReadyReport = isReadyTalentMapReport(aiReport);
 
   let safeContent: HrPersonTalentMapV1 | null = null;
-  if (hasReadyReport && parsedContent) {
+  if (hasReadyReport && aiReport) {
     try {
-      safeContent = normalizeAiReportContent(parsedContent);
+      safeContent = normalizeAiReportContent(getReportContentRoot(aiReport));
     } catch (err) {
       console.error("[hr] normalize talent map content failed", err);
       safeContent = null;
@@ -942,7 +1115,7 @@ export default function CandidateTalentMapPage() {
           candidateId={candidateId}
           vacancies={vacancies}
           aiContent={safeContent}
-          rawAiContent={parsedContent}
+          rawAiContent={getReportContentRoot(aiReport)}
           aiReport={aiReport}
           onRegenerate={() => onGenerate(true)}
           generating={generating}
@@ -974,6 +1147,8 @@ export default function CandidateTalentMapPage() {
         onGenerate={() => onGenerate(true)}
         generating={generating}
         error={genError}
+        fetchError={fetchError}
+        debug={displayDebug}
       />
     );
   }
@@ -986,6 +1161,8 @@ export default function CandidateTalentMapPage() {
       onGenerate={() => onGenerate(false)}
       generating={generating}
       error={genError}
+      fetchError={fetchError}
+      debug={displayDebug}
     />
   );
 }

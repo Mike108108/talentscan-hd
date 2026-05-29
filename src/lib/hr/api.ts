@@ -13,6 +13,45 @@ import type {
   HrProfile,
 } from "./types";
 import { deriveChartStatus } from "./chartStatus";
+import { isReadyTalentMapReport } from "./normalizeAiReport";
+
+export type HrReportFetchResult = {
+  report: HrReport | null;
+  error: string | null;
+};
+
+/** Extract report from Netlify/client JSON shapes. */
+export function extractGeneratedReport(payload: unknown): HrReport | null {
+  if (!payload || typeof payload !== "object") return null;
+  const root = payload as Record<string, unknown>;
+  const nested = root.report;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return nested as HrReport;
+  }
+  const data = root.data;
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const dataRec = data as Record<string, unknown>;
+    const dataReport = dataRec.report;
+    if (dataReport && typeof dataReport === "object" && !Array.isArray(dataReport)) {
+      return dataReport as HrReport;
+    }
+  }
+  if ("report_status" in root && "company_id" in root) {
+    return root as HrReport;
+  }
+  return null;
+}
+
+export function reportMatchesCandidate(
+  report: HrReport,
+  companyId: string,
+  candidateId: string,
+): boolean {
+  return (
+    String(report.company_id) === String(companyId) &&
+    String(report.candidate_id) === String(candidateId)
+  );
+}
 
 export async function searchBirthCities(q: string): Promise<GeocodeSuggestion[]> {
   if (q.length < 2) return [];
@@ -466,12 +505,16 @@ export async function fetchReadyTalentMapReportsForCompany(companyId: string) {
   return data ?? [];
 }
 
-export async function fetchLatestCandidateReport(
+/** Latest ready report — list query (avoids maybeSingle edge cases). */
+export async function fetchBestReadyCandidateReport(
   companyId: string,
   candidateId: string,
   reportType: HrReportType = "hr_person_talent_map",
-): Promise<HrReport | null> {
-  if (!supabase) return null;
+): Promise<HrReportFetchResult> {
+  if (!supabase) {
+    return { report: null, error: "Supabase не настроен" };
+  }
+
   const { data, error } = await supabase
     .from("hr_reports")
     .select("*")
@@ -479,15 +522,33 @@ export async function fetchLatestCandidateReport(
     .eq("candidate_id", candidateId)
     .eq("report_type", reportType)
     .eq("report_status", "ready")
-    .order("generated_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(10);
+
   if (error) {
-    console.error("[hr] latest ready report:", error.message);
-    return null;
+    console.error("[fetchBestReadyCandidateReport] Supabase error", error);
+    return { report: null, error: error.message };
   }
-  return data as HrReport | null;
+
+  const rows = (data ?? []) as HrReport[];
+  const ready = rows.find((row) => isReadyTalentMapReport(row)) ?? null;
+  return { report: ready, error: null };
+}
+
+export async function fetchLatestCandidateReport(
+  companyId: string,
+  candidateId: string,
+  reportType: HrReportType = "hr_person_talent_map",
+): Promise<HrReport | null> {
+  const { report, error } = await fetchBestReadyCandidateReport(
+    companyId,
+    candidateId,
+    reportType,
+  );
+  if (error) {
+    console.error("[fetchLatestCandidateReport]", error);
+  }
+  return report;
 }
 
 /** Latest report row regardless of status (for post-generate diagnostics). */
@@ -495,8 +556,11 @@ export async function fetchLatestHrReport(
   companyId: string,
   candidateId: string,
   reportType: HrReportType = "hr_person_talent_map",
-): Promise<HrReport | null> {
-  if (!supabase) return null;
+): Promise<HrReportFetchResult> {
+  if (!supabase) {
+    return { report: null, error: "Supabase не настроен" };
+  }
+
   const { data, error } = await supabase
     .from("hr_reports")
     .select("*")
@@ -504,13 +568,15 @@ export async function fetchLatestHrReport(
     .eq("candidate_id", candidateId)
     .eq("report_type", reportType)
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+
   if (error) {
-    console.error("[hr] latest report (any status):", error.message);
-    return null;
+    console.error("[fetchLatestHrReport] Supabase error", error);
+    return { report: null, error: error.message };
   }
-  return data as HrReport | null;
+
+  const row = ((data ?? []) as HrReport[])[0] ?? null;
+  return { report: row, error: null };
 }
 
 export async function generateCandidateReport(
@@ -540,10 +606,10 @@ export async function generateCandidateReport(
   });
 
   const rawBody = await resp.text();
-  let data: { error?: string; report?: HrReport; source?: string } = {};
+  let parsed: unknown = {};
   if (rawBody) {
     try {
-      data = JSON.parse(rawBody) as { error?: string; report?: HrReport; source?: string };
+      parsed = JSON.parse(rawBody);
     } catch {
       const preview = rawBody.replace(/\s+/g, " ").slice(0, 160);
       throw new Error(
@@ -552,20 +618,25 @@ export async function generateCandidateReport(
     }
   }
 
+  const payload = parsed as { error?: string; source?: string };
   if (!resp.ok) {
-    throw new Error(data.error ?? `Ошибка генерации отчёта (${resp.status})`);
+    throw new Error(payload.error ?? `Ошибка генерации отчёта (${resp.status})`);
   }
-  if (!data.report) {
+
+  const report = extractGeneratedReport(parsed);
+  if (!report) {
     throw new Error("Пустой ответ сервера: отчёт не возвращён");
   }
-  if (import.meta.env.DEV) {
-    console.info("[HR report generate] response", {
-      status: data.report.report_status,
-      id: data.report.id,
-      hasContent: data.report.content_json != null,
-    });
-  }
-  return data.report;
+
+  console.info("[HR report generate] response", {
+    status: report.report_status,
+    id: report.id,
+    company_id: report.company_id,
+    candidate_id: report.candidate_id,
+    hasContent: report.content_json != null,
+  });
+
+  return report;
 }
 
 export { isSupabaseConfigured };

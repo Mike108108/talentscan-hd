@@ -1,4 +1,4 @@
-import type { HrPersonTalentMapV1 } from "./types";
+import type { HrPersonTalentMapV1, HrReport } from "./types";
 
 function asString(value: unknown, fallback = ""): string {
   if (typeof value === "string") return value.trim();
@@ -77,6 +77,14 @@ export function parseReportContentJson(raw: unknown): Record<string, unknown> | 
     return raw as Record<string, unknown>;
   }
   return null;
+}
+
+/** Whether the report can be shown in the talent map workspace. */
+export function isReadyTalentMapReport(report: HrReport | null): boolean {
+  if (!report) return false;
+  if (report.report_type && report.report_type !== "hr_person_talent_map") return false;
+  if (report.report_status !== "ready") return false;
+  return parseReportContentJson(report.content_json) != null;
 }
 
 /** Defensive normalization so incomplete AI JSON does not break the UI. */

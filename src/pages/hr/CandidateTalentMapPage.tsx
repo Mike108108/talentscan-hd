@@ -6,9 +6,11 @@ import {
   fetchCandidate,
   fetchCandidateVacancies,
   fetchLatestCandidateReport,
+  fetchLatestHrReport,
   generateCandidateReport,
 } from "../../lib/hr/api";
 import {
+  isReadyTalentMapReport,
   normalizeAiReportContent,
   parseReportContentJson,
 } from "../../lib/hr/normalizeAiReport";
@@ -52,9 +54,43 @@ const NAV_SECTIONS: Array<{ id: SectionId; label: string; hint?: string }> = [
   { id: "roles", label: "Роли и вакансии" },
 ];
 
-function isReadyTalentMapReport(report: HrReport | null): boolean {
-  if (!report || report.report_status !== "ready") return false;
-  return parseReportContentJson(report.content_json) != null;
+function logGenerate(step: string, report: HrReport | null) {
+  if (!import.meta.env.DEV) return;
+  console.info(`[HR report generate] ${step}`, {
+    id: report?.id ?? null,
+    status: report?.report_status ?? null,
+    hasContent: report?.content_json != null,
+    generationError: report?.generation_error ?? null,
+  });
+}
+
+function pickReadyReport(...candidates: Array<HrReport | null | undefined>): HrReport | null {
+  for (const r of candidates) {
+    if (r && isReadyTalentMapReport(r)) return r;
+  }
+  return null;
+}
+
+function buildGenerationFailureMessage(
+  generated: HrReport | null,
+  latestAny: HrReport | null,
+): string {
+  const r = latestAny ?? generated;
+  if (!r) {
+    return "Генерация завершилась, но готовый отчёт не найден. Попробуйте обновить страницу или повторить генерацию.";
+  }
+  if (r.report_status === "ready" && !parseReportContentJson(r.content_json)) {
+    return "Разбор создан, но данные отчёта не удалось прочитать. Попробуйте перегенерировать карту.";
+  }
+  if (r.report_status === "error") {
+    return r.generation_error
+      ? `Не удалось сгенерировать карту. ${r.generation_error}`
+      : "Не удалось сгенерировать карту.";
+  }
+  if (r.report_status === "generating") {
+    return "Отчёт создан, но пока не готов к отображению. Статус: generating";
+  }
+  return `Отчёт создан, но пока не готов к отображению. Статус: ${r.report_status}`;
 }
 
 function normalizeHrCopy(text: string | null | undefined): string {
@@ -669,6 +705,61 @@ class WorkspaceErrorBoundary extends Component<
   }
 }
 
+function PendingReportState({
+  candidate,
+  companyId,
+  candidateId,
+  report,
+  onGenerate,
+  generating,
+  error,
+}: {
+  candidate: HrCandidate;
+  companyId: string;
+  candidateId: string;
+  report: HrReport;
+  onGenerate: () => void;
+  generating: boolean;
+  error: string | null;
+}) {
+  return (
+    <div className="hr-tm-page">
+      <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
+        ← К кандидату
+      </Link>
+      <h2 className="hr-tm-title">Карта талантов</h2>
+      <p className="hr-tm-subtitle">
+        <b>{candidate.name}</b>
+      </p>
+      <div className="hr-card hr-tm-empty-card">
+        <p className="hr-tm-empty-title">Карта пока не отобразилась</p>
+        <p className="hr-muted" style={{ lineHeight: 1.55, maxWidth: 560 }}>
+          {error ??
+            "Мы запустили генерацию, но готовый отчёт ещё не доступен для отображения."}
+        </p>
+        <p className="hr-muted" style={{ marginTop: 10, fontSize: 13 }}>
+          Статус отчёта: <strong>{report.report_status}</strong>
+          {report.generation_error ? (
+            <>
+              <br />
+              Ошибка: {report.generation_error}
+            </>
+          ) : null}
+        </p>
+        <button
+          type="button"
+          className="hr-btn"
+          style={{ marginTop: 16 }}
+          disabled={generating}
+          onClick={onGenerate}
+        >
+          {generating ? "Генерируем карту…" : "Повторить генерацию"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function EmptyReportState({
   candidate,
   companyId,
@@ -755,36 +846,60 @@ export default function CandidateTalentMapPage() {
 
   const onGenerate = async (forceRegenerate = false) => {
     if (!companyId || !candidateId) return;
+    const previousReady = isReadyTalentMapReport(aiReport) ? aiReport : null;
     setGenerating(true);
     setGenError(null);
     try {
       const primaryVacancyId = vacancies.length === 1 ? vacancies[0].id : null;
-      await generateCandidateReport(companyId, candidateId, {
+      const generated = await generateCandidateReport(companyId, candidateId, {
         vacancyId: primaryVacancyId,
         reportType: "hr_person_talent_map",
         forceRegenerate,
       });
-      const latest = await fetchLatestCandidateReport(
+      logGenerate("response", generated);
+
+      const refetchedReady = await fetchLatestCandidateReport(
         companyId,
         candidateId,
         "hr_person_talent_map",
       );
-      setAiReport(latest);
-      if (!isReadyTalentMapReport(latest)) {
-        await load({ silent: true });
+      logGenerate("refetched ready", refetchedReady);
+
+      const latestAny = await fetchLatestHrReport(companyId, candidateId, "hr_person_talent_map");
+      logGenerate("refetched any status", latestAny);
+
+      const resolved = pickReadyReport(generated, refetchedReady, latestAny);
+      if (resolved) {
+        setAiReport(resolved);
+        setGenError(null);
+        return;
+      }
+
+      setGenError(buildGenerationFailureMessage(generated, latestAny ?? refetchedReady));
+
+      if (forceRegenerate && previousReady) {
+        setAiReport(previousReady);
+      } else {
+        setAiReport(latestAny ?? generated ?? refetchedReady);
       }
     } catch (err) {
       console.error("[hr] generate talent map failed", err);
       setGenError(err instanceof Error ? err.message : "Не удалось сгенерировать карту");
       try {
-        const latest = await fetchLatestCandidateReport(
-          companyId,
-          candidateId,
-          "hr_person_talent_map",
+        const latestAny = await fetchLatestHrReport(companyId, candidateId, "hr_person_talent_map");
+        const ready = pickReadyReport(
+          await fetchLatestCandidateReport(companyId, candidateId, "hr_person_talent_map"),
+          latestAny,
         );
-        if (latest) setAiReport(latest);
+        if (ready) {
+          setAiReport(ready);
+        } else if (forceRegenerate && previousReady) {
+          setAiReport(previousReady);
+        } else if (latestAny) {
+          setAiReport(latestAny);
+        }
       } catch {
-        /* keep previous report state */
+        if (forceRegenerate && previousReady) setAiReport(previousReady);
       }
     } finally {
       setGenerating(false);
@@ -849,14 +964,28 @@ export default function CandidateTalentMapPage() {
     );
   }
 
+  if (aiReport && !hasReadyReport) {
+    return (
+      <PendingReportState
+        candidate={candidate}
+        companyId={companyId}
+        candidateId={candidateId}
+        report={aiReport}
+        onGenerate={() => onGenerate(true)}
+        generating={generating}
+        error={genError}
+      />
+    );
+  }
+
   return (
     <EmptyReportState
       candidate={candidate}
       companyId={companyId}
       candidateId={candidateId}
       onGenerate={() => onGenerate(false)}
-      generating={generating || aiReport?.report_status === "generating"}
-      error={genError ?? (aiReport?.report_status === "error" ? aiReport.generation_error : null)}
+      generating={generating}
+      error={genError}
     />
   );
 }

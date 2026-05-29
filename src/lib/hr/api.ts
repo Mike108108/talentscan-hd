@@ -480,10 +480,34 @@ export async function fetchLatestCandidateReport(
     .eq("report_type", reportType)
     .eq("report_status", "ready")
     .order("generated_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) {
-    console.error("[hr] latest report:", error.message);
+    console.error("[hr] latest ready report:", error.message);
+    return null;
+  }
+  return data as HrReport | null;
+}
+
+/** Latest report row regardless of status (for post-generate diagnostics). */
+export async function fetchLatestHrReport(
+  companyId: string,
+  candidateId: string,
+  reportType: HrReportType = "hr_person_talent_map",
+): Promise<HrReport | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("hr_reports")
+    .select("*")
+    .eq("company_id", companyId)
+    .eq("candidate_id", candidateId)
+    .eq("report_type", reportType)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error("[hr] latest report (any status):", error.message);
     return null;
   }
   return data as HrReport | null;
@@ -531,7 +555,16 @@ export async function generateCandidateReport(
   if (!resp.ok) {
     throw new Error(data.error ?? `Ошибка генерации отчёта (${resp.status})`);
   }
-  if (!data.report) throw new Error("Пустой ответ сервера");
+  if (!data.report) {
+    throw new Error("Пустой ответ сервера: отчёт не возвращён");
+  }
+  if (import.meta.env.DEV) {
+    console.info("[HR report generate] response", {
+      status: data.report.report_status,
+      id: data.report.id,
+      hasContent: data.report.content_json != null,
+    });
+  }
   return data.report;
 }
 

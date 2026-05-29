@@ -4,6 +4,8 @@ import type {
   CandidateFormData,
   GeocodeSuggestion,
   HrCandidate,
+  HrReport,
+  HrReportType,
   HrVacancy,
   HrVacancyCandidate,
   VacancyFormData,
@@ -421,6 +423,98 @@ export async function fetchTalentMapsForCompany(companyId: string) {
     .eq("company_id", companyId);
   if (error) return [];
   return data ?? [];
+}
+
+export async function fetchCandidateReports(
+  companyId: string,
+  candidateId: string,
+  reportType?: HrReportType,
+): Promise<HrReport[]> {
+  if (!supabase) return [];
+  let query = supabase
+    .from("hr_reports")
+    .select("*")
+    .eq("company_id", companyId)
+    .eq("candidate_id", candidateId)
+    .order("generated_at", { ascending: false, nullsFirst: false });
+  if (reportType) {
+    query = query.eq("report_type", reportType);
+  }
+  const { data, error } = await query;
+  if (error) {
+    console.error("[hr] reports:", error.message);
+    return [];
+  }
+  return (data ?? []) as HrReport[];
+}
+
+export async function fetchLatestCandidateReport(
+  companyId: string,
+  candidateId: string,
+  reportType: HrReportType = "hr_person_talent_map",
+): Promise<HrReport | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("hr_reports")
+    .select("*")
+    .eq("company_id", companyId)
+    .eq("candidate_id", candidateId)
+    .eq("report_type", reportType)
+    .eq("report_status", "ready")
+    .order("generated_at", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error("[hr] latest report:", error.message);
+    return null;
+  }
+  return data as HrReport | null;
+}
+
+export async function generateCandidateReport(
+  companyId: string,
+  candidateId: string,
+  opts?: {
+    vacancyId?: string | null;
+    reportType?: HrReportType;
+    forceRegenerate?: boolean;
+  },
+): Promise<HrReport> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Требуется вход");
+  const resp = await fetch("/.netlify/functions/hr-generate-candidate-report", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      company_id: companyId,
+      candidate_id: candidateId,
+      vacancy_id: opts?.vacancyId ?? null,
+      report_type: opts?.reportType ?? "hr_person_talent_map",
+      force_regenerate: opts?.forceRegenerate ?? false,
+    }),
+  });
+
+  const rawBody = await resp.text();
+  let data: { error?: string; report?: HrReport; source?: string } = {};
+  if (rawBody) {
+    try {
+      data = JSON.parse(rawBody) as { error?: string; report?: HrReport; source?: string };
+    } catch {
+      const preview = rawBody.replace(/\s+/g, " ").slice(0, 160);
+      throw new Error(
+        `Сервер вернул не-JSON ответ (${resp.status}). ${preview || "Пустое тело ответа."}`,
+      );
+    }
+  }
+
+  if (!resp.ok) {
+    throw new Error(data.error ?? `Ошибка генерации отчёта (${resp.status})`);
+  }
+  if (!data.report) throw new Error("Пустой ответ сервера");
+  return data.report;
 }
 
 export { isSupabaseConfigured };

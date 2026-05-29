@@ -981,6 +981,7 @@
 }
 
 .hr-tm-identity-card {
+  position: relative;
   padding: 16px;
   border: 1px solid var(--hr-line);
   border-radius: var(--hr-radius-md);
@@ -1108,6 +1109,417 @@
 .hr-tm-metric span {
   color: var(--hr-muted);
   font-size: 0.78rem;
+}
+
+/* Talent map — workspace cards & side panel */
+.hr-tm-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.hr-tm-identity-card--clickable {
+  position: relative;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    transform 0.12s ease;
+}
+
+.hr-tm-identity-card--clickable:hover,
+.hr-tm-identity-card--clickable:focus-visible {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(255, 255, 255, 0.04);
+  outline: none;
+}
+
+.hr-tm-identity-card--clickable:active {
+  transform: translateY(1px);
+}
+
+.hr-tm-card-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--hr-green);
+  font-weight: 600;
+}
+
+.hr-tm-card-chevron {
+  opacity: 0.85;
+  font-size: 0.9em;
+}
+
+.hr-tm-actions-section {
+  margin-top: 18px;
+}
+
+.hr-tm-actions-heading {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.hr-tm-actions-sub {
+  margin: 6px 0 0;
+  color: var(--hr-muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  max-width: 720px;
+}
+
+.hr-tm-action-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.hr-tm-action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--hr-line);
+  border-radius: var(--hr-radius-md);
+  background: var(--hr-panel-2);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  min-height: 88px;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.hr-tm-action-card:hover,
+.hr-tm-action-card:focus-visible {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  outline: none;
+}
+
+.hr-tm-action-card-title {
+  font-size: 0.92rem;
+  font-weight: 650;
+  color: var(--hr-text);
+  line-height: 1.3;
+}
+
+.hr-tm-action-card-desc {
+  font-size: 0.78rem;
+  color: var(--hr-muted);
+  line-height: 1.35;
+}
+
+.hr-tm-empty {
+  padding: 16px;
+  border-radius: var(--hr-radius-md);
+  border: 1px dashed var(--hr-line);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.hr-tm-empty-title {
+  margin: 0 0 6px;
+  font-weight: 650;
+  color: var(--hr-text);
+}
+
+.hr-tm-empty-text {
+  margin: 0;
+  color: var(--hr-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.hr-tm-panel-section {
+  margin-bottom: 18px;
+}
+
+.hr-tm-panel-section-title {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--hr-muted);
+  font-weight: 700;
+}
+
+.hr-tm-panel-lead {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--hr-text);
+}
+
+.hr-tm-insight-stack,
+.hr-tm-scorecard-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.hr-tm-insight-card-title {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+}
+
+.hr-tm-insight-card-body {
+  margin: 0;
+  color: var(--hr-soft);
+  line-height: 1.55;
+  font-size: 0.9rem;
+}
+
+.hr-tm-scorecard-question {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.hr-tm-meta-row {
+  margin-top: 8px;
+}
+
+.hr-tm-meta-label {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--hr-muted);
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.hr-tm-meta-value {
+  margin: 0;
+  color: var(--hr-soft);
+  line-height: 1.5;
+  font-size: 0.88rem;
+}
+
+.hr-tm-hr-note {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hr-line);
+}
+
+.hr-tm-hr-note-label {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--hr-muted);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.hr-tm-hr-note-field {
+  min-height: 52px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px dashed var(--hr-line);
+  background: rgba(0, 0, 0, 0.15);
+  color: var(--hr-muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.hr-tm-hr-note-field:empty::before {
+  content: "Заметка не сохраняется — для черновика на интервью";
+  color: var(--hr-muted);
+  opacity: 0.75;
+}
+
+.hr-tm-onboarding-timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.hr-tm-onboarding-summary {
+  margin: 0 0 8px;
+  line-height: 1.55;
+  color: var(--hr-soft);
+}
+
+.hr-tm-action-steps {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--hr-soft);
+  line-height: 1.6;
+}
+
+.hr-tm-action-steps li {
+  margin: 8px 0;
+}
+
+.hr-tm-roles-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 420px;
+}
+
+.hr-tm-roles-table th,
+.hr-tm-roles-table td {
+  text-align: left;
+  padding: 10px;
+  border-bottom: 1px solid var(--hr-line);
+}
+
+/* HR side panel */
+.hr-side-panel-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  pointer-events: none;
+}
+
+.hr-side-panel-overlay {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.52);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.hr-side-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(100%, 640px);
+  max-width: 720px;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--hr-panel);
+  border-left: 1px solid var(--hr-line);
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+  outline: none;
+}
+
+.hr-side-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hr-line);
+  background: var(--hr-panel);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+.hr-side-panel-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--hr-muted);
+  cursor: pointer;
+  font-size: 0.88rem;
+  padding: 6px 4px;
+}
+
+.hr-side-panel-back:hover {
+  color: var(--hr-text);
+}
+
+.hr-side-panel-close {
+  display: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--hr-line);
+  background: var(--hr-panel-2);
+  color: var(--hr-text);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.hr-side-panel-head {
+  padding: 12px 16px 0;
+  flex-shrink: 0;
+}
+
+.hr-side-panel-eyebrow {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--hr-green);
+  font-weight: 700;
+}
+
+.hr-side-panel-title {
+  margin: 0;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.hr-side-panel-desc {
+  margin: 8px 0 0;
+  color: var(--hr-muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.hr-side-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px 24px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.hr-side-panel-footer {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border-top: 1px solid var(--hr-line);
+  background: var(--hr-panel);
+}
+
+@media (max-width: 900px) {
+  .hr-tm-action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hr-side-panel {
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    border-left: 0;
+  }
+
+  .hr-side-panel-back-text {
+    display: inline;
+  }
+
+  .hr-side-panel-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 520px) {
+  .hr-tm-action-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 900px) {

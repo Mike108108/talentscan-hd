@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { HrSidePanel } from "../../components/hr/HrSidePanel";
 import {
   fetchCandidate,
   fetchCandidateVacancies,
@@ -7,6 +8,12 @@ import {
   fetchTalentMap,
   generateCandidateReport,
 } from "../../lib/hr/api";
+import { normalizeAiReportContent } from "../../lib/hr/normalizeAiReport";
+import {
+  extractCompletenessPercent,
+  formatReportDate,
+  mergeFlexibleItems,
+} from "../../lib/hr/talentMapUiHelpers";
 import type {
   HrCandidate,
   HrCandidateTalentMap,
@@ -18,18 +25,71 @@ import type {
   TalentMapRole,
 } from "../../lib/hr/types";
 import { formulaToSafeHtml } from "../../lib/safeHtml";
-import { normalizeAiReportContent } from "../../lib/hr/normalizeAiReport";
+import {
+  getPanelMeta,
+  InterviewScorecards,
+  OnboardingTimeline,
+  renderPanelContent,
+  TestTaskCards,
+  type TalentMapPanelKey,
+} from "./talentMapPanelContent";
 import "../../hr.css";
 
-type TabId = "overview" | "profile" | "risks" | "checks" | "roles";
+type TabId =
+  | "overview"
+  | "profile"
+  | "risks"
+  | "checks"
+  | "interview"
+  | "test"
+  | "onboarding"
+  | "data"
+  | "roles";
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "overview", label: "Обзор" },
   { id: "profile", label: "Рабочий профиль" },
   { id: "risks", label: "Риски и условия" },
   { id: "checks", label: "Проверка" },
+  { id: "interview", label: "Интервью" },
+  { id: "test", label: "Тестовое" },
+  { id: "onboarding", label: "Адаптация" },
+  { id: "data", label: "Данные" },
   { id: "roles", label: "Роли и вакансии" },
 ];
+
+const EXECUTIVE_CARDS: Array<{
+  key: TalentMapPanelKey;
+  label: string;
+  preview: (ctx: ExecutivePreviewCtx) => string | null;
+}> = [
+  { key: "bestFormat", label: "Лучший рабочий формат", preview: (c) => c.bestWorkFormat },
+  { key: "keyTalent", label: "Ключевой талант", preview: (c) => c.keyTalent },
+  { key: "mainRisk", label: "Главный риск", preview: (c) => c.mainRisk },
+  { key: "mainConclusion", label: "Главный вывод", preview: (c) => c.summaryText },
+];
+
+const ACTION_CARDS: Array<{
+  key: TalentMapPanelKey;
+  title: string;
+  desc: string;
+}> = [
+  { key: "profile", title: "Рабочий профиль", desc: "Формула, таланты, рабочий стиль" },
+  { key: "risks", title: "Риски и условия", desc: "Что мешает и какая среда нужна" },
+  { key: "verification", title: "Проверка", desc: "Вопросы и что проверять" },
+  { key: "testTasks", title: "Тестовое", desc: "Задания и критерии оценки" },
+  { key: "roles", title: "Роли и вакансии", desc: "Подходящие и спорные направления" },
+  { key: "onboarding", title: "Адаптация 7/30/90", desc: "Как вводить в роль" },
+  { key: "dataQuality", title: "Точность данных", desc: "Полнота и уверенность выводов" },
+  { key: "nextStep", title: "Следующий шаг HR", desc: "Что сделать после просмотра" },
+];
+
+type ExecutivePreviewCtx = {
+  bestWorkFormat: string | null;
+  keyTalent: string | null;
+  mainRisk: string | null;
+  summaryText: string | null;
+};
 
 function normalizeHrCopy(text: string): string {
   const t = text.trim();
@@ -126,8 +186,11 @@ type TalentMapViewProps = {
   vacancies: HrVacancy[];
   mode: "ai" | "deterministic";
   aiContent?: HrPersonTalentMapV1;
+  rawAiContent?: unknown;
   map?: HrCandidateTalentMap;
   fitScore?: number | null;
+  reportUpdatedAt?: string | null;
+  reportStatus?: string;
   onGenerateAi?: () => void;
   generating?: boolean;
   aiError?: string | null;
@@ -140,13 +203,17 @@ function TalentMapView({
   vacancies,
   mode,
   aiContent,
+  rawAiContent,
   map,
   fitScore,
+  reportUpdatedAt,
+  reportStatus,
   onGenerateAi,
   generating,
   aiError,
 }: TalentMapViewProps) {
   const [tab, setTab] = useState<TabId>("overview");
+  const [panelKey, setPanelKey] = useState<TalentMapPanelKey | null>(null);
 
   const hero = mode === "ai" ? aiContent?.hero : null;
   const bestWorkFormat =
@@ -162,12 +229,26 @@ function TalentMapView({
       ? normalizeHrMaybe(aiContent?.executive_summary?.text ?? hero?.headline)
       : normalizeHrMaybe(map?.summary);
 
+  const previewCtx: ExecutivePreviewCtx = {
+    bestWorkFormat,
+    keyTalent,
+    mainRisk,
+    summaryText,
+  };
+
   const formulaRaw =
     mode === "ai" ? aiContent?.working_formula?.text ?? "" : map?.formula ?? "";
   const formulaHtml = formulaRaw ? formulaToSafeHtml(formulaRaw) : "";
 
   const metrics =
     mode === "ai" ? aiContent?.data_quality?.metrics ?? [] : map?.metrics ?? [];
+  const completenessPct = extractCompletenessPercent(
+    mode === "ai" ? aiContent?.data_quality?.completeness : undefined,
+    metrics,
+  );
+  const confidenceLabel =
+    mode === "ai" ? aiContent?.data_quality?.confidence : undefined;
+
   const talents = mode === "ai" ? aiContent?.talents ?? [] : map?.talents ?? [];
   const directions =
     mode === "ai" ? aiContent?.suitable_directions ?? [] : map?.directions ?? [];
@@ -181,12 +262,49 @@ function TalentMapView({
       ? normalizeHrMaybe(aiContent?.final_hr_recommendation?.text)
       : normalizeHrMaybe(map?.final_recommendation);
 
-  const interviewQuestions = mode === "ai" ? aiContent?.interview_questions ?? [] : [];
-  const testTasks = mode === "ai" ? aiContent?.test_tasks ?? [] : map?.tests ?? [];
+  const raw = rawAiContent as Record<string, unknown> | undefined;
+  const interviewQuestions =
+    mode === "ai"
+      ? mergeFlexibleItems(aiContent?.interview_questions ?? [], raw?.interview_questions)
+      : [];
+  const testTasks =
+    mode === "ai"
+      ? mergeFlexibleItems(aiContent?.test_tasks ?? [], raw?.test_tasks)
+      : mergeFlexibleItems(map?.tests ?? [], undefined);
   const risks = mode === "ai" ? aiContent?.risks ?? [] : map?.risks ?? [];
   const questionable =
     mode === "ai" ? aiContent?.questionable_directions ?? [] : map?.not_fit_directions ?? [];
   const onboarding = mode === "ai" ? aiContent?.onboarding_7_30_90 : null;
+
+  const panelCtx = {
+    mode,
+    aiContent,
+    rawContent: rawAiContent,
+    map,
+    vacancies,
+    normalizeHrCopy,
+    normalizeHrMaybe,
+  };
+
+  const updatedLabel = formatReportDate(reportUpdatedAt ?? undefined);
+  const vacancyLabel =
+    vacancies.length === 1
+      ? vacancies[0].title
+      : vacancies.length > 1
+        ? `${vacancies.length} вакансии`
+        : candidate.vacancy_title || null;
+
+  const reportBadge = generating
+    ? "Генерируется"
+    : aiError
+      ? "Ошибка AI"
+      : mode === "ai"
+        ? "Отчёт: готов"
+        : "Базовая карта";
+
+  const openPanel = (key: TalentMapPanelKey) => setPanelKey(key);
+  const closePanel = () => setPanelKey(null);
+  const panelMeta = panelKey ? getPanelMeta(panelKey) : null;
 
   return (
     <div className="hr-tm-page">
@@ -195,14 +313,9 @@ function TalentMapView({
           <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
             ← К кандидату
           </Link>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
             {mode === "deterministic" && onGenerateAi && (
-              <button
-                type="button"
-                className="hr-btn"
-                disabled={generating}
-                onClick={onGenerateAi}
-              >
+              <button type="button" className="hr-btn" disabled={generating} onClick={onGenerateAi}>
                 {generating ? "Генерируем AI-карту…" : "Сгенерировать AI-карту"}
               </button>
             )}
@@ -231,7 +344,9 @@ function TalentMapView({
           <div className="hr-card" style={{ marginBottom: 12, borderColor: "rgba(255,120,120,0.35)" }}>
             <p style={{ margin: 0, color: "var(--hr-muted)" }}>
               {aiError}
-              {mode === "deterministic" ? " Показана базовая карта." : " Предыдущая версия AI-карты сохранена."}
+              {mode === "deterministic"
+                ? " Показана базовая карта."
+                : " Предыдущая версия AI-карты сохранена."}
             </p>
           </div>
         )}
@@ -249,35 +364,92 @@ function TalentMapView({
             </div>
             <div className="hr-tm-subtitle">
               <b>{candidate.name}</b>
-              {candidate.vacancy_title ? <span> · {candidate.vacancy_title}</span> : null}
+            </div>
+            <div className="hr-tm-badges">
+              {completenessPct != null && (
+                <span className="hr-status">Данные: {completenessPct}%</span>
+              )}
+              {confidenceLabel && (
+                <span className="hr-status">Точность: {normalizeHrCopy(confidenceLabel)}</span>
+              )}
+              <span
+                className={`hr-status ${aiError ? "hr-status--warn" : generating ? "" : mode === "ai" ? "hr-status--ok" : "hr-status--warn"}`}
+              >
+                {reportBadge}
+              </span>
+              <span className="hr-status">
+                Источник: {mode === "ai" ? "AI" : "базовый разбор"}
+              </span>
+              {updatedLabel && <span className="hr-status">Обновлено: {updatedLabel}</span>}
+              <span className="hr-status">
+                Вакансия: {vacancyLabel ?? "не привязана"}
+              </span>
+              {reportStatus === "generating" && (
+                <span className="hr-status hr-status--warn">Статус отчёта: в работе</span>
+              )}
             </div>
           </div>
         </div>
 
         <p className="hr-tm-lede">
-          Компактный разбор в HR-языке: сильные стороны, риски, условия раскрытия и что проверить на
-          интервью. Это рабочие гипотезы — уточняются по опыту, кейсам и реальной вакансии.
+          Рабочее пространство HR: главные выводы, риски, проверка на интервью и адаптация. Гипотезы
+          уточняются по опыту, кейсам и реальной вакансии.
         </p>
 
         <div className="hr-tm-summary-grid hr-tm-summary-grid--2x2">
-          <div className="hr-tm-identity-card">
-            <b>Лучший рабочий формат</b>
-            <span>{bestWorkFormat ?? "—"}</span>
-          </div>
-          <div className="hr-tm-identity-card">
-            <b>Ключевой талант</b>
-            <span>{keyTalent ?? "—"}</span>
-          </div>
-          <div className="hr-tm-identity-card">
-            <b>Главный риск</b>
-            <span>{mainRisk ?? "—"}</span>
-          </div>
-          <div className="hr-tm-identity-card hr-tm-summary-card--primary">
-            <b>Главный вывод</b>
-            <span>{summaryText ?? "—"}</span>
-          </div>
+          {EXECUTIVE_CARDS.map((card) => {
+            const preview = card.preview(previewCtx) ?? "—";
+            const isPrimary = card.key === "mainConclusion";
+            return (
+              <button
+                key={card.key}
+                type="button"
+                className={`hr-tm-identity-card hr-tm-identity-card--clickable${isPrimary ? " hr-tm-summary-card--primary" : ""}`}
+                onClick={() => openPanel(card.key)}
+              >
+                <b>{card.label}</b>
+                <span>{preview}</span>
+                <span className="hr-tm-card-more">
+                  Подробнее <span className="hr-tm-card-chevron" aria-hidden>→</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
+
+        <section className="hr-tm-actions-section" aria-label="Разборы и действия">
+          <h3 className="hr-tm-actions-heading">Разборы и действия</h3>
+          <p className="hr-tm-actions-sub">
+            Откройте нужный блок, чтобы быстро перейти от общей карты к HR-действию.
+          </p>
+          <div className="hr-tm-action-grid">
+            {ACTION_CARDS.map((card) => (
+              <button
+                key={card.key}
+                type="button"
+                className="hr-tm-action-card"
+                onClick={() => openPanel(card.key)}
+              >
+                <span className="hr-tm-action-card-title">{card.title}</span>
+                <span className="hr-tm-action-card-desc">{card.desc}</span>
+                <span className="hr-tm-card-more">
+                  Открыть <span className="hr-tm-card-chevron" aria-hidden>→</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
       </div>
+
+      <HrSidePanel
+        open={panelKey !== null}
+        onClose={closePanel}
+        title={panelMeta?.title ?? ""}
+        eyebrow={panelMeta?.eyebrow}
+        description={panelMeta?.description}
+      >
+        {panelKey ? renderPanelContent(panelKey, panelCtx) : null}
+      </HrSidePanel>
 
       <div className="hr-tm-tab-dock">
         <div className="hr-tm-tabs" role="tablist" aria-label="Вкладки карты талантов">
@@ -302,6 +474,14 @@ function TalentMapView({
                 <div className="hr-card">
                   <h3 style={{ marginTop: 0 }}>Показатели</h3>
                   <MetricsList metrics={metrics} />
+                  <button
+                    type="button"
+                    className="hr-btn hr-btn--ghost"
+                    style={{ marginTop: 10 }}
+                    onClick={() => openPanel("dataQuality")}
+                  >
+                    Точность данных →
+                  </button>
                 </div>
                 <div className="hr-card">
                   <h3 style={{ marginTop: 0 }}>Условия раскрытия</h3>
@@ -322,6 +502,14 @@ function TalentMapView({
                 <div className="hr-card" style={{ marginTop: 12 }}>
                   <h3 style={{ marginTop: 0 }}>Рекомендация HR</h3>
                   <p style={{ margin: 0, lineHeight: 1.6 }}>{finalRecommendation}</p>
+                  <button
+                    type="button"
+                    className="hr-btn hr-btn--ghost"
+                    style={{ marginTop: 10 }}
+                    onClick={() => openPanel("nextStep")}
+                  >
+                    Следующий шаг →
+                  </button>
                 </div>
               )}
             </section>
@@ -352,12 +540,12 @@ function TalentMapView({
 
               <div className="hr-tm-block">
                 <h3 className="hr-tm-block-title">Ключевые таланты</h3>
-                <ItemCards items={talents.slice(0, 3)} />
+                <ItemCards items={talents.slice(0, 6)} />
               </div>
 
               <div className="hr-tm-block">
                 <h3 className="hr-tm-block-title">Подходящие направления</h3>
-                <ItemCards items={directions.slice(0, 2)} />
+                <ItemCards items={directions.slice(0, 4)} />
               </div>
             </section>
           )}
@@ -370,8 +558,8 @@ function TalentMapView({
                   <p style={{ margin: 0, lineHeight: 1.6 }}>{mainRisk ?? "—"}</p>
                 </div>
                 <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Какие условия нужны</h3>
-                  <ItemCards items={risks.slice(0, 2)} />
+                  <h3 style={{ marginTop: 0 }}>Риски в работе</h3>
+                  <ItemCards items={risks.slice(0, 4)} />
                 </div>
               </div>
 
@@ -383,19 +571,29 @@ function TalentMapView({
               )}
 
               <div className="hr-tm-block">
-                <h3 className="hr-tm-block-title">Среда и менеджмент</h3>
-                <ItemCards items={conditions.slice(0, 4)} />
+                <h3 className="hr-tm-block-title">Среда и управление</h3>
+                <ItemCards items={conditions.slice(0, 6)} />
               </div>
             </section>
           )}
 
           {tab === "checks" && (
             <section>
+              <p className="hr-muted" style={{ marginTop: 0 }}>
+                Краткий план проверки. Подробные карточки — во вкладках «Интервью» и «Тестовое» или в
+                блоке «Проверка» в разделе действий.
+              </p>
               <div className="hr-grid-2">
                 <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Вопросы на интервью</h3>
+                  <h3 style={{ marginTop: 0 }}>Интервью</h3>
                   {interviewQuestions.length > 0 ? (
-                    <ItemCards items={interviewQuestions} />
+                    <ItemCards
+                      items={interviewQuestions.slice(0, 3).map((q) => ({
+                        title: q.title,
+                        body: q.checks || q.body,
+                        fit: q.fit,
+                      }))}
+                    />
                   ) : (
                     <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
                       Уточнить примеры решений, реакции на срочность и опыт работы в команде.
@@ -403,9 +601,15 @@ function TalentMapView({
                   )}
                 </div>
                 <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Тестовые задания</h3>
+                  <h3 style={{ marginTop: 0 }}>Тестовое</h3>
                   {testTasks.length > 0 ? (
-                    <ItemCards items={testTasks} />
+                    <ItemCards
+                      items={testTasks.slice(0, 2).map((t) => ({
+                        title: t.title,
+                        body: t.body,
+                        fit: t.fit,
+                      }))}
+                    />
                   ) : (
                     <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
                       Кейс на 2–3 часа с реальной задачей роли + разбор решения.
@@ -413,32 +617,6 @@ function TalentMapView({
                   )}
                 </div>
               </div>
-
-              {onboarding && (onboarding.day_7 || onboarding.day_30 || onboarding.day_90) && (
-                <div className="hr-tm-block">
-                  <h3 className="hr-tm-block-title">Онбординг 7 / 30 / 90</h3>
-                  <div className="hr-grid-2">
-                    {onboarding.day_7 && (
-                      <div className="hr-card">
-                        <h4 style={{ marginTop: 0 }}>7 дней</h4>
-                        <p style={{ margin: 0, lineHeight: 1.55 }}>{normalizeHrCopy(onboarding.day_7)}</p>
-                      </div>
-                    )}
-                    {onboarding.day_30 && (
-                      <div className="hr-card">
-                        <h4 style={{ marginTop: 0 }}>30 дней</h4>
-                        <p style={{ margin: 0, lineHeight: 1.55 }}>{normalizeHrCopy(onboarding.day_30)}</p>
-                      </div>
-                    )}
-                    {onboarding.day_90 && (
-                      <div className="hr-card">
-                        <h4 style={{ marginTop: 0 }}>90 дней</h4>
-                        <p style={{ margin: 0, lineHeight: 1.55 }}>{normalizeHrCopy(onboarding.day_90)}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
 
               {mode === "deterministic" && (
                 <div className="hr-tm-block">
@@ -464,6 +642,48 @@ function TalentMapView({
             </section>
           )}
 
+          {tab === "interview" && (
+            <section>
+              <InterviewScorecards items={interviewQuestions} />
+            </section>
+          )}
+
+          {tab === "test" && (
+            <section>
+              <TestTaskCards items={testTasks} />
+            </section>
+          )}
+
+          {tab === "onboarding" && (
+            <section>
+              {onboarding || mode === "ai" ? (
+                <OnboardingTimeline aiContent={aiContent} rawContent={rawAiContent} />
+              ) : (
+                <p className="hr-muted">
+                  План адаптации появится в AI-карте. Можно сгенерировать отчёт или открыть блок
+                  «Адаптация» в действиях.
+                </p>
+              )}
+            </section>
+          )}
+
+          {tab === "data" && (
+            <section>
+              {panelKey !== "dataQuality" && (
+                <button
+                  type="button"
+                  className="hr-btn"
+                  onClick={() => openPanel("dataQuality")}
+                >
+                  Открыть панель точности данных
+                </button>
+              )}
+              <div style={{ marginTop: 12 }}>
+                {renderPanelContent("dataQuality", panelCtx)}
+              </div>
+            </section>
+          )}
+
           {tab === "roles" && (
             <section>
               <div className="hr-grid-2">
@@ -476,7 +696,11 @@ function TalentMapView({
                   ) : (
                     <div style={{ display: "grid", gap: 10 }}>
                       {vacancies.map((v) => (
-                        <div key={v.id} className="hr-card" style={{ background: "rgba(255,255,255,0.02)" }}>
+                        <div
+                          key={v.id}
+                          className="hr-card"
+                          style={{ background: "rgba(255,255,255,0.02)" }}
+                        >
                           <div
                             style={{
                               display: "flex",
@@ -508,9 +732,17 @@ function TalentMapView({
                 <div className="hr-card">
                   <h3 style={{ marginTop: 0 }}>Следующий этап</h3>
                   <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                    Точная оценка под конкретную вакансию будет отдельным разбором. Сейчас карта
-                    показывает рабочий профиль кандидата и гипотезы для проверки на интервью.
+                    Точная оценка под конкретную вакансию — отдельный разбор. Сейчас карта показывает
+                    рабочий профиль и гипотезы для проверки.
                   </p>
+                  <button
+                    type="button"
+                    className="hr-btn hr-btn--ghost"
+                    style={{ marginTop: 10 }}
+                    onClick={() => openPanel("nextStep")}
+                  >
+                    Следующий шаг HR →
+                  </button>
                 </div>
               </div>
 
@@ -600,6 +832,11 @@ export default function CandidateTalentMapPage() {
     );
   }
 
+  const reportMeta = {
+    reportUpdatedAt: aiReport?.generated_at ?? aiReport?.updated_at ?? map?.updated_at,
+    reportStatus: aiReport?.report_status ?? map?.report_status,
+  };
+
   if (hasAi && companyId && candidateId) {
     return (
       <TalentMapView
@@ -609,10 +846,12 @@ export default function CandidateTalentMapPage() {
         vacancies={vacancies}
         mode="ai"
         aiContent={normalizeAiReportContent(aiReport.content_json)}
+        rawAiContent={aiReport.content_json}
         fitScore={aiReport.fit_score}
         onGenerateAi={() => onGenerateAi(true)}
         generating={generating}
         aiError={aiError}
+        {...reportMeta}
       />
     );
   }
@@ -629,6 +868,8 @@ export default function CandidateTalentMapPage() {
         onGenerateAi={() => onGenerateAi(false)}
         generating={generating}
         aiError={aiError}
+        reportUpdatedAt={map.updated_at}
+        reportStatus={map.report_status}
       />
     );
   }

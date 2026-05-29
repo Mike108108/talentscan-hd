@@ -1,41 +1,31 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { HrSidePanel } from "../../components/hr/HrSidePanel";
 import {
   fetchCandidate,
   fetchCandidateVacancies,
   fetchLatestCandidateReport,
-  fetchTalentMap,
   generateCandidateReport,
 } from "../../lib/hr/api";
 import { normalizeAiReportContent } from "../../lib/hr/normalizeAiReport";
 import {
   extractCompletenessPercent,
   formatReportDate,
-  mergeFlexibleItems,
 } from "../../lib/hr/talentMapUiHelpers";
-import type {
-  HrCandidate,
-  HrCandidateTalentMap,
-  HrPersonTalentMapV1,
-  HrReport,
-  HrVacancy,
-  TalentMapItem,
-  TalentMapMetric,
-  TalentMapRole,
-} from "../../lib/hr/types";
+import type { HrCandidate, HrPersonTalentMapV1, HrReport, HrVacancy, TalentMapRole } from "../../lib/hr/types";
 import { formulaToSafeHtml } from "../../lib/safeHtml";
 import {
-  getPanelMeta,
-  InterviewScorecards,
-  OnboardingTimeline,
-  renderPanelContent,
-  TestTaskCards,
-  type TalentMapPanelKey,
+  buildReportLists,
+  DataQualitySection,
+  getDetailPanelTitle,
+  ItemDetailPanel,
+  type DetailPanelState,
+  type ReportContentCtx,
 } from "./talentMapPanelContent";
+import type { OnboardingPhase } from "../../lib/hr/talentMapUiHelpers";
 import "../../hr.css";
 
-type TabId =
+type SectionId =
   | "overview"
   | "profile"
   | "risks"
@@ -46,9 +36,9 @@ type TabId =
   | "data"
   | "roles";
 
-const TABS: Array<{ id: TabId; label: string }> = [
+const NAV_SECTIONS: Array<{ id: SectionId; label: string; hint?: string }> = [
   { id: "overview", label: "Обзор" },
-  { id: "profile", label: "Рабочий профиль" },
+  { id: "profile", label: "Рабочий профиль", hint: "Формула и таланты" },
   { id: "risks", label: "Риски и условия" },
   { id: "checks", label: "Проверка" },
   { id: "interview", label: "Интервью" },
@@ -57,39 +47,6 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: "data", label: "Данные" },
   { id: "roles", label: "Роли и вакансии" },
 ];
-
-const EXECUTIVE_CARDS: Array<{
-  key: TalentMapPanelKey;
-  label: string;
-  preview: (ctx: ExecutivePreviewCtx) => string | null;
-}> = [
-  { key: "bestFormat", label: "Лучший рабочий формат", preview: (c) => c.bestWorkFormat },
-  { key: "keyTalent", label: "Ключевой талант", preview: (c) => c.keyTalent },
-  { key: "mainRisk", label: "Главный риск", preview: (c) => c.mainRisk },
-  { key: "mainConclusion", label: "Главный вывод", preview: (c) => c.summaryText },
-];
-
-const ACTION_CARDS: Array<{
-  key: TalentMapPanelKey;
-  title: string;
-  desc: string;
-}> = [
-  { key: "profile", title: "Рабочий профиль", desc: "Формула, таланты, рабочий стиль" },
-  { key: "risks", title: "Риски и условия", desc: "Что мешает и какая среда нужна" },
-  { key: "verification", title: "Проверка", desc: "Вопросы и что проверять" },
-  { key: "testTasks", title: "Тестовое", desc: "Задания и критерии оценки" },
-  { key: "roles", title: "Роли и вакансии", desc: "Подходящие и спорные направления" },
-  { key: "onboarding", title: "Адаптация 7/30/90", desc: "Как вводить в роль" },
-  { key: "dataQuality", title: "Точность данных", desc: "Полнота и уверенность выводов" },
-  { key: "nextStep", title: "Следующий шаг HR", desc: "Что сделать после просмотра" },
-];
-
-type ExecutivePreviewCtx = {
-  bestWorkFormat: string | null;
-  keyTalent: string | null;
-  mainRisk: string | null;
-  summaryText: string | null;
-};
 
 function normalizeHrCopy(text: string): string {
   const t = text.trim();
@@ -107,53 +64,74 @@ function normalizeHrMaybe(text: string | null | undefined): string | null {
   return normalizeHrCopy(text);
 }
 
-function ItemCards({ items }: { items: TalentMapItem[] | null | undefined }) {
-  if (!items?.length) return <p className="hr-muted">Нет данных</p>;
+function CompactRow({
+  title,
+  subtitle,
+  onClick,
+}: {
+  title: string;
+  subtitle?: string;
+  onClick?: () => void;
+}) {
+  const body = (
+    <>
+      <span className="hr-tm-row-body">
+        <span className="hr-tm-row-title">{title}</span>
+        {subtitle ? <span className="hr-tm-row-sub">{subtitle}</span> : null}
+      </span>
+      {onClick ? <span className="hr-tm-row-chevron" aria-hidden>→</span> : null}
+    </>
+  );
+  if (onClick) {
+    return (
+      <button type="button" className="hr-tm-row hr-tm-row--clickable" onClick={onClick}>
+        {body}
+      </button>
+    );
+  }
+  return <div className="hr-tm-row">{body}</div>;
+}
+
+function StatPill({
+  label,
+  value,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  onClick?: () => void;
+}) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className="hr-grid-2">
-      {items.map((item, idx) => (
-        <div key={`${item.title}-${idx}`} className="hr-card">
-          <h3 style={{ marginTop: 0 }}>{item.title}</h3>
-          <p style={{ margin: 0, color: "var(--hr-soft)", lineHeight: 1.55 }}>
-            {normalizeHrCopy(item.body)}
-          </p>
-          {item.fit && normalizeHrMaybe(item.fit) && (
-            <span className="hr-status hr-status--ok" style={{ marginTop: 10 }}>
-              {normalizeHrCopy(item.fit)}
-            </span>
-          )}
-        </div>
-      ))}
-    </div>
+    <Tag
+      type={onClick ? "button" : undefined}
+      className={`hr-tm-stat-pill${onClick ? " hr-tm-stat-pill--clickable" : ""}`}
+      onClick={onClick}
+    >
+      <span className="hr-tm-stat-pill-label">{label}</span>
+      <span className="hr-tm-stat-pill-value">{value}</span>
+    </Tag>
   );
 }
 
-function RolesTable({ roles }: { roles: TalentMapRole[] | null | undefined }) {
-  if (!roles?.length) return <p>Нет данных</p>;
+function RolesTable({ roles }: { roles: TalentMapRole[] }) {
+  if (!roles.length) return <p className="hr-muted">Нет данных</p>;
   return (
-    <div className="hr-card" style={{ overflow: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}>
+    <div className="hr-tm-table-wrap">
+      <table className="hr-tm-roles-table">
         <thead>
           <tr>
-            <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid var(--hr-line)" }}>
-              Роль
-            </th>
-            <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid var(--hr-line)" }}>
-              Соответствие
-            </th>
-            <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid var(--hr-line)" }}>
-              Заметка
-            </th>
+            <th>Роль</th>
+            <th>Соответствие</th>
+            <th>Заметка</th>
           </tr>
         </thead>
         <tbody>
           {roles.map((r, idx) => (
             <tr key={`${r.role}-${idx}`}>
-              <td style={{ padding: 10, borderBottom: "1px solid var(--hr-line)" }}>{r.role}</td>
-              <td style={{ padding: 10, borderBottom: "1px solid var(--hr-line)" }}>{r.fit}</td>
-              <td style={{ padding: 10, borderBottom: "1px solid var(--hr-line)" }}>
-                {normalizeHrCopy(r.note)}
-              </td>
+              <td>{r.role}</td>
+              <td>{r.fit}</td>
+              <td>{normalizeHrCopy(r.note)}</td>
             </tr>
           ))}
         </tbody>
@@ -162,598 +140,507 @@ function RolesTable({ roles }: { roles: TalentMapRole[] | null | undefined }) {
   );
 }
 
-function MetricsList({ metrics }: { metrics: TalentMapMetric[] | null | undefined }) {
-  if (!metrics?.length) return <p className="hr-muted">Нет данных</p>;
-  return (
-    <div className="hr-tm-metrics-list">
-      {metrics.map((m, idx) => (
-        <div key={`${m.label}-${idx}`} className="hr-tm-metrics-item">
-          <span className="hr-tm-metrics-label">
-            {m.label}
-            {m.hint ? <span className="hr-tm-metrics-hint"> · {m.hint}</span> : null}
-          </span>
-          <b className="hr-tm-metrics-value">{m.value}</b>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-type TalentMapViewProps = {
+type WorkspaceProps = {
   candidate: HrCandidate;
   companyId: string;
   candidateId: string;
   vacancies: HrVacancy[];
-  mode: "ai" | "deterministic";
-  aiContent?: HrPersonTalentMapV1;
-  rawAiContent?: unknown;
-  map?: HrCandidateTalentMap;
-  fitScore?: number | null;
-  reportUpdatedAt?: string | null;
-  reportStatus?: string;
-  onGenerateAi?: () => void;
-  generating?: boolean;
-  aiError?: string | null;
+  aiContent: HrPersonTalentMapV1;
+  rawAiContent: unknown;
+  aiReport: HrReport;
+  onRegenerate: () => void;
+  generating: boolean;
+  genError: string | null;
 };
 
-function TalentMapView({
+function TalentMapWorkspace({
   candidate,
   companyId,
   candidateId,
   vacancies,
-  mode,
   aiContent,
   rawAiContent,
-  map,
-  fitScore,
-  reportUpdatedAt,
-  reportStatus,
-  onGenerateAi,
+  aiReport,
+  onRegenerate,
   generating,
-  aiError,
-}: TalentMapViewProps) {
-  const [tab, setTab] = useState<TabId>("overview");
-  const [panelKey, setPanelKey] = useState<TalentMapPanelKey | null>(null);
+  genError,
+}: WorkspaceProps) {
+  const [section, setSection] = useState<SectionId>("overview");
+  const [detail, setDetail] = useState<DetailPanelState | null>(null);
 
-  const hero = mode === "ai" ? aiContent?.hero : null;
-  const bestWorkFormat =
-    mode === "ai"
-      ? normalizeHrMaybe(hero?.best_work_format)
-      : normalizeHrMaybe(map?.best_work_format);
-  const keyTalent =
-    mode === "ai" ? normalizeHrMaybe(hero?.key_talent) : normalizeHrMaybe(map?.key_talent);
-  const mainRisk =
-    mode === "ai" ? normalizeHrMaybe(hero?.main_risk) : normalizeHrMaybe(map?.main_risk);
-  const summaryText =
-    mode === "ai"
-      ? normalizeHrMaybe(aiContent?.executive_summary?.text ?? hero?.headline)
-      : normalizeHrMaybe(map?.summary);
-
-  const previewCtx: ExecutivePreviewCtx = {
-    bestWorkFormat,
-    keyTalent,
-    mainRisk,
-    summaryText,
-  };
-
-  const formulaRaw =
-    mode === "ai" ? aiContent?.working_formula?.text ?? "" : map?.formula ?? "";
-  const formulaHtml = formulaRaw ? formulaToSafeHtml(formulaRaw) : "";
-
-  const metrics =
-    mode === "ai" ? aiContent?.data_quality?.metrics ?? [] : map?.metrics ?? [];
-  const completenessPct = extractCompletenessPercent(
-    mode === "ai" ? aiContent?.data_quality?.completeness : undefined,
-    metrics,
-  );
-  const confidenceLabel =
-    mode === "ai" ? aiContent?.data_quality?.confidence : undefined;
-
-  const talents = mode === "ai" ? aiContent?.talents ?? [] : map?.talents ?? [];
-  const directions =
-    mode === "ai" ? aiContent?.suitable_directions ?? [] : map?.directions ?? [];
-  const conditions =
-    mode === "ai"
-      ? [...(aiContent?.work_environment ?? []), ...(aiContent?.management_style ?? [])]
-      : map?.conditions ?? [];
-  const roles = mode === "ai" ? aiContent?.roles ?? [] : map?.roles ?? [];
-  const finalRecommendation =
-    mode === "ai"
-      ? normalizeHrMaybe(aiContent?.final_hr_recommendation?.text)
-      : normalizeHrMaybe(map?.final_recommendation);
-
-  const raw = rawAiContent as Record<string, unknown> | undefined;
-  const interviewQuestions =
-    mode === "ai"
-      ? mergeFlexibleItems(aiContent?.interview_questions ?? [], raw?.interview_questions)
-      : [];
-  const testTasks =
-    mode === "ai"
-      ? mergeFlexibleItems(aiContent?.test_tasks ?? [], raw?.test_tasks)
-      : mergeFlexibleItems(map?.tests ?? [], undefined);
-  const risks = mode === "ai" ? aiContent?.risks ?? [] : map?.risks ?? [];
-  const questionable =
-    mode === "ai" ? aiContent?.questionable_directions ?? [] : map?.not_fit_directions ?? [];
-  const onboarding = mode === "ai" ? aiContent?.onboarding_7_30_90 : null;
-
-  const panelCtx = {
-    mode,
+  const ctx: ReportContentCtx = {
     aiContent,
     rawContent: rawAiContent,
-    map,
     vacancies,
     normalizeHrCopy,
     normalizeHrMaybe,
   };
 
-  const updatedLabel = formatReportDate(reportUpdatedAt ?? undefined);
+  const lists = useMemo(() => buildReportLists(ctx), [aiContent, rawAiContent, vacancies]);
+
+  const hero = aiContent.hero;
+  const bestWorkFormat = normalizeHrMaybe(hero?.best_work_format);
+  const keyTalent = normalizeHrMaybe(hero?.key_talent);
+  const mainRisk = normalizeHrMaybe(hero?.main_risk);
+  const summaryText = normalizeHrMaybe(
+    aiContent.executive_summary?.text ?? hero?.headline,
+  );
+  const finalRec = normalizeHrMaybe(aiContent.final_hr_recommendation?.text);
+  const formulaHtml = aiContent.working_formula?.text
+    ? formulaToSafeHtml(aiContent.working_formula.text)
+    : "";
+
+  const metrics = aiContent.data_quality?.metrics ?? [];
+  const completenessPct = extractCompletenessPercent(
+    aiContent.data_quality?.completeness,
+    metrics,
+  );
+  const confidenceLabel = aiContent.data_quality?.confidence
+    ? normalizeHrCopy(aiContent.data_quality.confidence)
+    : completenessPct != null
+      ? `${completenessPct}%`
+      : "уточняется";
+
+  const updatedLabel = formatReportDate(
+    aiReport.generated_at ?? aiReport.updated_at,
+  );
   const vacancyLabel =
     vacancies.length === 1
       ? vacancies[0].title
       : vacancies.length > 1
         ? `${vacancies.length} вакансии`
-        : candidate.vacancy_title || null;
+        : candidate.vacancy_title || "не привязана";
 
-  const reportBadge = generating
-    ? "Генерируется"
-    : aiError
-      ? "Ошибка AI"
-      : mode === "ai"
-        ? "Отчёт: готов"
-        : "Базовая карта";
+  const checkHint =
+    lists.interviews.length > 0
+      ? `${lists.interviews.length} вопросов`
+      : lists.tests.length > 0
+        ? "тестовое задание"
+        : "кейс + встреча";
 
-  const openPanel = (key: TalentMapPanelKey) => setPanelKey(key);
-  const closePanel = () => setPanelKey(null);
-  const panelMeta = panelKey ? getPanelMeta(panelKey) : null;
+  const nextStep =
+    finalRec ??
+    (lists.interviews.length > 0
+      ? "Провести интервью по вопросам из раздела «Интервью»."
+      : "Уточнить опыт и мотивацию на встрече.");
+
+  const mainConclusion = summaryText ?? finalRec ?? "Разбор готов — откройте разделы ниже для деталей.";
+
+  const detailLists = {
+    risks: lists.risks,
+    interviews: lists.interviews,
+    tests: lists.tests,
+    talents: lists.talents,
+    strengths: lists.strengths,
+    directions: lists.directions,
+    roles: lists.roles,
+  };
+
+  const onboardingPhaseKey = (phase: OnboardingPhase, idx: number): "7" | "30" | "90" => {
+    if (phase.label.includes("7")) return "7";
+    if (phase.label.includes("30")) return "30";
+    if (phase.label.includes("90")) return "90";
+    return (["7", "30", "90"] as const)[idx] ?? "7";
+  };
+
+  const renderSection = () => {
+    switch (section) {
+      case "overview":
+        return (
+          <div className="hr-tm-section-stack">
+            {formulaHtml ? (
+              <div>
+                <h3 className="hr-tm-section-h">Условия раскрытия</h3>
+                <div
+                  className="hr-tm-overview-formula"
+                  dangerouslySetInnerHTML={{ __html: formulaHtml }}
+                />
+              </div>
+            ) : null}
+            {keyTalent ? (
+              <div>
+                <h3 className="hr-tm-section-h">Ключевой талант</h3>
+                <p className="hr-muted">{keyTalent}</p>
+              </div>
+            ) : null}
+            {mainRisk ? (
+              <div>
+                <h3 className="hr-tm-section-h">Главный риск</h3>
+                <p className="hr-muted">{mainRisk}</p>
+              </div>
+            ) : null}
+          </div>
+        );
+      case "profile":
+        return (
+          <div className="hr-tm-section-stack">
+            {bestWorkFormat ? (
+              <p>
+                <strong>Рабочий формат:</strong> {bestWorkFormat}
+              </p>
+            ) : null}
+            {formulaHtml ? (
+              <div
+                className="hr-tm-overview-formula"
+                dangerouslySetInnerHTML={{ __html: formulaHtml }}
+              />
+            ) : null}
+            <h3 className="hr-tm-section-h">Таланты</h3>
+            {lists.talents.length === 0 ? (
+              <p className="hr-muted">Нет данных</p>
+            ) : (
+              lists.talents.map((t, i) => (
+                <CompactRow
+                  key={`${t.title}-${i}`}
+                  title={t.title}
+                  subtitle={t.body}
+                  onClick={() => setDetail({ kind: "talent", index: i })}
+                />
+              ))
+            )}
+            <h3 className="hr-tm-section-h">Сильные стороны</h3>
+            {lists.strengths.map((s, i) => (
+              <CompactRow
+                key={`${s.title}-${i}`}
+                title={s.title}
+                subtitle={s.body}
+                onClick={() => setDetail({ kind: "strength", index: i })}
+              />
+            ))}
+            <h3 className="hr-tm-section-h">Подходящие направления</h3>
+            {lists.directions.map((d, i) => (
+              <CompactRow
+                key={`${d.title}-${i}`}
+                title={d.title}
+                subtitle={d.body}
+                onClick={() => setDetail({ kind: "direction", index: i })}
+              />
+            ))}
+          </div>
+        );
+      case "risks":
+        return (
+          <div className="hr-tm-section-stack">
+            {mainRisk ? <p className="hr-tm-section-lead">{mainRisk}</p> : null}
+            {lists.risks.map((r, i) => (
+              <CompactRow
+                key={`${r.title}-${i}`}
+                title={r.title}
+                subtitle={r.body}
+                onClick={() => setDetail({ kind: "risk", index: i })}
+              />
+            ))}
+            <h3 className="hr-tm-section-h">Среда и управление</h3>
+            {[...lists.workEnv, ...lists.mgmt].map((c, i) => (
+              <CompactRow key={`${c.title}-${i}`} title={c.title} subtitle={c.body} />
+            ))}
+            <h3 className="hr-tm-section-h">Спорные направления</h3>
+            {lists.questionable.map((q, i) => (
+              <CompactRow key={`${q.title}-${i}`} title={q.title} subtitle={q.body} />
+            ))}
+          </div>
+        );
+      case "checks":
+        return (
+          <div className="hr-tm-section-stack">
+            <p className="hr-muted">
+              Краткий план: интервью для проверки гипотез и короткое тестовое по роли.
+            </p>
+            <CompactRow
+              title="Интервью"
+              subtitle={`${lists.interviews.length} вопросов`}
+              onClick={() => setSection("interview")}
+            />
+            <CompactRow
+              title="Тестовое"
+              subtitle={`${lists.tests.length} заданий`}
+              onClick={() => setSection("test")}
+            />
+          </div>
+        );
+      case "interview":
+        return lists.interviews.length === 0 ? (
+          <p className="hr-muted">
+            Вопросы появятся после генерации карты с достаточным контекстом.
+          </p>
+        ) : (
+          lists.interviews.map((q, i) => (
+            <CompactRow
+              key={`${q.title}-${i}`}
+              title={q.title}
+              subtitle={q.checks || q.body}
+              onClick={() => setDetail({ kind: "interview", index: i })}
+            />
+          ))
+        );
+      case "test":
+        return lists.tests.length === 0 ? (
+          <p className="hr-muted">Практические задания появятся в полном разборе.</p>
+        ) : (
+          lists.tests.map((t, i) => (
+            <CompactRow
+              key={`${t.title}-${i}`}
+              title={t.title}
+              subtitle={t.checks || t.body}
+              onClick={() => setDetail({ kind: "test", index: i })}
+            />
+          ))
+        );
+      case "onboarding":
+        return lists.onboardingPhases.length === 0 ? (
+          <p className="hr-muted">План адаптации появится при достаточном контексте роли.</p>
+        ) : (
+          lists.onboardingPhases.map((phase, i) => (
+            <CompactRow
+              key={`${phase.label}-${i}`}
+              title={phase.label}
+              subtitle={phase.summary ?? phase.focus ?? "Открыть этап"}
+              onClick={() =>
+                setDetail({ kind: "onboarding", phase: onboardingPhaseKey(phase, i) })
+              }
+            />
+          ))
+        );
+      case "data":
+        return <DataQualitySection ctx={ctx} />;
+      case "roles":
+        return (
+          <div className="hr-tm-section-stack">
+            {vacancies.length === 0 ? (
+              <p className="hr-muted">Вакансия не привязана — привяжите кандидата для оценки под роль.</p>
+            ) : (
+              vacancies.map((v) => (
+                <div key={v.id} className="hr-tm-row">
+                  <span className="hr-tm-row-title">{v.title}</span>
+                  <span className="hr-tm-row-sub">{v.status}</span>
+                  <Link
+                    to={`/hr/company/${companyId}/vacancies/${v.id}`}
+                    className="hr-btn hr-btn--ghost"
+                    style={{ marginLeft: "auto", flexShrink: 0 }}
+                  >
+                    Открыть
+                  </Link>
+                </div>
+              ))
+            )}
+            <h3 className="hr-tm-section-h">Подходящие роли</h3>
+            {lists.roles.map((r, i) => (
+              <CompactRow
+                key={`${r.role}-${i}`}
+                title={r.role}
+                subtitle={`${r.fit} · ${normalizeHrCopy(r.note)}`}
+                onClick={() => setDetail({ kind: "role", index: i })}
+              />
+            ))}
+            {lists.roles.length > 3 ? (
+              <RolesTable roles={lists.roles} />
+            ) : null}
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
-    <div className="hr-tm-page">
+    <div className="hr-tm-page hr-tm-page--workspace">
       <div className="hr-tm-header">
         <div className="hr-tm-header-top">
           <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
             ← К кандидату
           </Link>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
-            {mode === "deterministic" && onGenerateAi && (
-              <button type="button" className="hr-btn" disabled={generating} onClick={onGenerateAi}>
-                {generating ? "Генерируем AI-карту…" : "Сгенерировать AI-карту"}
-              </button>
-            )}
-            {mode === "ai" && onGenerateAi && (
-              <button
-                type="button"
-                className="hr-btn hr-btn--ghost"
-                disabled={generating}
-                onClick={onGenerateAi}
-              >
-                {generating ? "Обновляем…" : "Перегенерировать"}
-              </button>
-            )}
-          </div>
+          <button
+            type="button"
+            className="hr-btn hr-btn--ghost"
+            disabled={generating}
+            onClick={onRegenerate}
+          >
+            {generating ? "Генерируем карту…" : "Перегенерировать карту"}
+          </button>
         </div>
 
         {generating && (
-          <div className="hr-card" style={{ marginBottom: 12, borderColor: "rgba(120,180,255,0.35)" }}>
-            <p style={{ margin: 0, color: "var(--hr-muted)" }}>
-              Генерируем AI-карту… Обычно это занимает 15–40 секунд. Базовая карта остаётся доступной.
-            </p>
-          </div>
+          <p className="hr-tm-banner hr-tm-banner--info">Генерируем карту кандидата…</p>
+        )}
+        {genError && (
+          <p className="hr-tm-banner hr-tm-banner--error">
+            {genError}
+            <button type="button" className="hr-btn hr-btn--ghost" onClick={onRegenerate}>
+              Повторить генерацию
+            </button>
+          </p>
         )}
 
-        {aiError && (
-          <div className="hr-card" style={{ marginBottom: 12, borderColor: "rgba(255,120,120,0.35)" }}>
-            <p style={{ margin: 0, color: "var(--hr-muted)" }}>
-              {aiError}
-              {mode === "deterministic"
-                ? " Показана базовая карта."
-                : " Предыдущая версия AI-карты сохранена."}
-            </p>
-          </div>
-        )}
-
-        <div className="hr-tm-title-row">
-          <div>
-            <div className="hr-tm-title-line">
-              <h2 className="hr-tm-title">Карта талантов</h2>
-              <span className={`hr-status ${mode === "ai" ? "hr-status--ok" : "hr-status--warn"}`}>
-                {mode === "ai" ? "AI-карта" : "Базовая карта"}
-              </span>
-              {mode === "ai" && fitScore != null && (
-                <span className="hr-status hr-status--ok">Соответствие ~{fitScore}%</span>
-              )}
-            </div>
-            <div className="hr-tm-subtitle">
-              <b>{candidate.name}</b>
-            </div>
-            <div className="hr-tm-badges">
-              {completenessPct != null && (
-                <span className="hr-status">Данные: {completenessPct}%</span>
-              )}
-              {confidenceLabel && (
-                <span className="hr-status">Точность: {normalizeHrCopy(confidenceLabel)}</span>
-              )}
-              <span
-                className={`hr-status ${aiError ? "hr-status--warn" : generating ? "" : mode === "ai" ? "hr-status--ok" : "hr-status--warn"}`}
-              >
-                {reportBadge}
-              </span>
-              <span className="hr-status">
-                Источник: {mode === "ai" ? "AI" : "базовый разбор"}
-              </span>
-              {updatedLabel && <span className="hr-status">Обновлено: {updatedLabel}</span>}
-              <span className="hr-status">
-                Вакансия: {vacancyLabel ?? "не привязана"}
-              </span>
-              {reportStatus === "generating" && (
-                <span className="hr-status hr-status--warn">Статус отчёта: в работе</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <p className="hr-tm-lede">
-          Рабочее пространство HR: главные выводы, риски, проверка на интервью и адаптация. Гипотезы
-          уточняются по опыту, кейсам и реальной вакансии.
+        <h2 className="hr-tm-title">Карта талантов</h2>
+        <p className="hr-tm-subtitle">
+          <b>{candidate.name}</b>
+        </p>
+        <p className="hr-tm-meta-line">
+          <span className="hr-status hr-status--ok">Разбор готов</span>
+          {updatedLabel ? <span>· обновлено {updatedLabel}</span> : null}
+          <span>· вакансия {vacancyLabel}</span>
+          {aiReport.fit_score != null ? (
+            <span>· соответствие ~{aiReport.fit_score}%</span>
+          ) : null}
         </p>
 
-        <div className="hr-tm-summary-grid hr-tm-summary-grid--2x2">
-          {EXECUTIVE_CARDS.map((card) => {
-            const preview = card.preview(previewCtx) ?? "—";
-            const isPrimary = card.key === "mainConclusion";
-            return (
-              <button
-                key={card.key}
-                type="button"
-                className={`hr-tm-identity-card hr-tm-identity-card--clickable${isPrimary ? " hr-tm-summary-card--primary" : ""}`}
-                onClick={() => openPanel(card.key)}
-              >
-                <b>{card.label}</b>
-                <span>{preview}</span>
-                <span className="hr-tm-card-more">
-                  Подробнее <span className="hr-tm-card-chevron" aria-hidden>→</span>
-                </span>
-              </button>
-            );
-          })}
+        <div className="hr-tm-conclusion">
+          <h3 className="hr-tm-conclusion-title">Главный HR-вывод</h3>
+          <p className="hr-tm-conclusion-text">{mainConclusion}</p>
+          <p className="hr-tm-conclusion-next">
+            <span className="hr-tm-conclusion-next-label">Следующий шаг:</span> {nextStep}
+          </p>
+          {completenessPct != null && completenessPct < 60 ? (
+            <p className="hr-tm-conclusion-warn">
+              Данных пока мало — выводы предварительные. Добавьте контекст вакансии и перегенерируйте
+              карту.
+            </p>
+          ) : null}
         </div>
 
-        <section className="hr-tm-actions-section" aria-label="Разборы и действия">
-          <h3 className="hr-tm-actions-heading">Разборы и действия</h3>
-          <p className="hr-tm-actions-sub">
-            Откройте нужный блок, чтобы быстро перейти от общей карты к HR-действию.
-          </p>
-          <div className="hr-tm-action-grid">
-            {ACTION_CARDS.map((card) => (
+        <div className="hr-tm-stat-row">
+          <StatPill
+            label="Точность данных"
+            value={confidenceLabel}
+            onClick={() => setSection("data")}
+          />
+          <StatPill
+            label="Лучший формат"
+            value={bestWorkFormat ?? "—"}
+            onClick={() => setSection("profile")}
+          />
+          <StatPill
+            label="Главный риск"
+            value={mainRisk ?? "—"}
+            onClick={() => setSection("risks")}
+          />
+          <StatPill
+            label="Что проверить"
+            value={checkHint}
+            onClick={() => setSection("checks")}
+          />
+        </div>
+      </div>
+
+      <div className="hr-tm-workspace">
+        <nav className="hr-tm-nav" aria-label="Разделы карты">
+          <div className="hr-tm-nav-chips" role="tablist">
+            {NAV_SECTIONS.map((s) => (
               <button
-                key={card.key}
+                key={s.id}
                 type="button"
-                className="hr-tm-action-card"
-                onClick={() => openPanel(card.key)}
+                role="tab"
+                aria-selected={section === s.id}
+                className={section === s.id ? "hr-tm-nav-item hr-tm-nav-item--active" : "hr-tm-nav-item"}
+                onClick={() => setSection(s.id)}
               >
-                <span className="hr-tm-action-card-title">{card.title}</span>
-                <span className="hr-tm-action-card-desc">{card.desc}</span>
-                <span className="hr-tm-card-more">
-                  Открыть <span className="hr-tm-card-chevron" aria-hidden>→</span>
-                </span>
+                {s.label}
               </button>
             ))}
           </div>
-        </section>
+          <ul className="hr-tm-nav-list">
+            {NAV_SECTIONS.map((s) => (
+              <li key={s.id}>
+                <button
+                  type="button"
+                  className={
+                    section === s.id ? "hr-tm-nav-item hr-tm-nav-item--active" : "hr-tm-nav-item"
+                  }
+                  onClick={() => setSection(s.id)}
+                >
+                  <span>{s.label}</span>
+                  {s.hint ? <small>{s.hint}</small> : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <div className="hr-tm-section-panel" role="tabpanel">
+          <h3 className="hr-tm-section-panel-title">
+            {NAV_SECTIONS.find((s) => s.id === section)?.label}
+          </h3>
+          {renderSection()}
+        </div>
       </div>
 
       <HrSidePanel
-        open={panelKey !== null}
-        onClose={closePanel}
-        title={panelMeta?.title ?? ""}
-        eyebrow={panelMeta?.eyebrow}
-        description={panelMeta?.description}
+        open={detail !== null}
+        onClose={() => setDetail(null)}
+        title={detail ? getDetailPanelTitle(detail, detailLists) : ""}
+        description="Детали для проверки на интервью"
       >
-        {panelKey ? renderPanelContent(panelKey, panelCtx) : null}
+        {detail ? (
+          <ItemDetailPanel
+            detail={detail}
+            ctx={ctx}
+            risks={lists.risks}
+            interviews={lists.interviews}
+            tests={lists.tests}
+            talents={lists.talents}
+            strengths={lists.strengths}
+            directions={lists.directions}
+            roles={lists.roles}
+          />
+        ) : null}
       </HrSidePanel>
+    </div>
+  );
+}
 
-      <div className="hr-tm-tab-dock">
-        <div className="hr-tm-tabs" role="tablist" aria-label="Вкладки карты талантов">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className={tab === t.id ? "hr-tm-tab hr-tm-tab--active" : "hr-tm-tab"}
-              onClick={() => setTab(t.id)}
-              role="tab"
-              aria-selected={tab === t.id}
-            >
-              {t.label}
-            </button>
-          ))}
+function EmptyReportState({
+  candidate,
+  companyId,
+  candidateId,
+  onGenerate,
+  generating,
+  error,
+}: {
+  candidate: HrCandidate;
+  companyId: string;
+  candidateId: string;
+  onGenerate: () => void;
+  generating: boolean;
+  error: string | null;
+}) {
+  return (
+    <div className="hr-tm-page">
+      <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
+        ← К кандидату
+      </Link>
+      <h2 className="hr-tm-title">Карта талантов</h2>
+      <p className="hr-tm-subtitle">
+        <b>{candidate.name}</b>
+      </p>
+
+      {generating ? (
+        <div className="hr-card hr-tm-empty-card">
+          <p className="hr-tm-empty-title">Генерируем карту кандидата…</p>
+          <p className="hr-muted">Обычно это занимает 15–40 секунд.</p>
         </div>
-
-        <div className="hr-tm-panel">
-          {tab === "overview" && (
-            <section>
-              <div className="hr-grid-2">
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Показатели</h3>
-                  <MetricsList metrics={metrics} />
-                  <button
-                    type="button"
-                    className="hr-btn hr-btn--ghost"
-                    style={{ marginTop: 10 }}
-                    onClick={() => openPanel("dataQuality")}
-                  >
-                    Точность данных →
-                  </button>
-                </div>
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Условия раскрытия</h3>
-                  {formulaHtml ? (
-                    <div
-                      className="hr-tm-overview-formula"
-                      dangerouslySetInnerHTML={{ __html: formulaHtml }}
-                    />
-                  ) : (
-                    <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                      Нет данных для формулировки условий раскрытия.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {finalRecommendation && (
-                <div className="hr-card" style={{ marginTop: 12 }}>
-                  <h3 style={{ marginTop: 0 }}>Рекомендация HR</h3>
-                  <p style={{ margin: 0, lineHeight: 1.6 }}>{finalRecommendation}</p>
-                  <button
-                    type="button"
-                    className="hr-btn hr-btn--ghost"
-                    style={{ marginTop: 10 }}
-                    onClick={() => openPanel("nextStep")}
-                  >
-                    Следующий шаг →
-                  </button>
-                </div>
-              )}
-            </section>
-          )}
-
-          {tab === "profile" && (
-            <section>
-              <div className="hr-grid-2">
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Рабочий формат</h3>
-                  <p style={{ margin: 0, lineHeight: 1.6 }}>{bestWorkFormat ?? "—"}</p>
-                </div>
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Где раскрывается</h3>
-                  {formulaHtml ? (
-                    <div
-                      className="hr-tm-overview-formula"
-                      dangerouslySetInnerHTML={{ __html: formulaHtml }}
-                    />
-                  ) : (
-                    <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                      Лучше всего проявляет себя в задачах с понятным результатом, прозрачными
-                      ожиданиями и регулярной обратной связью.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="hr-tm-block">
-                <h3 className="hr-tm-block-title">Ключевые таланты</h3>
-                <ItemCards items={talents.slice(0, 6)} />
-              </div>
-
-              <div className="hr-tm-block">
-                <h3 className="hr-tm-block-title">Подходящие направления</h3>
-                <ItemCards items={directions.slice(0, 4)} />
-              </div>
-            </section>
-          )}
-
-          {tab === "risks" && (
-            <section>
-              <div className="hr-grid-2">
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Что может мешать</h3>
-                  <p style={{ margin: 0, lineHeight: 1.6 }}>{mainRisk ?? "—"}</p>
-                </div>
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Риски в работе</h3>
-                  <ItemCards items={risks.slice(0, 4)} />
-                </div>
-              </div>
-
-              {questionable.length > 0 && (
-                <div className="hr-tm-block">
-                  <h3 className="hr-tm-block-title">Спорные зоны</h3>
-                  <ItemCards items={questionable} />
-                </div>
-              )}
-
-              <div className="hr-tm-block">
-                <h3 className="hr-tm-block-title">Среда и управление</h3>
-                <ItemCards items={conditions.slice(0, 6)} />
-              </div>
-            </section>
-          )}
-
-          {tab === "checks" && (
-            <section>
-              <p className="hr-muted" style={{ marginTop: 0 }}>
-                Краткий план проверки. Подробные карточки — во вкладках «Интервью» и «Тестовое» или в
-                блоке «Проверка» в разделе действий.
-              </p>
-              <div className="hr-grid-2">
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Интервью</h3>
-                  {interviewQuestions.length > 0 ? (
-                    <ItemCards
-                      items={interviewQuestions.slice(0, 3).map((q) => ({
-                        title: q.title,
-                        body: q.checks || q.body,
-                        fit: q.fit,
-                      }))}
-                    />
-                  ) : (
-                    <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                      Уточнить примеры решений, реакции на срочность и опыт работы в команде.
-                    </p>
-                  )}
-                </div>
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Тестовое</h3>
-                  {testTasks.length > 0 ? (
-                    <ItemCards
-                      items={testTasks.slice(0, 2).map((t) => ({
-                        title: t.title,
-                        body: t.body,
-                        fit: t.fit,
-                      }))}
-                    />
-                  ) : (
-                    <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                      Кейс на 2–3 часа с реальной задачей роли + разбор решения.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {mode === "deterministic" && (
-                <div className="hr-tm-block">
-                  <h3 className="hr-tm-block-title">План проверки</h3>
-                  <div className="hr-grid-2">
-                    <div className="hr-card hr-tm-step">
-                      <p className="hr-tm-step-kicker">Шаг 1</p>
-                      <h4 style={{ margin: "0 0 6px" }}>Интервью</h4>
-                      <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                        Уточнить примеры решений, реакции на срочность и опыт работы в команде.
-                      </p>
-                    </div>
-                    <div className="hr-card hr-tm-step">
-                      <p className="hr-tm-step-kicker">Шаг 2</p>
-                      <h4 style={{ margin: "0 0 6px" }}>Рабочий кейс</h4>
-                      <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                        Кейс на 2–3 часа с реальной задачей роли + короткий разбор решения.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </section>
-          )}
-
-          {tab === "interview" && (
-            <section>
-              <InterviewScorecards items={interviewQuestions} />
-            </section>
-          )}
-
-          {tab === "test" && (
-            <section>
-              <TestTaskCards items={testTasks} />
-            </section>
-          )}
-
-          {tab === "onboarding" && (
-            <section>
-              {onboarding || mode === "ai" ? (
-                <OnboardingTimeline aiContent={aiContent} rawContent={rawAiContent} />
-              ) : (
-                <p className="hr-muted">
-                  План адаптации появится в AI-карте. Можно сгенерировать отчёт или открыть блок
-                  «Адаптация» в действиях.
-                </p>
-              )}
-            </section>
-          )}
-
-          {tab === "data" && (
-            <section>
-              {panelKey !== "dataQuality" && (
-                <button
-                  type="button"
-                  className="hr-btn"
-                  onClick={() => openPanel("dataQuality")}
-                >
-                  Открыть панель точности данных
-                </button>
-              )}
-              <div style={{ marginTop: 12 }}>
-                {renderPanelContent("dataQuality", panelCtx)}
-              </div>
-            </section>
-          )}
-
-          {tab === "roles" && (
-            <section>
-              <div className="hr-grid-2">
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Связанные вакансии</h3>
-                  {vacancies.length === 0 ? (
-                    <p style={{ margin: 0, color: "var(--hr-muted)" }}>
-                      Кандидат пока не привязан к вакансии.
-                    </p>
-                  ) : (
-                    <div style={{ display: "grid", gap: 10 }}>
-                      {vacancies.map((v) => (
-                        <div
-                          key={v.id}
-                          className="hr-card"
-                          style={{ background: "rgba(255,255,255,0.02)" }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: 12,
-                              justifyContent: "space-between",
-                            }}
-                          >
-                            <div>
-                              <h4 style={{ margin: "0 0 4px" }}>{v.title}</h4>
-                              <p style={{ margin: 0, color: "var(--hr-muted)" }}>
-                                Статус: <strong>{v.status}</strong>
-                              </p>
-                            </div>
-                            <div className="hr-fork-actions">
-                              <Link
-                                to={`/hr/company/${companyId}/vacancies/${v.id}`}
-                                className="hr-btn"
-                              >
-                                Открыть вакансию
-                              </Link>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Следующий этап</h3>
-                  <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                    Точная оценка под конкретную вакансию — отдельный разбор. Сейчас карта показывает
-                    рабочий профиль и гипотезы для проверки.
-                  </p>
-                  <button
-                    type="button"
-                    className="hr-btn hr-btn--ghost"
-                    style={{ marginTop: 10 }}
-                    onClick={() => openPanel("nextStep")}
-                  >
-                    Следующий шаг HR →
-                  </button>
-                </div>
-              </div>
-
-              <div className="hr-tm-block">
-                <h3 className="hr-tm-block-title">Предварительно подходящие роли</h3>
-                <RolesTable roles={roles} />
-              </div>
-            </section>
-          )}
+      ) : (
+        <div className="hr-card hr-tm-empty-card">
+          <p className="hr-tm-empty-title">Разбор ещё не создан</p>
+          <p className="hr-muted" style={{ lineHeight: 1.55, maxWidth: 520 }}>
+            Сначала сгенерируйте карту кандидата, чтобы увидеть рабочий профиль, риски, вопросы
+            интервью, тестовое и план адаптации.
+          </p>
+          {error ? (
+            <p className="hr-tm-banner hr-tm-banner--error" style={{ marginTop: 12 }}>
+              Не удалось сгенерировать карту. {error}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            className="hr-btn"
+            style={{ marginTop: 16 }}
+            disabled={generating}
+            onClick={onGenerate}
+          >
+            {error ? "Повторить генерацию" : "Сгенерировать карту"}
+          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -761,24 +648,21 @@ function TalentMapView({
 export default function CandidateTalentMapPage() {
   const { companyId, candidateId } = useParams<{ companyId: string; candidateId: string }>();
   const [candidate, setCandidate] = useState<HrCandidate | null>(null);
-  const [map, setMap] = useState<HrCandidateTalentMap | null>(null);
   const [aiReport, setAiReport] = useState<HrReport | null>(null);
   const [vacancies, setVacancies] = useState<HrVacancy[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
 
   const load = async () => {
     if (!companyId || !candidateId) return;
     setLoading(true);
-    const [c, m, links, report] = await Promise.all([
+    const [c, links, report] = await Promise.all([
       fetchCandidate(companyId, candidateId),
-      fetchTalentMap(companyId, candidateId),
       fetchCandidateVacancies(companyId, candidateId),
       fetchLatestCandidateReport(companyId, candidateId, "hr_person_talent_map"),
     ]);
     setCandidate(c);
-    setMap(m as HrCandidateTalentMap | null);
     setVacancies((links ?? []).map((l: { vacancy: HrVacancy }) => l.vacancy).filter(Boolean));
     setAiReport(report);
     setLoading(false);
@@ -788,10 +672,10 @@ export default function CandidateTalentMapPage() {
     load();
   }, [companyId, candidateId]);
 
-  const onGenerateAi = async (forceRegenerate = false) => {
+  const onGenerate = async (forceRegenerate = false) => {
     if (!companyId || !candidateId) return;
     setGenerating(true);
-    setAiError(null);
+    setGenError(null);
     try {
       const primaryVacancyId = vacancies.length === 1 ? vacancies[0].id : null;
       const report = await generateCandidateReport(companyId, candidateId, {
@@ -800,79 +684,51 @@ export default function CandidateTalentMapPage() {
         forceRegenerate,
       });
       setAiReport(report);
+      if (report.report_status !== "ready") {
+        await load();
+      }
     } catch (err) {
-      setAiError(err instanceof Error ? err.message : "Не удалось сгенерировать AI-карту");
+      setGenError(err instanceof Error ? err.message : "Не удалось сгенерировать карту");
     } finally {
       setGenerating(false);
     }
   };
 
-  if (loading || !candidate) {
+  if (loading || !candidate || !companyId || !candidateId) {
     return <p>Загрузка…</p>;
   }
 
-  const hasDeterministic = map && map.report_status === "ready";
-  const hasAi =
+  const hasReadyReport =
     aiReport &&
     aiReport.report_status === "ready" &&
     aiReport.content_json &&
     typeof aiReport.content_json === "object";
 
-  if (!hasAi && !hasDeterministic && !generating) {
+  if (hasReadyReport) {
     return (
-      <div className="hr-card">
-        <h2 style={{ marginTop: 0 }}>Карта рассчитана, отчёт формируется</h2>
-        <p style={{ color: "var(--hr-muted)" }}>
-          Попробуйте обновить страницу через несколько секунд или пересчитайте карту кандидата.
-        </p>
-        <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-btn">
-          ← К кандидату
-        </Link>
-      </div>
-    );
-  }
-
-  const reportMeta = {
-    reportUpdatedAt: aiReport?.generated_at ?? aiReport?.updated_at ?? map?.updated_at,
-    reportStatus: aiReport?.report_status ?? map?.report_status,
-  };
-
-  if (hasAi && companyId && candidateId) {
-    return (
-      <TalentMapView
+      <TalentMapWorkspace
         candidate={candidate}
         companyId={companyId}
         candidateId={candidateId}
         vacancies={vacancies}
-        mode="ai"
         aiContent={normalizeAiReportContent(aiReport.content_json)}
         rawAiContent={aiReport.content_json}
-        fitScore={aiReport.fit_score}
-        onGenerateAi={() => onGenerateAi(true)}
+        aiReport={aiReport}
+        onRegenerate={() => onGenerate(true)}
         generating={generating}
-        aiError={aiError}
-        {...reportMeta}
+        genError={genError}
       />
     );
   }
 
-  if ((hasDeterministic || generating) && companyId && candidateId && map) {
-    return (
-      <TalentMapView
-        candidate={candidate}
-        companyId={companyId}
-        candidateId={candidateId}
-        vacancies={vacancies}
-        mode="deterministic"
-        map={map}
-        onGenerateAi={() => onGenerateAi(false)}
-        generating={generating}
-        aiError={aiError}
-        reportUpdatedAt={map.updated_at}
-        reportStatus={map.report_status}
-      />
-    );
-  }
-
-  return null;
+  return (
+    <EmptyReportState
+      candidate={candidate}
+      companyId={companyId}
+      candidateId={candidateId}
+      onGenerate={() => onGenerate(false)}
+      generating={generating || aiReport?.report_status === "generating"}
+      error={genError ?? (aiReport?.report_status === "error" ? aiReport.generation_error : null)}
+    />
+  );
 }

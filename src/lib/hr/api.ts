@@ -448,6 +448,24 @@ export async function fetchCandidateReports(
   return (data ?? []) as HrReport[];
 }
 
+export async function fetchReadyTalentMapReportsForCompany(companyId: string) {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("hr_reports")
+    .select(
+      "id, candidate_id, summary, fit_score, generated_at, updated_at, content_json, report_status",
+    )
+    .eq("company_id", companyId)
+    .eq("report_type", "hr_person_talent_map")
+    .eq("report_status", "ready")
+    .order("generated_at", { ascending: false, nullsFirst: false });
+  if (error) {
+    console.error("[hr] company reports:", error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
 export async function fetchLatestCandidateReport(
   companyId: string,
   candidateId: string,

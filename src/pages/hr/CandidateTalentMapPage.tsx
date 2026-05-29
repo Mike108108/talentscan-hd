@@ -1,39 +1,143 @@
-import { useEffect, useState } from "react";
+import { Component, useEffect, useMemo, useState } from "react";
+import type { ErrorInfo, ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
+import { HrSidePanel } from "../../components/hr/HrSidePanel";
 import {
+  fetchBestReadyCandidateReport,
   fetchCandidate,
   fetchCandidateVacancies,
-  fetchLatestCandidateReport,
-  fetchTalentMap,
+  fetchLatestHrReport,
   generateCandidateReport,
+  reportMatchesCandidate,
 } from "../../lib/hr/api";
-import type {
-  HrCandidate,
-  HrCandidateTalentMap,
-  HrPersonTalentMapV1,
-  HrReport,
-  HrVacancy,
-  TalentMapItem,
-  TalentMapMetric,
-  TalentMapRole,
-} from "../../lib/hr/types";
+import {
+  canParseReportContent,
+  getReportContentRoot,
+  isReadyTalentMapReport,
+  logNormalizedWorkspaceContent,
+  logReportContentShape,
+  normalizeAiReportContent,
+} from "../../lib/hr/normalizeAiReport";
+import {
+  ensureArray,
+  extractCompletenessPercent,
+  formatReportDate,
+  getText,
+} from "../../lib/hr/talentMapUiHelpers";
+import type { HrCandidate, HrPersonTalentMapV1, HrReport, HrVacancy, TalentMapRole } from "../../lib/hr/types";
 import { formulaToSafeHtml } from "../../lib/safeHtml";
-import { normalizeAiReportContent } from "../../lib/hr/normalizeAiReport";
+import {
+  buildReportLists,
+  DataQualitySection,
+  getDetailPanelTitle,
+  ItemDetailPanel,
+  type DetailPanelState,
+  type ReportContentCtx,
+} from "./talentMapPanelContent";
+import type { OnboardingPhase } from "../../lib/hr/talentMapUiHelpers";
 import "../../hr.css";
 
-type TabId = "overview" | "profile" | "risks" | "checks" | "roles";
+type SectionId =
+  | "overview"
+  | "profile"
+  | "risks"
+  | "checks"
+  | "interview"
+  | "test"
+  | "onboarding"
+  | "data"
+  | "roles";
 
-const TABS: Array<{ id: TabId; label: string }> = [
+const NAV_SECTIONS: Array<{ id: SectionId; label: string; hint?: string }> = [
   { id: "overview", label: "Обзор" },
-  { id: "profile", label: "Рабочий профиль" },
+  { id: "profile", label: "Рабочий профиль", hint: "Формула и таланты" },
   { id: "risks", label: "Риски и условия" },
   { id: "checks", label: "Проверка" },
+  { id: "interview", label: "Интервью" },
+  { id: "test", label: "Тестовое" },
+  { id: "onboarding", label: "Адаптация" },
+  { id: "data", label: "Данные" },
   { id: "roles", label: "Роли и вакансии" },
 ];
 
-function normalizeHrCopy(text: string): string {
-  const t = text.trim();
-  if (!t) return t;
+type ReportSnapshot = {
+  id?: string;
+  company_id?: string;
+  candidate_id?: string;
+  report_type?: string;
+  report_status?: string;
+  has_content_json?: boolean;
+  generation_error?: string | null;
+};
+
+function snapshotReport(report: HrReport | null): ReportSnapshot | null {
+  if (!report) return null;
+  return {
+    id: report.id,
+    company_id: report.company_id,
+    candidate_id: report.candidate_id ?? undefined,
+    report_type: report.report_type,
+    report_status: report.report_status,
+    has_content_json: report.content_json != null,
+    generation_error: report.generation_error || undefined,
+  };
+}
+
+function logReportStep(step: string, report: HrReport | null) {
+  console.info(`[CandidateTalentMapPage] ${step}`, snapshotReport(report));
+}
+
+function pickReadyReportForContext(
+  companyId: string,
+  candidateId: string,
+  ...candidates: Array<HrReport | null | undefined>
+): { report: HrReport | null; mismatch: HrReport | null } {
+  let mismatch: HrReport | null = null;
+  for (const r of candidates) {
+    if (!r) continue;
+    if (!reportMatchesCandidate(r, companyId, candidateId)) {
+      if (!mismatch && isReadyTalentMapReport(r)) mismatch = r;
+      continue;
+    }
+    if (isReadyTalentMapReport(r)) return { report: r, mismatch: null };
+  }
+  return { report: null, mismatch };
+}
+
+function buildMismatchMessage(
+  companyId: string,
+  candidateId: string,
+  candidateName: string,
+  report: HrReport,
+): string {
+  return `Отчёт создан, но не совпал с текущим кандидатом. Текущий: ${candidateName} (${candidateId}). В отчёте: кандидат ${report.candidate_id}, компания ${report.company_id}. Ожидалась компания ${companyId}.`;
+}
+
+function buildGenerationFailureMessage(
+  generated: HrReport | null,
+  latestAny: HrReport | null,
+): string {
+  const r = latestAny ?? generated;
+  if (!r) {
+    return "Генерация завершилась, но готовый отчёт не найден. Попробуйте обновить страницу или повторить генерацию.";
+  }
+  if (r.report_status === "ready" && r.content_json == null) {
+    return "Разбор создан, но данные отчёта не удалось прочитать. Попробуйте перегенерировать карту.";
+  }
+  if (r.report_status === "error") {
+    return r.generation_error
+      ? `Не удалось сгенерировать карту. ${r.generation_error}`
+      : "Не удалось сгенерировать карту.";
+  }
+  if (r.report_status === "generating") {
+    return "Отчёт создан, но пока не готов к отображению. Статус: generating";
+  }
+  return `Отчёт создан, но пока не готов к отображению. Статус: ${r.report_status}`;
+}
+
+function normalizeHrCopy(text: unknown): string {
+  const t = getText(text);
+  if (!t) return "";
   return t
     .replaceAll(
       /Wait for the Invitation/gi,
@@ -42,58 +146,81 @@ function normalizeHrCopy(text: string): string {
     .replaceAll(/Invitation/gi, "ясный запрос");
 }
 
-function normalizeHrMaybe(text: string | null | undefined): string | null {
-  if (!text) return null;
-  return normalizeHrCopy(text);
+function normalizeHrMaybe(text: unknown): string | null {
+  const t = normalizeHrCopy(text);
+  return t || null;
 }
 
-function ItemCards({ items }: { items: TalentMapItem[] | null | undefined }) {
-  if (!items?.length) return <p className="hr-muted">Нет данных</p>;
+function CompactRow({
+  title,
+  subtitle,
+  onClick,
+}: {
+  title: unknown;
+  subtitle?: unknown;
+  onClick?: () => void;
+}) {
+  const safeTitle = getText(title, "—");
+  const safeSubtitle = subtitle != null ? getText(subtitle) || null : null;
+  const body = (
+    <>
+      <span className="hr-tm-row-body">
+        <span className="hr-tm-row-title">{safeTitle}</span>
+        {safeSubtitle ? <span className="hr-tm-row-sub">{safeSubtitle}</span> : null}
+      </span>
+      {onClick ? <span className="hr-tm-row-chevron" aria-hidden>→</span> : null}
+    </>
+  );
+  if (onClick) {
+    return (
+      <button type="button" className="hr-tm-row hr-tm-row--clickable" onClick={onClick}>
+        {body}
+      </button>
+    );
+  }
+  return <div className="hr-tm-row">{body}</div>;
+}
+
+function StatPill({
+  label,
+  value,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  onClick?: () => void;
+}) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className="hr-grid-2">
-      {items.map((item, idx) => (
-        <div key={`${item.title}-${idx}`} className="hr-card">
-          <h3 style={{ marginTop: 0 }}>{item.title}</h3>
-          <p style={{ margin: 0, color: "var(--hr-soft)", lineHeight: 1.55 }}>
-            {normalizeHrCopy(item.body)}
-          </p>
-          {item.fit && normalizeHrMaybe(item.fit) && (
-            <span className="hr-status hr-status--ok" style={{ marginTop: 10 }}>
-              {normalizeHrCopy(item.fit)}
-            </span>
-          )}
-        </div>
-      ))}
-    </div>
+    <Tag
+      type={onClick ? "button" : undefined}
+      className={`hr-tm-stat-pill${onClick ? " hr-tm-stat-pill--clickable" : ""}`}
+      onClick={onClick}
+    >
+      <span className="hr-tm-stat-pill-label">{label}</span>
+      <span className="hr-tm-stat-pill-value">{value}</span>
+    </Tag>
   );
 }
 
-function RolesTable({ roles }: { roles: TalentMapRole[] | null | undefined }) {
-  if (!roles?.length) return <p>Нет данных</p>;
+function RolesTable({ roles }: { roles: TalentMapRole[] }) {
+  if (!roles.length) return <p className="hr-muted">Нет данных</p>;
   return (
-    <div className="hr-card" style={{ overflow: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}>
+    <div className="hr-tm-table-wrap">
+      <table className="hr-tm-roles-table">
         <thead>
           <tr>
-            <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid var(--hr-line)" }}>
-              Роль
-            </th>
-            <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid var(--hr-line)" }}>
-              Соответствие
-            </th>
-            <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid var(--hr-line)" }}>
-              Заметка
-            </th>
+            <th>Роль</th>
+            <th>Соответствие</th>
+            <th>Заметка</th>
           </tr>
         </thead>
         <tbody>
           {roles.map((r, idx) => (
-            <tr key={`${r.role}-${idx}`}>
-              <td style={{ padding: 10, borderBottom: "1px solid var(--hr-line)" }}>{r.role}</td>
-              <td style={{ padding: 10, borderBottom: "1px solid var(--hr-line)" }}>{r.fit}</td>
-              <td style={{ padding: 10, borderBottom: "1px solid var(--hr-line)" }}>
-                {normalizeHrCopy(r.note)}
-              </td>
+            <tr key={`${getText(r.role)}-${idx}`}>
+              <td>{getText(r.role)}</td>
+              <td>{getText(r.fit)}</td>
+              <td>{normalizeHrCopy(r.note)}</td>
             </tr>
           ))}
         </tbody>
@@ -102,426 +229,884 @@ function RolesTable({ roles }: { roles: TalentMapRole[] | null | undefined }) {
   );
 }
 
-function MetricsList({ metrics }: { metrics: TalentMapMetric[] | null | undefined }) {
-  if (!metrics?.length) return <p className="hr-muted">Нет данных</p>;
-  return (
-    <div className="hr-tm-metrics-list">
-      {metrics.map((m, idx) => (
-        <div key={`${m.label}-${idx}`} className="hr-tm-metrics-item">
-          <span className="hr-tm-metrics-label">
-            {m.label}
-            {m.hint ? <span className="hr-tm-metrics-hint"> · {m.hint}</span> : null}
-          </span>
-          <b className="hr-tm-metrics-value">{m.value}</b>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-type TalentMapViewProps = {
+type WorkspaceProps = {
   candidate: HrCandidate;
   companyId: string;
   candidateId: string;
   vacancies: HrVacancy[];
-  mode: "ai" | "deterministic";
-  aiContent?: HrPersonTalentMapV1;
-  map?: HrCandidateTalentMap;
-  fitScore?: number | null;
-  onGenerateAi?: () => void;
-  generating?: boolean;
-  aiError?: string | null;
+  aiContent: HrPersonTalentMapV1;
+  rawAiContent: unknown;
+  aiReport: HrReport;
+  onRegenerate: () => void;
+  generating: boolean;
+  genError: string | null;
 };
 
-function TalentMapView({
+function TalentMapWorkspace({
   candidate,
   companyId,
   candidateId,
   vacancies,
-  mode,
   aiContent,
-  map,
-  fitScore,
-  onGenerateAi,
+  rawAiContent,
+  aiReport,
+  onRegenerate,
   generating,
-  aiError,
-}: TalentMapViewProps) {
-  const [tab, setTab] = useState<TabId>("overview");
+  genError,
+}: WorkspaceProps) {
+  const [section, setSection] = useState<SectionId>("overview");
+  const [detail, setDetail] = useState<DetailPanelState | null>(null);
 
-  const hero = mode === "ai" ? aiContent?.hero : null;
-  const bestWorkFormat =
-    mode === "ai"
-      ? normalizeHrMaybe(hero?.best_work_format)
-      : normalizeHrMaybe(map?.best_work_format);
-  const keyTalent =
-    mode === "ai" ? normalizeHrMaybe(hero?.key_talent) : normalizeHrMaybe(map?.key_talent);
-  const mainRisk =
-    mode === "ai" ? normalizeHrMaybe(hero?.main_risk) : normalizeHrMaybe(map?.main_risk);
-  const summaryText =
-    mode === "ai"
-      ? normalizeHrMaybe(aiContent?.executive_summary?.text ?? hero?.headline)
-      : normalizeHrMaybe(map?.summary);
+  useEffect(() => {
+    if (generating) setDetail(null);
+  }, [generating]);
 
-  const formulaRaw =
-    mode === "ai" ? aiContent?.working_formula?.text ?? "" : map?.formula ?? "";
-  const formulaHtml = formulaRaw ? formulaToSafeHtml(formulaRaw) : "";
+  const ctx: ReportContentCtx = {
+    aiContent,
+    rawContent: rawAiContent,
+    vacancies,
+    normalizeHrCopy,
+    normalizeHrMaybe,
+  };
 
-  const metrics =
-    mode === "ai" ? aiContent?.data_quality?.metrics ?? [] : map?.metrics ?? [];
-  const talents = mode === "ai" ? aiContent?.talents ?? [] : map?.talents ?? [];
-  const directions =
-    mode === "ai" ? aiContent?.suitable_directions ?? [] : map?.directions ?? [];
-  const conditions =
-    mode === "ai"
-      ? [...(aiContent?.work_environment ?? []), ...(aiContent?.management_style ?? [])]
-      : map?.conditions ?? [];
-  const roles = mode === "ai" ? aiContent?.roles ?? [] : map?.roles ?? [];
-  const finalRecommendation =
-    mode === "ai"
-      ? normalizeHrMaybe(aiContent?.final_hr_recommendation?.text)
-      : normalizeHrMaybe(map?.final_recommendation);
+  const lists = useMemo(() => {
+    try {
+      return buildReportLists(ctx);
+    } catch (err) {
+      console.error("[TalentMapWorkspace] buildReportLists failed", err);
+      return {
+        risks: [],
+        interviews: [],
+        tests: [],
+        talents: [],
+        strengths: [],
+        directions: [],
+        questionable: [],
+        workEnv: [],
+        mgmt: [],
+        roles: [],
+        onboardingPhases: [],
+      };
+    }
+  }, [aiContent, rawAiContent, vacancies]);
 
-  const interviewQuestions = mode === "ai" ? aiContent?.interview_questions ?? [] : [];
-  const testTasks = mode === "ai" ? aiContent?.test_tasks ?? [] : map?.tests ?? [];
-  const risks = mode === "ai" ? aiContent?.risks ?? [] : map?.risks ?? [];
-  const questionable =
-    mode === "ai" ? aiContent?.questionable_directions ?? [] : map?.not_fit_directions ?? [];
-  const onboarding = mode === "ai" ? aiContent?.onboarding_7_30_90 : null;
+  const hero = aiContent.hero;
+  const bestWorkFormat = normalizeHrMaybe(hero?.best_work_format);
+  const keyTalent = normalizeHrMaybe(hero?.key_talent);
+  const mainRisk = normalizeHrMaybe(hero?.main_risk);
+  const summaryText = normalizeHrMaybe(
+    aiContent.executive_summary?.text ?? hero?.headline,
+  );
+  const finalRec = normalizeHrMaybe(aiContent.final_hr_recommendation?.text);
+  const formulaText = getText(aiContent.working_formula?.text);
+  const formulaHtml = formulaText ? formulaToSafeHtml(formulaText) : "";
+
+  const metrics = ensureArray(aiContent.data_quality?.metrics);
+  const completenessPct = extractCompletenessPercent(
+    aiContent.data_quality?.completeness,
+    metrics,
+  );
+  const confidenceLabel = aiContent.data_quality?.confidence
+    ? normalizeHrCopy(aiContent.data_quality.confidence)
+    : completenessPct != null
+      ? `${completenessPct}%`
+      : "уточняется";
+
+  const updatedLabel = formatReportDate(
+    aiReport.generated_at ?? aiReport.updated_at,
+  );
+  const vacancyLabel =
+    vacancies.length === 1
+      ? vacancies[0].title
+      : vacancies.length > 1
+        ? `${vacancies.length} вакансии`
+        : candidate.vacancy_title || "не привязана";
+
+  const checkHint =
+    lists.interviews.length > 0
+      ? `${lists.interviews.length} вопросов`
+      : lists.tests.length > 0
+        ? "тестовое задание"
+        : "кейс + встреча";
+
+  const nextStep =
+    finalRec ??
+    (lists.interviews.length > 0
+      ? "Провести интервью по вопросам из раздела «Интервью»."
+      : "Уточнить опыт и мотивацию на встрече.");
+
+  const mainConclusion = summaryText ?? finalRec ?? "Разбор готов — откройте разделы ниже для деталей.";
+
+  const detailLists = {
+    risks: lists.risks,
+    interviews: lists.interviews,
+    tests: lists.tests,
+    talents: lists.talents,
+    strengths: lists.strengths,
+    directions: lists.directions,
+    roles: lists.roles,
+  };
+
+  const onboardingPhaseKey = (phase: OnboardingPhase, idx: number): "7" | "30" | "90" => {
+    const label = phase.label ?? "";
+    if (label.includes("7")) return "7";
+    if (label.includes("30")) return "30";
+    if (label.includes("90")) return "90";
+    return (["7", "30", "90"] as const)[idx] ?? "7";
+  };
+
+  const renderSection = () => {
+    switch (section) {
+      case "overview":
+        return (
+          <div className="hr-tm-section-stack">
+            {formulaHtml ? (
+              <div>
+                <h3 className="hr-tm-section-h">Условия раскрытия</h3>
+                <div
+                  className="hr-tm-overview-formula"
+                  dangerouslySetInnerHTML={{ __html: formulaHtml }}
+                />
+              </div>
+            ) : null}
+            {keyTalent ? (
+              <div>
+                <h3 className="hr-tm-section-h">Ключевой талант</h3>
+                <p className="hr-muted">{keyTalent}</p>
+              </div>
+            ) : null}
+            {mainRisk ? (
+              <div>
+                <h3 className="hr-tm-section-h">Главный риск</h3>
+                <p className="hr-muted">{mainRisk}</p>
+              </div>
+            ) : null}
+          </div>
+        );
+      case "profile":
+        return (
+          <div className="hr-tm-section-stack">
+            {bestWorkFormat ? (
+              <p>
+                <strong>Рабочий формат:</strong> {bestWorkFormat}
+              </p>
+            ) : null}
+            {formulaHtml ? (
+              <div
+                className="hr-tm-overview-formula"
+                dangerouslySetInnerHTML={{ __html: formulaHtml }}
+              />
+            ) : null}
+            <h3 className="hr-tm-section-h">Таланты</h3>
+            {lists.talents.length === 0 ? (
+              <p className="hr-muted">Нет данных</p>
+            ) : (
+              lists.talents.map((t, i) => (
+                <CompactRow
+                  key={`${t.title}-${i}`}
+                  title={t.title}
+                  subtitle={t.body}
+                  onClick={() => setDetail({ kind: "talent", index: i })}
+                />
+              ))
+            )}
+            <h3 className="hr-tm-section-h">Сильные стороны</h3>
+            {lists.strengths.map((s, i) => (
+              <CompactRow
+                key={`${s.title}-${i}`}
+                title={s.title}
+                subtitle={s.body}
+                onClick={() => setDetail({ kind: "strength", index: i })}
+              />
+            ))}
+            <h3 className="hr-tm-section-h">Подходящие направления</h3>
+            {lists.directions.map((d, i) => (
+              <CompactRow
+                key={`${d.title}-${i}`}
+                title={d.title}
+                subtitle={d.body}
+                onClick={() => setDetail({ kind: "direction", index: i })}
+              />
+            ))}
+          </div>
+        );
+      case "risks":
+        return (
+          <div className="hr-tm-section-stack">
+            {mainRisk ? <p className="hr-tm-section-lead">{mainRisk}</p> : null}
+            {lists.risks.map((r, i) => (
+              <CompactRow
+                key={`${r.title}-${i}`}
+                title={r.title}
+                subtitle={r.body}
+                onClick={() => setDetail({ kind: "risk", index: i })}
+              />
+            ))}
+            <h3 className="hr-tm-section-h">Среда и управление</h3>
+            {[...lists.workEnv, ...lists.mgmt].map((c, i) => (
+              <CompactRow key={`${c.title}-${i}`} title={c.title} subtitle={c.body} />
+            ))}
+            <h3 className="hr-tm-section-h">Спорные направления</h3>
+            {lists.questionable.map((q, i) => (
+              <CompactRow key={`${q.title}-${i}`} title={q.title} subtitle={q.body} />
+            ))}
+          </div>
+        );
+      case "checks":
+        return (
+          <div className="hr-tm-section-stack">
+            <p className="hr-muted">
+              Краткий план: интервью для проверки гипотез и короткое тестовое по роли.
+            </p>
+            <CompactRow
+              title="Интервью"
+              subtitle={`${lists.interviews.length} вопросов`}
+              onClick={() => setSection("interview")}
+            />
+            <CompactRow
+              title="Тестовое"
+              subtitle={`${lists.tests.length} заданий`}
+              onClick={() => setSection("test")}
+            />
+          </div>
+        );
+      case "interview":
+        return lists.interviews.length === 0 ? (
+          <p className="hr-muted">
+            Вопросы появятся после генерации карты с достаточным контекстом.
+          </p>
+        ) : (
+          lists.interviews.map((q, i) => (
+            <CompactRow
+              key={`${q.title}-${i}`}
+              title={q.title}
+              subtitle={q.checks || q.body}
+              onClick={() => setDetail({ kind: "interview", index: i })}
+            />
+          ))
+        );
+      case "test":
+        return lists.tests.length === 0 ? (
+          <p className="hr-muted">Практические задания появятся в полном разборе.</p>
+        ) : (
+          lists.tests.map((t, i) => (
+            <CompactRow
+              key={`${t.title}-${i}`}
+              title={t.title}
+              subtitle={t.checks || t.body}
+              onClick={() => setDetail({ kind: "test", index: i })}
+            />
+          ))
+        );
+      case "onboarding":
+        return lists.onboardingPhases.length === 0 ? (
+          <p className="hr-muted">План адаптации появится при достаточном контексте роли.</p>
+        ) : (
+          lists.onboardingPhases.map((phase, i) => (
+            <CompactRow
+              key={`${getText(phase.label, "phase")}-${i}`}
+              title={getText(phase.label, "Этап")}
+              subtitle={getText(phase.summary ?? phase.focus, "Открыть этап")}
+              onClick={() =>
+                setDetail({ kind: "onboarding", phase: onboardingPhaseKey(phase, i) })
+              }
+            />
+          ))
+        );
+      case "data":
+        return <DataQualitySection ctx={ctx} />;
+      case "roles":
+        return (
+          <div className="hr-tm-section-stack">
+            {vacancies.length === 0 ? (
+              <p className="hr-muted">Вакансия не привязана — привяжите кандидата для оценки под роль.</p>
+            ) : (
+              vacancies.map((v) => (
+                <div key={v.id} className="hr-tm-row">
+                  <span className="hr-tm-row-title">{v.title}</span>
+                  <span className="hr-tm-row-sub">{v.status}</span>
+                  <Link
+                    to={`/hr/company/${companyId}/vacancies/${v.id}`}
+                    className="hr-btn hr-btn--ghost"
+                    style={{ marginLeft: "auto", flexShrink: 0 }}
+                  >
+                    Открыть
+                  </Link>
+                </div>
+              ))
+            )}
+            <h3 className="hr-tm-section-h">Подходящие роли</h3>
+            {lists.roles.map((r, i) => (
+              <CompactRow
+                key={`${r.role}-${i}`}
+                title={r.role}
+                subtitle={`${r.fit ?? "—"} · ${normalizeHrCopy(r.note ?? "")}`}
+                onClick={() => setDetail({ kind: "role", index: i })}
+              />
+            ))}
+            {lists.roles.length > 3 ? (
+              <RolesTable roles={lists.roles} />
+            ) : null}
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
-    <div className="hr-tm-page">
+    <div className="hr-tm-page hr-tm-page--workspace">
       <div className="hr-tm-header">
         <div className="hr-tm-header-top">
           <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
             ← К кандидату
           </Link>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {mode === "deterministic" && onGenerateAi && (
-              <button
-                type="button"
-                className="hr-btn"
-                disabled={generating}
-                onClick={onGenerateAi}
-              >
-                {generating ? "Генерируем AI-карту…" : "Сгенерировать AI-карту"}
-              </button>
-            )}
-            {mode === "ai" && onGenerateAi && (
-              <button
-                type="button"
-                className="hr-btn hr-btn--ghost"
-                disabled={generating}
-                onClick={onGenerateAi}
-              >
-                {generating ? "Обновляем…" : "Перегенерировать"}
-              </button>
-            )}
-          </div>
+          <button
+            type="button"
+            className="hr-btn hr-btn--ghost"
+            disabled={generating}
+            onClick={onRegenerate}
+          >
+            {generating ? "Генерируем карту…" : "Перегенерировать карту"}
+          </button>
         </div>
 
         {generating && (
-          <div className="hr-card" style={{ marginBottom: 12, borderColor: "rgba(120,180,255,0.35)" }}>
-            <p style={{ margin: 0, color: "var(--hr-muted)" }}>
-              Генерируем AI-карту… Обычно это занимает 15–40 секунд. Базовая карта остаётся доступной.
-            </p>
-          </div>
+          <p className="hr-tm-banner hr-tm-banner--info">Генерируем карту кандидата…</p>
+        )}
+        {genError && (
+          <p className="hr-tm-banner hr-tm-banner--error">
+            {genError}
+            <button type="button" className="hr-btn hr-btn--ghost" onClick={onRegenerate}>
+              Повторить генерацию
+            </button>
+          </p>
         )}
 
-        {aiError && (
-          <div className="hr-card" style={{ marginBottom: 12, borderColor: "rgba(255,120,120,0.35)" }}>
-            <p style={{ margin: 0, color: "var(--hr-muted)" }}>
-              {aiError}
-              {mode === "deterministic" ? " Показана базовая карта." : " Предыдущая версия AI-карты сохранена."}
-            </p>
-          </div>
-        )}
-
-        <div className="hr-tm-title-row">
-          <div>
-            <div className="hr-tm-title-line">
-              <h2 className="hr-tm-title">Карта талантов</h2>
-              <span className={`hr-status ${mode === "ai" ? "hr-status--ok" : "hr-status--warn"}`}>
-                {mode === "ai" ? "AI-карта" : "Базовая карта"}
-              </span>
-              {mode === "ai" && fitScore != null && (
-                <span className="hr-status hr-status--ok">Соответствие ~{fitScore}%</span>
-              )}
-            </div>
-            <div className="hr-tm-subtitle">
-              <b>{candidate.name}</b>
-              {candidate.vacancy_title ? <span> · {candidate.vacancy_title}</span> : null}
-            </div>
-          </div>
-        </div>
-
-        <p className="hr-tm-lede">
-          Компактный разбор в HR-языке: сильные стороны, риски, условия раскрытия и что проверить на
-          интервью. Это рабочие гипотезы — уточняются по опыту, кейсам и реальной вакансии.
+        <h2 className="hr-tm-title">Карта талантов</h2>
+        <p className="hr-tm-subtitle">
+          <b>{candidate.name}</b>
+        </p>
+        <p className="hr-tm-meta-line">
+          <span className="hr-status hr-status--ok">Разбор готов</span>
+          {updatedLabel ? <span>· обновлено {updatedLabel}</span> : null}
+          <span>· вакансия {vacancyLabel}</span>
+          {aiReport.fit_score != null ? (
+            <span>· соответствие ~{aiReport.fit_score}%</span>
+          ) : null}
         </p>
 
-        <div className="hr-tm-summary-grid hr-tm-summary-grid--2x2">
-          <div className="hr-tm-identity-card">
-            <b>Лучший рабочий формат</b>
-            <span>{bestWorkFormat ?? "—"}</span>
-          </div>
-          <div className="hr-tm-identity-card">
-            <b>Ключевой талант</b>
-            <span>{keyTalent ?? "—"}</span>
-          </div>
-          <div className="hr-tm-identity-card">
-            <b>Главный риск</b>
-            <span>{mainRisk ?? "—"}</span>
-          </div>
-          <div className="hr-tm-identity-card hr-tm-summary-card--primary">
-            <b>Главный вывод</b>
-            <span>{summaryText ?? "—"}</span>
-          </div>
+        <div className="hr-tm-conclusion">
+          <h3 className="hr-tm-conclusion-title">Главный HR-вывод</h3>
+          <p className="hr-tm-conclusion-text">{mainConclusion}</p>
+          <p className="hr-tm-conclusion-next">
+            <span className="hr-tm-conclusion-next-label">Следующий шаг:</span> {nextStep}
+          </p>
+          {completenessPct != null && completenessPct < 60 ? (
+            <p className="hr-tm-conclusion-warn">
+              Данных пока мало — выводы предварительные. Добавьте контекст вакансии и перегенерируйте
+              карту.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="hr-tm-stat-row">
+          <StatPill
+            label="Точность данных"
+            value={confidenceLabel}
+            onClick={() => setSection("data")}
+          />
+          <StatPill
+            label="Лучший формат"
+            value={bestWorkFormat ?? "—"}
+            onClick={() => setSection("profile")}
+          />
+          <StatPill
+            label="Главный риск"
+            value={mainRisk ?? "—"}
+            onClick={() => setSection("risks")}
+          />
+          <StatPill
+            label="Что проверить"
+            value={checkHint}
+            onClick={() => setSection("checks")}
+          />
         </div>
       </div>
 
-      <div className="hr-tm-tab-dock">
-        <div className="hr-tm-tabs" role="tablist" aria-label="Вкладки карты талантов">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className={tab === t.id ? "hr-tm-tab hr-tm-tab--active" : "hr-tm-tab"}
-              onClick={() => setTab(t.id)}
-              role="tab"
-              aria-selected={tab === t.id}
+      <div className="hr-tm-workspace">
+        <nav className="hr-tm-nav" aria-label="Разделы карты">
+          <div className="hr-tm-nav-chips" role="tablist">
+            {NAV_SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                role="tab"
+                aria-selected={section === s.id}
+                className={section === s.id ? "hr-tm-nav-item hr-tm-nav-item--active" : "hr-tm-nav-item"}
+                onClick={() => setSection(s.id)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          <ul className="hr-tm-nav-list">
+            {NAV_SECTIONS.map((s) => (
+              <li key={s.id}>
+                <button
+                  type="button"
+                  className={
+                    section === s.id ? "hr-tm-nav-item hr-tm-nav-item--active" : "hr-tm-nav-item"
+                  }
+                  onClick={() => setSection(s.id)}
+                >
+                  <span>{s.label}</span>
+                  {s.hint ? <small>{s.hint}</small> : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <div className="hr-tm-section-panel" role="tabpanel">
+          <h3 className="hr-tm-section-panel-title">
+            {NAV_SECTIONS.find((s) => s.id === section)?.label}
+          </h3>
+          <SectionErrorBoundary
+            key={section}
+            title={NAV_SECTIONS.find((s) => s.id === section)?.label ?? section}
+          >
+            {renderSection()}
+          </SectionErrorBoundary>
+        </div>
+      </div>
+
+      <HrSidePanel
+        open={detail !== null}
+        onClose={() => setDetail(null)}
+        title={detail ? getDetailPanelTitle(detail, detailLists) : ""}
+        description="Детали для проверки на интервью"
+      >
+        {detail ? (
+          <SectionErrorBoundary title="Детали">
+            <ItemDetailPanel
+              detail={detail}
+              ctx={ctx}
+              risks={lists.risks}
+              interviews={lists.interviews}
+              tests={lists.tests}
+              talents={lists.talents}
+              strengths={lists.strengths}
+              directions={lists.directions}
+              roles={lists.roles}
+            />
+          </SectionErrorBoundary>
+        ) : null}
+      </HrSidePanel>
+    </div>
+  );
+}
+
+type BrokenReportDiagnostic = {
+  reportId?: string;
+  reportStatus?: string;
+  reportType?: string;
+  contentType?: string;
+  topLevelKeys?: string[] | null;
+  parseError?: string | null;
+  renderError?: string | null;
+  renderErrorName?: string;
+  renderErrorMessage?: string;
+  renderErrorStack?: string[];
+  componentStack?: string | null;
+};
+
+function buildRenderDiagnostic(
+  error: Error | null,
+  errorInfo: ErrorInfo | null,
+  base: Omit<
+    BrokenReportDiagnostic,
+    "renderErrorName" | "renderErrorMessage" | "renderErrorStack" | "componentStack"
+  >,
+): BrokenReportDiagnostic {
+  return {
+    ...base,
+    renderError: error?.message ?? "Неизвестная ошибка render",
+    renderErrorName: error?.name,
+    renderErrorMessage: error?.message,
+    renderErrorStack: error?.stack?.split("\n").slice(0, 8),
+    componentStack: errorInfo?.componentStack ?? null,
+  };
+}
+
+function BrokenReportState({
+  candidate,
+  companyId,
+  candidateId,
+  diagnostic,
+}: {
+  candidate: HrCandidate;
+  companyId: string;
+  candidateId: string;
+  onRegenerate?: () => void;
+  generating?: boolean;
+  diagnostic?: BrokenReportDiagnostic | null;
+}) {
+  return (
+    <div className="hr-tm-page">
+      <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
+        ← К кандидату
+      </Link>
+      <h2 className="hr-tm-title">Карта талантов</h2>
+      <p className="hr-tm-subtitle">
+        <b>{candidate.name}</b>
+      </p>
+      <div className="hr-card hr-tm-empty-card">
+        <p className="hr-tm-empty-title">Разбор создан, но интерфейс пока не смог прочитать его структуру</p>
+        <p className="hr-muted" style={{ lineHeight: 1.55, maxWidth: 520 }}>
+          Это не ошибка генерации — отчёт сохранён в базе. Нужно адаптировать отображение под формат
+          данных. Перегенерация создаст новую запись, но не исправит чтение уже сохранённого отчёта.
+        </p>
+        {diagnostic ? (
+          <pre
+            className="hr-muted"
+            style={{
+              marginTop: 12,
+              padding: 10,
+              borderRadius: 8,
+              background: "rgba(0,0,0,0.2)",
+              fontSize: 11,
+              overflow: "auto",
+              maxWidth: 560,
+            }}
+          >
+            {JSON.stringify(diagnostic, null, 2)}
+          </pre>
+        ) : null}
+        <button
+          type="button"
+          className="hr-btn hr-btn--ghost"
+          style={{ marginTop: 16 }}
+          onClick={() => window.location.reload()}
+        >
+          Обновить страницу
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type WorkspaceErrorBoundaryProps = {
+  children: ReactNode;
+  fallback: (error: Error | null, errorInfo: ErrorInfo | null) => ReactNode;
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
+};
+
+type WorkspaceErrorBoundaryState = {
+  hasError: boolean;
+  error: Error | null;
+  errorInfo: ErrorInfo | null;
+};
+
+class WorkspaceErrorBoundary extends Component<
+  WorkspaceErrorBoundaryProps,
+  WorkspaceErrorBoundaryState
+> {
+  state: WorkspaceErrorBoundaryState = {
+    hasError: false,
+    error: null,
+    errorInfo: null,
+  };
+
+  static getDerivedStateFromError(error: Error): Partial<WorkspaceErrorBoundaryState> {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error("[WorkspaceErrorBoundary]", err, info);
+    this.setState({ error: err, errorInfo: info });
+    this.props.onError?.(err, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback(this.state.error, this.state.errorInfo);
+    }
+    return this.props.children;
+  }
+}
+
+type SectionErrorBoundaryProps = {
+  title: string;
+  children: ReactNode;
+};
+
+type SectionErrorBoundaryState = {
+  hasError: boolean;
+  message: string | null;
+  stack: string[] | null;
+  componentStack: string | null;
+};
+
+class SectionErrorBoundary extends Component<
+  SectionErrorBoundaryProps,
+  SectionErrorBoundaryState
+> {
+  state: SectionErrorBoundaryState = {
+    hasError: false,
+    message: null,
+    stack: null,
+    componentStack: null,
+  };
+
+  static getDerivedStateFromError(error: Error): SectionErrorBoundaryState {
+    return {
+      hasError: true,
+      message: error.message,
+      stack: error.stack?.split("\n").slice(0, 8) ?? null,
+      componentStack: null,
+    };
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error(`[SectionErrorBoundary:${this.props.title}]`, err, info.componentStack);
+    this.setState({
+      message: err.message,
+      stack: err.stack?.split("\n").slice(0, 8) ?? null,
+      componentStack: info.componentStack ?? null,
+    });
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="hr-muted" style={{ margin: 0 }}>
+          <p style={{ margin: "0 0 8px" }}>
+            Не удалось отобразить раздел «{this.props.title}»: {this.state.message}
+          </p>
+          {this.state.stack?.length || this.state.componentStack ? (
+            <pre
+              style={{
+                margin: 0,
+                padding: 8,
+                fontSize: 11,
+                borderRadius: 6,
+                background: "rgba(0,0,0,0.2)",
+                overflow: "auto",
+              }}
             >
-              {t.label}
-            </button>
-          ))}
+              {JSON.stringify(
+                {
+                  section: this.props.title,
+                  stack: this.state.stack,
+                  componentStack: this.state.componentStack,
+                },
+                null,
+                2,
+              )}
+            </pre>
+          ) : null}
         </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
-        <div className="hr-tm-panel">
-          {tab === "overview" && (
-            <section>
-              <div className="hr-grid-2">
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Показатели</h3>
-                  <MetricsList metrics={metrics} />
-                </div>
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Условия раскрытия</h3>
-                  {formulaHtml ? (
-                    <div
-                      className="hr-tm-overview-formula"
-                      dangerouslySetInnerHTML={{ __html: formulaHtml }}
-                    />
-                  ) : (
-                    <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                      Нет данных для формулировки условий раскрытия.
-                    </p>
-                  )}
-                </div>
-              </div>
+function DisplayDiagnosticBlock({
+  companyId,
+  candidateId,
+  candidateName,
+  fetchError,
+  debug,
+}: {
+  companyId: string;
+  candidateId: string;
+  candidateName: string;
+  fetchError: string | null;
+  debug: {
+    generated: ReportSnapshot | null;
+    refetchedReady: ReportSnapshot | null;
+    latestAny: ReportSnapshot | null;
+  } | null;
+}) {
+  if (!fetchError && !debug) return null;
+  return (
+    <div
+      className="hr-card"
+      style={{ marginTop: 12, fontSize: 13, color: "var(--hr-muted)", lineHeight: 1.5 }}
+    >
+      <p style={{ margin: "0 0 6px", color: "var(--hr-text)", fontWeight: 600 }}>
+        Диагностика отображения
+      </p>
+      <p style={{ margin: 0 }}>
+        Кандидат: <strong>{candidateName}</strong> · {candidateId}
+        <br />
+        Компания: {companyId}
+      </p>
+      {fetchError ? (
+        <p style={{ margin: "8px 0 0", color: "var(--hr-soft)" }}>
+          Ошибка чтения из Supabase: {fetchError}
+        </p>
+      ) : null}
+      {debug ? (
+        <pre
+          style={{
+            margin: "8px 0 0",
+            padding: 10,
+            borderRadius: 8,
+            background: "rgba(0,0,0,0.2)",
+            overflow: "auto",
+            fontSize: 11,
+          }}
+        >
+          {JSON.stringify(debug, null, 2)}
+        </pre>
+      ) : null}
+    </div>
+  );
+}
 
-              {finalRecommendation && (
-                <div className="hr-card" style={{ marginTop: 12 }}>
-                  <h3 style={{ marginTop: 0 }}>Рекомендация HR</h3>
-                  <p style={{ margin: 0, lineHeight: 1.6 }}>{finalRecommendation}</p>
-                </div>
-              )}
-            </section>
-          )}
-
-          {tab === "profile" && (
-            <section>
-              <div className="hr-grid-2">
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Рабочий формат</h3>
-                  <p style={{ margin: 0, lineHeight: 1.6 }}>{bestWorkFormat ?? "—"}</p>
-                </div>
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Где раскрывается</h3>
-                  {formulaHtml ? (
-                    <div
-                      className="hr-tm-overview-formula"
-                      dangerouslySetInnerHTML={{ __html: formulaHtml }}
-                    />
-                  ) : (
-                    <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                      Лучше всего проявляет себя в задачах с понятным результатом, прозрачными
-                      ожиданиями и регулярной обратной связью.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="hr-tm-block">
-                <h3 className="hr-tm-block-title">Ключевые таланты</h3>
-                <ItemCards items={talents.slice(0, 3)} />
-              </div>
-
-              <div className="hr-tm-block">
-                <h3 className="hr-tm-block-title">Подходящие направления</h3>
-                <ItemCards items={directions.slice(0, 2)} />
-              </div>
-            </section>
-          )}
-
-          {tab === "risks" && (
-            <section>
-              <div className="hr-grid-2">
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Что может мешать</h3>
-                  <p style={{ margin: 0, lineHeight: 1.6 }}>{mainRisk ?? "—"}</p>
-                </div>
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Какие условия нужны</h3>
-                  <ItemCards items={risks.slice(0, 2)} />
-                </div>
-              </div>
-
-              {questionable.length > 0 && (
-                <div className="hr-tm-block">
-                  <h3 className="hr-tm-block-title">Спорные зоны</h3>
-                  <ItemCards items={questionable} />
-                </div>
-              )}
-
-              <div className="hr-tm-block">
-                <h3 className="hr-tm-block-title">Среда и менеджмент</h3>
-                <ItemCards items={conditions.slice(0, 4)} />
-              </div>
-            </section>
-          )}
-
-          {tab === "checks" && (
-            <section>
-              <div className="hr-grid-2">
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Вопросы на интервью</h3>
-                  {interviewQuestions.length > 0 ? (
-                    <ItemCards items={interviewQuestions} />
-                  ) : (
-                    <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                      Уточнить примеры решений, реакции на срочность и опыт работы в команде.
-                    </p>
-                  )}
-                </div>
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Тестовые задания</h3>
-                  {testTasks.length > 0 ? (
-                    <ItemCards items={testTasks} />
-                  ) : (
-                    <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                      Кейс на 2–3 часа с реальной задачей роли + разбор решения.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {onboarding && (onboarding.day_7 || onboarding.day_30 || onboarding.day_90) && (
-                <div className="hr-tm-block">
-                  <h3 className="hr-tm-block-title">Онбординг 7 / 30 / 90</h3>
-                  <div className="hr-grid-2">
-                    {onboarding.day_7 && (
-                      <div className="hr-card">
-                        <h4 style={{ marginTop: 0 }}>7 дней</h4>
-                        <p style={{ margin: 0, lineHeight: 1.55 }}>{normalizeHrCopy(onboarding.day_7)}</p>
-                      </div>
-                    )}
-                    {onboarding.day_30 && (
-                      <div className="hr-card">
-                        <h4 style={{ marginTop: 0 }}>30 дней</h4>
-                        <p style={{ margin: 0, lineHeight: 1.55 }}>{normalizeHrCopy(onboarding.day_30)}</p>
-                      </div>
-                    )}
-                    {onboarding.day_90 && (
-                      <div className="hr-card">
-                        <h4 style={{ marginTop: 0 }}>90 дней</h4>
-                        <p style={{ margin: 0, lineHeight: 1.55 }}>{normalizeHrCopy(onboarding.day_90)}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {mode === "deterministic" && (
-                <div className="hr-tm-block">
-                  <h3 className="hr-tm-block-title">План проверки</h3>
-                  <div className="hr-grid-2">
-                    <div className="hr-card hr-tm-step">
-                      <p className="hr-tm-step-kicker">Шаг 1</p>
-                      <h4 style={{ margin: "0 0 6px" }}>Интервью</h4>
-                      <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                        Уточнить примеры решений, реакции на срочность и опыт работы в команде.
-                      </p>
-                    </div>
-                    <div className="hr-card hr-tm-step">
-                      <p className="hr-tm-step-kicker">Шаг 2</p>
-                      <h4 style={{ margin: "0 0 6px" }}>Рабочий кейс</h4>
-                      <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                        Кейс на 2–3 часа с реальной задачей роли + короткий разбор решения.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </section>
-          )}
-
-          {tab === "roles" && (
-            <section>
-              <div className="hr-grid-2">
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Связанные вакансии</h3>
-                  {vacancies.length === 0 ? (
-                    <p style={{ margin: 0, color: "var(--hr-muted)" }}>
-                      Кандидат пока не привязан к вакансии.
-                    </p>
-                  ) : (
-                    <div style={{ display: "grid", gap: 10 }}>
-                      {vacancies.map((v) => (
-                        <div key={v.id} className="hr-card" style={{ background: "rgba(255,255,255,0.02)" }}>
-                          <div
-                            style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: 12,
-                              justifyContent: "space-between",
-                            }}
-                          >
-                            <div>
-                              <h4 style={{ margin: "0 0 4px" }}>{v.title}</h4>
-                              <p style={{ margin: 0, color: "var(--hr-muted)" }}>
-                                Статус: <strong>{v.status}</strong>
-                              </p>
-                            </div>
-                            <div className="hr-fork-actions">
-                              <Link
-                                to={`/hr/company/${companyId}/vacancies/${v.id}`}
-                                className="hr-btn"
-                              >
-                                Открыть вакансию
-                              </Link>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="hr-card">
-                  <h3 style={{ marginTop: 0 }}>Следующий этап</h3>
-                  <p style={{ margin: 0, color: "var(--hr-muted)", lineHeight: 1.55 }}>
-                    Точная оценка под конкретную вакансию будет отдельным разбором. Сейчас карта
-                    показывает рабочий профиль кандидата и гипотезы для проверки на интервью.
-                  </p>
-                </div>
-              </div>
-
-              <div className="hr-tm-block">
-                <h3 className="hr-tm-block-title">Предварительно подходящие роли</h3>
-                <RolesTable roles={roles} />
-              </div>
-            </section>
-          )}
-        </div>
+function PendingReportState({
+  candidate,
+  companyId,
+  candidateId,
+  report,
+  onGenerate,
+  generating,
+  error,
+  fetchError,
+  debug,
+}: {
+  candidate: HrCandidate;
+  companyId: string;
+  candidateId: string;
+  report: HrReport;
+  onGenerate: () => void;
+  generating: boolean;
+  error: string | null;
+  fetchError: string | null;
+  debug: {
+    generated: ReportSnapshot | null;
+    refetchedReady: ReportSnapshot | null;
+    latestAny: ReportSnapshot | null;
+  } | null;
+}) {
+  return (
+    <div className="hr-tm-page">
+      <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
+        ← К кандидату
+      </Link>
+      <h2 className="hr-tm-title">Карта талантов</h2>
+      <p className="hr-tm-subtitle">
+        <b>{candidate.name}</b>
+      </p>
+      <div className="hr-card hr-tm-empty-card">
+        <p className="hr-tm-empty-title">Карта пока не отобразилась</p>
+        <p className="hr-muted" style={{ lineHeight: 1.55, maxWidth: 560 }}>
+          {error ??
+            "Мы запустили генерацию, но готовый отчёт ещё не доступен для отображения."}
+        </p>
+        <p className="hr-muted" style={{ marginTop: 10, fontSize: 13 }}>
+          Статус отчёта: <strong>{report.report_status}</strong>
+          {report.generation_error ? (
+            <>
+              <br />
+              Ошибка: {report.generation_error}
+            </>
+          ) : null}
+        </p>
+        <DisplayDiagnosticBlock
+          companyId={companyId}
+          candidateId={candidateId}
+          candidateName={candidate.name}
+          fetchError={fetchError}
+          debug={debug}
+        />
+        <button
+          type="button"
+          className="hr-btn"
+          style={{ marginTop: 16 }}
+          disabled={generating}
+          onClick={onGenerate}
+        >
+          {generating ? "Генерируем карту…" : "Повторить генерацию"}
+        </button>
       </div>
+    </div>
+  );
+}
+
+function EmptyReportState({
+  candidate,
+  companyId,
+  candidateId,
+  onGenerate,
+  generating,
+  error,
+  fetchError,
+  debug,
+}: {
+  candidate: HrCandidate;
+  companyId: string;
+  candidateId: string;
+  onGenerate: () => void;
+  generating: boolean;
+  error: string | null;
+  fetchError: string | null;
+  debug: {
+    generated: ReportSnapshot | null;
+    refetchedReady: ReportSnapshot | null;
+    latestAny: ReportSnapshot | null;
+  } | null;
+}) {
+  return (
+    <div className="hr-tm-page">
+      <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
+        ← К кандидату
+      </Link>
+      <h2 className="hr-tm-title">Карта талантов</h2>
+      <p className="hr-tm-subtitle">
+        <b>{candidate.name}</b>
+      </p>
+
+      {generating ? (
+        <div className="hr-card hr-tm-empty-card">
+          <p className="hr-tm-empty-title">Генерируем карту кандидата…</p>
+          <p className="hr-muted">Обычно это занимает 15–40 секунд.</p>
+        </div>
+      ) : (
+        <div className="hr-card hr-tm-empty-card">
+          <p className="hr-tm-empty-title">Разбор ещё не создан</p>
+          <p className="hr-muted" style={{ lineHeight: 1.55, maxWidth: 520 }}>
+            Сначала сгенерируйте карту кандидата, чтобы увидеть рабочий профиль, риски, вопросы
+            интервью, тестовое и план адаптации.
+          </p>
+          {error ? (
+            <p className="hr-tm-banner hr-tm-banner--error" style={{ marginTop: 12 }}>
+              {error}
+            </p>
+          ) : null}
+          <DisplayDiagnosticBlock
+            companyId={companyId}
+            candidateId={candidateId}
+            candidateName={candidate.name}
+            fetchError={fetchError}
+            debug={debug}
+          />
+          <button
+            type="button"
+            className="hr-btn"
+            style={{ marginTop: 16 }}
+            disabled={generating}
+            onClick={onGenerate}
+          >
+            {error ? "Повторить генерацию" : "Сгенерировать карту"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -529,109 +1114,240 @@ function TalentMapView({
 export default function CandidateTalentMapPage() {
   const { companyId, candidateId } = useParams<{ companyId: string; candidateId: string }>();
   const [candidate, setCandidate] = useState<HrCandidate | null>(null);
-  const [map, setMap] = useState<HrCandidateTalentMap | null>(null);
   const [aiReport, setAiReport] = useState<HrReport | null>(null);
   const [vacancies, setVacancies] = useState<HrVacancy[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [displayDebug, setDisplayDebug] = useState<{
+    generated: ReportSnapshot | null;
+    refetchedReady: ReportSnapshot | null;
+    latestAny: ReportSnapshot | null;
+  } | null>(null);
 
-  const load = async () => {
+  const load = async (opts?: { silent?: boolean }) => {
     if (!companyId || !candidateId) return;
-    setLoading(true);
-    const [c, m, links, report] = await Promise.all([
+    if (!opts?.silent) setLoading(true);
+    const [c, links, readyResult] = await Promise.all([
       fetchCandidate(companyId, candidateId),
-      fetchTalentMap(companyId, candidateId),
       fetchCandidateVacancies(companyId, candidateId),
-      fetchLatestCandidateReport(companyId, candidateId, "hr_person_talent_map"),
+      fetchBestReadyCandidateReport(companyId, candidateId, "hr_person_talent_map"),
     ]);
     setCandidate(c);
-    setMap(m as HrCandidateTalentMap | null);
     setVacancies((links ?? []).map((l: { vacancy: HrVacancy }) => l.vacancy).filter(Boolean));
-    setAiReport(report);
-    setLoading(false);
+    setAiReport(readyResult.report);
+    setFetchError(readyResult.error);
+    if (!opts?.silent) setLoading(false);
+
+    console.info("[CandidateTalentMapPage] context", {
+      companyId,
+      candidateId,
+      candidateName: c?.name,
+      loadedReport: snapshotReport(readyResult.report),
+      fetchError: readyResult.error,
+    });
   };
 
   useEffect(() => {
     load();
   }, [companyId, candidateId]);
 
-  const onGenerateAi = async (forceRegenerate = false) => {
+  const onGenerate = async (forceRegenerate = false) => {
     if (!companyId || !candidateId) return;
+    const previousReady = isReadyTalentMapReport(aiReport) ? aiReport : null;
     setGenerating(true);
-    setAiError(null);
+    setGenError(null);
+    setFetchError(null);
+    setDisplayDebug(null);
+
     try {
       const primaryVacancyId = vacancies.length === 1 ? vacancies[0].id : null;
-      const report = await generateCandidateReport(companyId, candidateId, {
+      const generated = await generateCandidateReport(companyId, candidateId, {
         vacancyId: primaryVacancyId,
         reportType: "hr_person_talent_map",
         forceRegenerate,
       });
-      setAiReport(report);
+      logReportStep("generated report", generated);
+
+      const readyResult = await fetchBestReadyCandidateReport(
+        companyId,
+        candidateId,
+        "hr_person_talent_map",
+      );
+      logReportStep("refetched ready report", readyResult.report);
+      if (readyResult.error) setFetchError(readyResult.error);
+
+      const latestAnyResult = await fetchLatestHrReport(
+        companyId,
+        candidateId,
+        "hr_person_talent_map",
+      );
+      logReportStep("latest any report", latestAnyResult.report);
+      if (latestAnyResult.error && !readyResult.error) {
+        setFetchError(latestAnyResult.error);
+      }
+
+      setDisplayDebug({
+        generated: snapshotReport(generated),
+        refetchedReady: snapshotReport(readyResult.report),
+        latestAny: snapshotReport(latestAnyResult.report),
+      });
+
+      const { report: resolved, mismatch } = pickReadyReportForContext(
+        companyId,
+        candidateId,
+        generated,
+        readyResult.report,
+        latestAnyResult.report,
+      );
+
+      if (resolved) {
+        setAiReport(resolved);
+        setGenError(null);
+        return;
+      }
+
+      if (mismatch && candidate) {
+        setGenError(buildMismatchMessage(companyId, candidateId, candidate.name, mismatch));
+      } else if (readyResult.error) {
+        setGenError(
+          `Не удалось прочитать отчёт из базы: ${readyResult.error}. Отчёт мог быть создан — попробуйте обновить страницу.`,
+        );
+      } else {
+        setGenError(buildGenerationFailureMessage(generated, latestAnyResult.report));
+      }
+
+      if (forceRegenerate && previousReady) {
+        setAiReport(previousReady);
+      } else {
+        setAiReport(latestAnyResult.report ?? generated ?? readyResult.report);
+      }
     } catch (err) {
-      setAiError(err instanceof Error ? err.message : "Не удалось сгенерировать AI-карту");
+      console.error("[hr] generate talent map failed", err);
+      setGenError(err instanceof Error ? err.message : "Не удалось сгенерировать карту");
+      try {
+        const readyResult = await fetchBestReadyCandidateReport(
+          companyId,
+          candidateId,
+          "hr_person_talent_map",
+        );
+        if (readyResult.error) setFetchError(readyResult.error);
+        const { report: resolved } = pickReadyReportForContext(
+          companyId,
+          candidateId,
+          readyResult.report,
+        );
+        if (resolved) {
+          setAiReport(resolved);
+        } else if (forceRegenerate && previousReady) {
+          setAiReport(previousReady);
+        } else if (readyResult.report) {
+          setAiReport(readyResult.report);
+        }
+      } catch {
+        if (forceRegenerate && previousReady) setAiReport(previousReady);
+      }
     } finally {
       setGenerating(false);
     }
   };
 
-  if (loading || !candidate) {
+  if (loading || !candidate || !companyId || !candidateId) {
     return <p>Загрузка…</p>;
   }
 
-  const hasDeterministic = map && map.report_status === "ready";
-  const hasAi =
-    aiReport &&
-    aiReport.report_status === "ready" &&
-    aiReport.content_json &&
-    typeof aiReport.content_json === "object";
+  const hasReadyReport = isReadyTalentMapReport(aiReport);
 
-  if (!hasAi && !hasDeterministic && !generating) {
+  if (hasReadyReport && aiReport) {
+    logReportContentShape(aiReport.content_json, aiReport.id);
+    const contentRoot = getReportContentRoot(aiReport.content_json);
+    const safeContent = normalizeAiReportContent(aiReport.content_json);
+    const contentKeys = Object.keys(contentRoot);
+
+    if (!canParseReportContent(aiReport.content_json)) {
+      return (
+        <BrokenReportState
+          candidate={candidate}
+          companyId={companyId}
+          candidateId={candidateId}
+          onRegenerate={() => onGenerate(true)}
+          generating={generating}
+          diagnostic={{
+            reportId: aiReport.id,
+            reportStatus: aiReport.report_status,
+            reportType: aiReport.report_type,
+            contentType: typeof aiReport.content_json,
+            topLevelKeys: contentKeys,
+            parseError: "content_json не является объектом или валидной JSON-строкой",
+          }}
+        />
+      );
+    }
+
+    const diagnosticBase = {
+      reportId: aiReport.id,
+      reportStatus: aiReport.report_status,
+      reportType: aiReport.report_type,
+      contentType: typeof aiReport.content_json,
+      topLevelKeys: contentKeys,
+    };
+
+    logNormalizedWorkspaceContent(safeContent);
+
     return (
-      <div className="hr-card">
-        <h2 style={{ marginTop: 0 }}>Карта рассчитана, отчёт формируется</h2>
-        <p style={{ color: "var(--hr-muted)" }}>
-          Попробуйте обновить страницу через несколько секунд или пересчитайте карту кандидата.
-        </p>
-        <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-btn">
-          ← К кандидату
-        </Link>
-      </div>
+      <WorkspaceErrorBoundary
+        fallback={(error, errorInfo) => (
+          <BrokenReportState
+            candidate={candidate}
+            companyId={companyId}
+            candidateId={candidateId}
+            diagnostic={buildRenderDiagnostic(error, errorInfo, diagnosticBase)}
+          />
+        )}
+      >
+        <TalentMapWorkspace
+          candidate={candidate}
+          companyId={companyId}
+          candidateId={candidateId}
+          vacancies={vacancies}
+          aiContent={safeContent}
+          rawAiContent={contentRoot}
+          aiReport={aiReport}
+          onRegenerate={() => onGenerate(true)}
+          generating={generating}
+          genError={genError}
+        />
+      </WorkspaceErrorBoundary>
     );
   }
 
-  if (hasAi && companyId && candidateId) {
+  if (aiReport && !hasReadyReport) {
     return (
-      <TalentMapView
+      <PendingReportState
         candidate={candidate}
         companyId={companyId}
         candidateId={candidateId}
-        vacancies={vacancies}
-        mode="ai"
-        aiContent={normalizeAiReportContent(aiReport.content_json)}
-        fitScore={aiReport.fit_score}
-        onGenerateAi={() => onGenerateAi(true)}
+        report={aiReport}
+        onGenerate={() => onGenerate(true)}
         generating={generating}
-        aiError={aiError}
+        error={genError}
+        fetchError={fetchError}
+        debug={displayDebug}
       />
     );
   }
 
-  if ((hasDeterministic || generating) && companyId && candidateId && map) {
-    return (
-      <TalentMapView
-        candidate={candidate}
-        companyId={companyId}
-        candidateId={candidateId}
-        vacancies={vacancies}
-        mode="deterministic"
-        map={map}
-        onGenerateAi={() => onGenerateAi(false)}
-        generating={generating}
-        aiError={aiError}
-      />
-    );
-  }
-
-  return null;
+  return (
+    <EmptyReportState
+      candidate={candidate}
+      companyId={companyId}
+      candidateId={candidateId}
+      onGenerate={() => onGenerate(false)}
+      generating={generating}
+      error={genError}
+      fetchError={fetchError}
+      debug={displayDebug}
+    />
+  );
 }

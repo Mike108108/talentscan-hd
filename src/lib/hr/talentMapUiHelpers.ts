@@ -71,6 +71,31 @@ export function isNonEmptyArray(value: unknown): boolean {
   return Array.isArray(value) && value.length > 0;
 }
 
+/** Coerce disclaimers / string lists from DB (array or single string). */
+export function coerceStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((v) => getText(v)).filter(Boolean);
+  }
+  const single = getText(value);
+  return single ? [single] : [];
+}
+
+export function coerceRolesList(value: unknown): HrPersonTalentMapV1["roles"] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item === "string") {
+      const t = item.trim();
+      return { role: t || "—", fit: "—", note: "" };
+    }
+    const rec = asObject(item);
+    return {
+      role: getText(rec.role ?? rec.title ?? rec.name, "—"),
+      fit: getText(rec.fit, "—"),
+      note: getText(rec.note),
+    };
+  });
+}
+
 export function parseFlexibleItem(raw: unknown): FlexibleSectionItem | null {
   if (typeof raw === "string") {
     const t = raw.trim();
@@ -125,11 +150,18 @@ export function parseFlexibleItems(raw: unknown): FlexibleSectionItem[] {
 }
 
 export function itemsFromTalentMapItems(items: HrTalentMapSectionItem[] | TalentMapItem[]): FlexibleSectionItem[] {
-  return items.map((item) => ({
-    title: item.title,
-    body: item.body,
-    ...(item.fit ? { fit: item.fit } : {}),
-  }));
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => {
+    if (!item || typeof item !== "object") {
+      const t = getText(item);
+      return { title: "—", body: t };
+    }
+    return {
+      title: getText(item.title, "—"),
+      body: getText(item.body),
+      ...(item.fit ? { fit: getText(item.fit) } : {}),
+    };
+  });
 }
 
 export function mergeFlexibleItems(
@@ -177,7 +209,8 @@ export function parseOnboardingTimeline(
 ): OnboardingPhase[] {
   const raw = asObject(rawRoot);
   const ob = asObject(raw.onboarding_7_30_90 ?? rawRoot);
-  const safeOnboarding = onboarding ?? { day_7: "", day_30: "", day_90: "", items: [] };
+  const safeItems = Array.isArray(onboarding?.items) ? onboarding.items : [];
+  const safeOnboarding = onboarding ?? { day_7: "", day_30: "", day_90: "", items: safeItems };
 
   const phases: OnboardingPhase[] = [];
 
@@ -189,12 +222,15 @@ export function parseOnboardingTimeline(
   if (d30) phases.push(d30);
   if (d90) phases.push(d90);
 
-  if (phases.length === 0 && safeOnboarding.items?.length) {
-    for (const item of safeOnboarding.items) {
+  const onboardingItems = safeOnboarding.items ?? [];
+  if (phases.length === 0 && onboardingItems.length > 0) {
+    for (const item of onboardingItems) {
+      const title = getText(item?.title ?? item, "Этап");
+      const body = getText(item?.body);
       phases.push({
-        label: item.title,
-        summary: item.body,
-        ...(item.fit ? { risk: item.fit } : {}),
+        label: title,
+        ...(body ? { summary: body } : {}),
+        ...(item?.fit ? { risk: getText(item.fit) } : {}),
       });
     }
   }

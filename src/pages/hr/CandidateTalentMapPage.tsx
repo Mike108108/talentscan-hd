@@ -11,8 +11,10 @@ import {
   reportMatchesCandidate,
 } from "../../lib/hr/api";
 import {
+  canParseReportContent,
   getReportContentRoot,
   isReadyTalentMapReport,
+  logReportContentShape,
   normalizeAiReportContent,
 } from "../../lib/hr/normalizeAiReport";
 import {
@@ -323,9 +325,10 @@ function TalentMapWorkspace({
   };
 
   const onboardingPhaseKey = (phase: OnboardingPhase, idx: number): "7" | "30" | "90" => {
-    if (phase.label.includes("7")) return "7";
-    if (phase.label.includes("30")) return "30";
-    if (phase.label.includes("90")) return "90";
+    const label = phase.label ?? "";
+    if (label.includes("7")) return "7";
+    if (label.includes("30")) return "30";
+    if (label.includes("90")) return "90";
     return (["7", "30", "90"] as const)[idx] ?? "7";
   };
 
@@ -674,18 +677,28 @@ function TalentMapWorkspace({
   );
 }
 
+type BrokenReportDiagnostic = {
+  reportId?: string;
+  reportStatus?: string;
+  reportType?: string;
+  contentType?: string;
+  topLevelKeys?: string[] | null;
+  parseError?: string | null;
+  renderError?: string | null;
+};
+
 function BrokenReportState({
   candidate,
   companyId,
   candidateId,
-  onRegenerate,
-  generating,
+  diagnostic,
 }: {
   candidate: HrCandidate;
   companyId: string;
   candidateId: string;
-  onRegenerate: () => void;
-  generating: boolean;
+  onRegenerate?: () => void;
+  generating?: boolean;
+  diagnostic?: BrokenReportDiagnostic | null;
 }) {
   return (
     <div className="hr-tm-page">
@@ -697,18 +710,34 @@ function BrokenReportState({
         <b>{candidate.name}</b>
       </p>
       <div className="hr-card hr-tm-empty-card">
-        <p className="hr-tm-empty-title">Разбор создан, но отобразить его не удалось</p>
+        <p className="hr-tm-empty-title">Разбор создан, но интерфейс пока не смог прочитать его структуру</p>
         <p className="hr-muted" style={{ lineHeight: 1.55, maxWidth: 520 }}>
-          Данные отчёта пришли в неожиданном формате. Попробуйте перегенерировать карту.
+          Это не ошибка генерации — отчёт сохранён в базе. Нужно адаптировать отображение под формат
+          данных. Перегенерация создаст новую запись, но не исправит чтение уже сохранённого отчёта.
         </p>
+        {diagnostic ? (
+          <pre
+            className="hr-muted"
+            style={{
+              marginTop: 12,
+              padding: 10,
+              borderRadius: 8,
+              background: "rgba(0,0,0,0.2)",
+              fontSize: 11,
+              overflow: "auto",
+              maxWidth: 560,
+            }}
+          >
+            {JSON.stringify(diagnostic, null, 2)}
+          </pre>
+        ) : null}
         <button
           type="button"
-          className="hr-btn"
+          className="hr-btn hr-btn--ghost"
           style={{ marginTop: 16 }}
-          disabled={generating}
-          onClick={onRegenerate}
+          onClick={() => window.location.reload()}
         >
-          {generating ? "Генерируем карту…" : "Перегенерировать карту"}
+          Обновить страницу
         </button>
       </div>
     </div>
@@ -1086,17 +1115,32 @@ export default function CandidateTalentMapPage() {
 
   const hasReadyReport = isReadyTalentMapReport(aiReport);
 
-  let safeContent: HrPersonTalentMapV1 | null = null;
   if (hasReadyReport && aiReport) {
-    try {
-      safeContent = normalizeAiReportContent(getReportContentRoot(aiReport));
-    } catch (err) {
-      console.error("[hr] normalize talent map content failed", err);
-      safeContent = null;
-    }
-  }
+    logReportContentShape(aiReport.content_json, aiReport.id);
+    const contentRoot = getReportContentRoot(aiReport.content_json);
+    const safeContent = normalizeAiReportContent(aiReport.content_json);
+    const contentKeys = Object.keys(contentRoot);
 
-  if (hasReadyReport && safeContent && aiReport) {
+    if (!canParseReportContent(aiReport.content_json)) {
+      return (
+        <BrokenReportState
+          candidate={candidate}
+          companyId={companyId}
+          candidateId={candidateId}
+          onRegenerate={() => onGenerate(true)}
+          generating={generating}
+          diagnostic={{
+            reportId: aiReport.id,
+            reportStatus: aiReport.report_status,
+            reportType: aiReport.report_type,
+            contentType: typeof aiReport.content_json,
+            topLevelKeys: contentKeys,
+            parseError: "content_json не является объектом или валидной JSON-строкой",
+          }}
+        />
+      );
+    }
+
     const brokenFallback = (
       <BrokenReportState
         candidate={candidate}
@@ -1104,6 +1148,14 @@ export default function CandidateTalentMapPage() {
         candidateId={candidateId}
         onRegenerate={() => onGenerate(true)}
         generating={generating}
+        diagnostic={{
+          reportId: aiReport.id,
+          reportStatus: aiReport.report_status,
+          reportType: aiReport.report_type,
+          contentType: typeof aiReport.content_json,
+          topLevelKeys: contentKeys,
+          renderError: "Ошибка отображения workspace — см. консоль",
+        }}
       />
     );
 
@@ -1115,25 +1167,13 @@ export default function CandidateTalentMapPage() {
           candidateId={candidateId}
           vacancies={vacancies}
           aiContent={safeContent}
-          rawAiContent={getReportContentRoot(aiReport)}
+          rawAiContent={contentRoot}
           aiReport={aiReport}
           onRegenerate={() => onGenerate(true)}
           generating={generating}
           genError={genError}
         />
       </WorkspaceErrorBoundary>
-    );
-  }
-
-  if (hasReadyReport && !safeContent) {
-    return (
-      <BrokenReportState
-        candidate={candidate}
-        companyId={companyId}
-        candidateId={candidateId}
-        onRegenerate={() => onGenerate(true)}
-        generating={generating}
-      />
     );
   }
 

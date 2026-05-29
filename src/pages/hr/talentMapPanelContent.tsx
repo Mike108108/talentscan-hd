@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { HrPersonTalentMapV1, HrVacancy, TalentMapRole } from "../../lib/hr/types";
 import {
+  coerceRolesList,
+  coerceStringArray,
   getList,
   getText,
   mergeFlexibleItems,
@@ -156,11 +158,14 @@ export function DataQualitySection({ ctx }: { ctx: ReportContentCtx }) {
           <p>{normalizeHrCopy(aiContent.qa_meta.hypothesis_level)}</p>
         </SectionBlock>
       ) : null}
-      {aiContent.qa_meta?.disclaimers?.length ? (
-        <SectionBlock title="Предварительные выводы">
-          <BulletList items={aiContent.qa_meta.disclaimers.map(normalizeHrCopy)} />
-        </SectionBlock>
-      ) : null}
+      {(() => {
+        const disclaimers = coerceStringArray(aiContent.qa_meta?.disclaimers);
+        return disclaimers.length > 0 ? (
+          <SectionBlock title="Предварительные выводы">
+            <BulletList items={disclaimers.map(normalizeHrCopy)} />
+          </SectionBlock>
+        ) : null;
+      })()}
     </>
   );
 }
@@ -378,7 +383,7 @@ export function buildReportLists(ctx: ReportContentCtx) {
     ),
     workEnv: mergeFlexibleItems(aiContent.work_environment ?? [], raw.work_environment),
     mgmt: mergeFlexibleItems(aiContent.management_style ?? [], raw.management_style),
-    roles: aiContent.roles ?? [],
+    roles: coerceRolesList(aiContent.roles ?? raw.roles),
     onboardingPhases: parseOnboardingTimeline(aiContent.onboarding_7_30_90, rawContent),
   };
 }

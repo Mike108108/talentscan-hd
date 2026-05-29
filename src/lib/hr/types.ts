@@ -184,3 +184,85 @@ export type VacancyFormData = {
   hiring_priorities: string;
   risks_to_check: string;
 };
+
+export type HrReportType = "hr_person_talent_map";
+
+export type HrReportStatus = "ready" | "generating" | "error" | "draft";
+
+export type HrTalentMapSectionItem = { title: string; body: string; fit?: string };
+
+export type HrPersonTalentMapHero = {
+  name?: string;
+  subtitle?: string;
+  status_label?: string;
+  best_work_format?: string;
+  key_talent?: string;
+  main_risk?: string;
+  headline?: string;
+};
+
+export type HrPersonTalentMapDataQuality = {
+  completeness?: string;
+  confidence?: string;
+  notes?: string;
+  metrics?: TalentMapMetric[];
+};
+
+export type HrPersonTalentMapExecutiveSummary = {
+  text: string;
+  fit_score?: number;
+};
+
+export type HrPersonTalentMapOnboarding = {
+  day_7?: string;
+  day_30?: string;
+  day_90?: string;
+  items?: HrTalentMapSectionItem[];
+};
+
+export type HrPersonTalentMapQaMeta = {
+  hypothesis_level?: string;
+  disclaimers?: string[];
+};
+
+/** Structured JSON for hr_person_talent_map AI reports (client-facing HR language). */
+export type HrPersonTalentMapV1 = {
+  hero: HrPersonTalentMapHero;
+  data_quality: HrPersonTalentMapDataQuality;
+  executive_summary: HrPersonTalentMapExecutiveSummary;
+  working_formula: { text: string };
+  talents: HrTalentMapSectionItem[];
+  strengths: HrTalentMapSectionItem[];
+  risks: HrTalentMapSectionItem[];
+  suitable_directions: HrTalentMapSectionItem[];
+  questionable_directions: HrTalentMapSectionItem[];
+  roles: TalentMapRole[];
+  work_environment: HrTalentMapSectionItem[];
+  management_style: HrTalentMapSectionItem[];
+  interview_questions: HrTalentMapSectionItem[];
+  test_tasks: HrTalentMapSectionItem[];
+  onboarding_7_30_90: HrPersonTalentMapOnboarding;
+  final_hr_recommendation: { text: string };
+  qa_meta?: HrPersonTalentMapQaMeta;
+};
+
+export type HrReport = {
+  id: string;
+  company_id: string;
+  candidate_id: string | null;
+  vacancy_id: string | null;
+  report_type: HrReportType;
+  report_status: HrReportStatus;
+  title: string | null;
+  summary: string | null;
+  fit_score: number | null;
+  content_json: HrPersonTalentMapV1;
+  input_snapshot: Record<string, unknown>;
+  input_hash: string;
+  model: string | null;
+  prompt_version: string;
+  generation_error: string | null;
+  generated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};

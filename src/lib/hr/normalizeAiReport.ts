@@ -1,4 +1,15 @@
-import type { HrPersonTalentMapV1, HrReport } from "./types";
+import type {
+  HrPersonTalentMapV1,
+  HrReport,
+  HrTalentMapConfidence,
+  HrTalentMapExecutiveSnapshot,
+  HrTalentMapEvidenceItem,
+  HrTalentMapHypothesisCard,
+  HrTalentMapLayer,
+  HrTalentMapManagementPlaybook,
+  HrTalentMapRiskCheck,
+  HrTalentMapVerificationPlan,
+} from "./types";
 
 const POSSIBLE_ROOT_KEYS = [
   "content",
@@ -28,6 +39,15 @@ const EXPECTED_REPORT_KEYS = [
   "onboarding_7_30_90",
   "final_hr_recommendation",
   "qa_meta",
+  "schema_version",
+  "executive_snapshot",
+  "layer_map",
+  "hypothesis_cards",
+  "risk_checks",
+  "management_playbook",
+  "verification_plan",
+  "evidence_map",
+  "ui",
 ] as const;
 
 const LIST_NESTED_KEYS = ["items", "list", "points", "values", "data", "entries"] as const;
@@ -212,6 +232,153 @@ export function getReportContentRoot(raw: unknown): Record<string, unknown> {
   return unwrapReportContent(parsed);
 }
 
+function normalizeConfidence(raw: unknown): HrTalentMapConfidence {
+  const v = asString(raw).toLowerCase();
+  if (v === "high" || v === "medium" || v === "low") return v;
+  return "medium";
+}
+
+function normalizeStringArray(raw: unknown, max = 20): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .slice(0, max)
+    .map((item) => asString(item))
+    .filter(Boolean);
+}
+
+function normalizeExecutiveSnapshot(raw: unknown): HrTalentMapExecutiveSnapshot | undefined {
+  const rec = asObject(raw);
+  const snapshot: HrTalentMapExecutiveSnapshot = {
+    one_sentence: asString(rec.one_sentence),
+    best_use: asString(rec.best_use),
+    main_value: asString(rec.main_value),
+    main_risk: asString(rec.main_risk),
+    how_to_check_first: asString(rec.how_to_check_first),
+    decision_note: asString(rec.decision_note),
+  };
+  if (!Object.values(snapshot).some(Boolean)) return undefined;
+  return snapshot;
+}
+
+function normalizeLayerMap(raw: unknown): HrTalentMapLayer[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 12).map((item, idx) => {
+    const rec = asObject(item);
+    return {
+      id: asString(rec.id, `layer-${idx + 1}`),
+      title: asString(rec.title, "—"),
+      client_summary: asString(rec.client_summary),
+      hr_meaning: asString(rec.hr_meaning),
+      key_signal: asString(rec.key_signal),
+      risk_signal: asString(rec.risk_signal),
+      how_to_check: asString(rec.how_to_check),
+      confidence: normalizeConfidence(rec.confidence),
+      ui_priority:
+        typeof rec.ui_priority === "number" && Number.isFinite(rec.ui_priority)
+          ? rec.ui_priority
+          : idx + 1,
+      source_layer_id: asString(rec.source_layer_id),
+    };
+  });
+}
+
+function normalizeHypothesisCards(raw: unknown): HrTalentMapHypothesisCard[] {
+  if (!Array.isArray(raw)) return [];
+  const types = new Set(["talent", "risk", "condition", "management", "growth"]);
+  return raw.slice(0, 30).map((item, idx) => {
+    const rec = asObject(item);
+    const typeRaw = asString(rec.type).toLowerCase();
+    const type = types.has(typeRaw)
+      ? (typeRaw as HrTalentMapHypothesisCard["type"])
+      : "talent";
+    return {
+      id: asString(rec.id, `hypothesis-${idx + 1}`),
+      type,
+      title: asString(rec.title, "—"),
+      statement: asString(rec.statement),
+      why_it_matters: asString(rec.why_it_matters),
+      workplace_manifestation: asString(rec.workplace_manifestation),
+      how_to_check: asString(rec.how_to_check),
+      good_signal: asString(rec.good_signal),
+      warning_signal: asString(rec.warning_signal),
+      related_layer_ids: normalizeStringArray(rec.related_layer_ids),
+      confidence: normalizeConfidence(rec.confidence),
+      client_visible: rec.client_visible !== false,
+    };
+  });
+}
+
+function normalizeRiskChecks(raw: unknown): HrTalentMapRiskCheck[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 20).map((item, idx) => {
+    const rec = asObject(item);
+    return {
+      id: asString(rec.id, `risk-${idx + 1}`),
+      risk: asString(rec.risk, "—"),
+      how_it_may_show_up: asString(rec.how_it_may_show_up),
+      interview_check: asString(rec.interview_check),
+      test_task_check: asString(rec.test_task_check),
+      good_signal: asString(rec.good_signal),
+      warning_signal: asString(rec.warning_signal),
+      management_prevention: asString(rec.management_prevention),
+      related_hypothesis_ids: normalizeStringArray(rec.related_hypothesis_ids),
+      confidence: normalizeConfidence(rec.confidence),
+    };
+  });
+}
+
+function normalizeManagementPlaybook(raw: unknown): HrTalentMapManagementPlaybook | undefined {
+  const rec = asObject(raw);
+  const playbook: HrTalentMapManagementPlaybook = {
+    how_to_set_tasks: asString(rec.how_to_set_tasks),
+    how_to_give_feedback: asString(rec.how_to_give_feedback),
+    how_to_motivate: asString(rec.how_to_motivate),
+    what_not_to_do: asString(rec.what_not_to_do),
+    best_environment: asString(rec.best_environment),
+    overload_signals: asString(rec.overload_signals),
+    first_30_days_focus: asString(rec.first_30_days_focus),
+  };
+  if (!Object.values(playbook).some(Boolean)) return undefined;
+  return playbook;
+}
+
+function normalizeVerificationPlan(raw: unknown): HrTalentMapVerificationPlan | undefined {
+  const rec = asObject(raw);
+  const plan: HrTalentMapVerificationPlan = {
+    first_check: asString(rec.first_check),
+    interview_focus: asString(rec.interview_focus),
+    test_task_focus: asString(rec.test_task_focus),
+    what_to_observe: asString(rec.what_to_observe),
+    decision_after_check: asString(rec.decision_after_check),
+  };
+  if (!Object.values(plan).some(Boolean)) return undefined;
+  return plan;
+}
+
+function normalizeEvidenceMap(raw: unknown): HrTalentMapEvidenceItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 40).map((item, idx) => {
+    const rec = asObject(item);
+    return {
+      id: asString(rec.id, `evidence-${idx + 1}`),
+      conclusion: asString(rec.conclusion),
+      based_on: normalizeStringArray(rec.based_on),
+      source_layer_ids: normalizeStringArray(rec.source_layer_ids),
+      confidence: normalizeConfidence(rec.confidence),
+      client_visible: rec.client_visible === true,
+    };
+  });
+}
+
+/** Whether workspace should use v1.2 layered layout. */
+export function isTalentMapV12(root: Record<string, unknown>): boolean {
+  if (asString(root.schema_version) === "hr_person_talent_map_v1_2") return true;
+  if (Array.isArray(root.layer_map) && root.layer_map.length > 0) return true;
+  if (Array.isArray(root.hypothesis_cards) && root.hypothesis_cards.length > 0) return true;
+  if (Array.isArray(root.risk_checks) && root.risk_checks.length > 0) return true;
+  return false;
+}
+
 function buildNormalizedContent(root: Record<string, unknown>): HrPersonTalentMapV1 {
   const hero = asObject(root.hero);
   const dataQuality = asObject(root.data_quality);
@@ -245,7 +412,17 @@ function buildNormalizedContent(root: Record<string, unknown>): HrPersonTalentMa
     asString(finalRec.text) ||
     executiveText;
 
+  const schemaVersion = asString(root.schema_version);
+  const executiveSnapshot = normalizeExecutiveSnapshot(root.executive_snapshot);
+  const layerMap = normalizeLayerMap(root.layer_map);
+  const hypothesisCards = normalizeHypothesisCards(root.hypothesis_cards);
+  const riskChecks = normalizeRiskChecks(root.risk_checks);
+  const managementPlaybook = normalizeManagementPlaybook(root.management_playbook);
+  const verificationPlan = normalizeVerificationPlan(root.verification_plan);
+  const evidenceMap = normalizeEvidenceMap(root.evidence_map);
+
   return {
+    ...(schemaVersion ? { schema_version: schemaVersion } : {}),
     hero: {
       name: asString(hero.name),
       subtitle: asString(hero.subtitle),
@@ -289,6 +466,14 @@ function buildNormalizedContent(root: Record<string, unknown>): HrPersonTalentMa
       hypothesis_level: asString(qaMeta.hypothesis_level),
       disclaimers: normalizeDisclaimers(qaMeta.disclaimers),
     },
+    ...(executiveSnapshot ? { executive_snapshot: executiveSnapshot } : {}),
+    ...(layerMap.length > 0 ? { layer_map: layerMap } : {}),
+    ...(hypothesisCards.length > 0 ? { hypothesis_cards: hypothesisCards } : {}),
+    ...(riskChecks.length > 0 ? { risk_checks: riskChecks } : {}),
+    ...(managementPlaybook ? { management_playbook: managementPlaybook } : {}),
+    ...(verificationPlan ? { verification_plan: verificationPlan } : {}),
+    ...(evidenceMap.length > 0 ? { evidence_map: evidenceMap } : {}),
+    ...(root.ui !== undefined ? { ui: root.ui } : {}),
   };
 }
 

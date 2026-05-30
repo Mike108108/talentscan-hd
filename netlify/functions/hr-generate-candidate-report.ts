@@ -9,7 +9,7 @@ import {
   normalizePersonTalentMapContent,
 } from "./hr-report-normalize";
 
-const PROMPT_VERSION = "hr_person_talent_map_v1_1";
+const PROMPT_VERSION = "hr_person_talent_map_v1_2";
 const DEFAULT_REPORT_TYPE = "hr_person_talent_map";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -135,21 +135,24 @@ function buildSystemPrompt(): string {
 
 Режим работы:
 - Сначала прочитай analysis_layers в analysis_packet по порядку priority (1 → 8).
-- Пакет слойный и подготовлен для будущей многошаговой генерации, но сейчас ты работаешь в режиме single-call.
+- Используй каждый слой analysis_packet.analysis_layers как источник HR-гипотез — не пересказывай технические данные.
+- Пакет слойный, но сейчас ты работаешь в режиме single-call: синтезируй выводы в цельную HR-карту кандидата.
 - Не перечисляй технические слои и analysis_layers клиенту — синтезируй выводы в цельную HR-карту кандидата.
 - Это hr_person_talent_map — общая карта талантов кандидата, НЕ оценка под конкретную вакансию.
 - vacancy_context, если есть, используй только как контекст — не для процента соответствия и не для role-fit score.
 
 Правила:
 - Пиши только на русском языке.
-- Используй HR-язык для работодателя: рабочий формат, сильные стороны, риски, условия, интервью, онбординг.
+- Используй HR-язык для работодателя: рабочий стиль, рабочий формат, талант, риск, условия раскрытия, среда, управление, коммуникация, интервью, тестовое, адаптация, следующий шаг, проверка гипотезы, что проверить перед решением.
 - Следуй prompt_rules из analysis_packet: forbidden_client_terms, interpretation_rules, priority_rules.
 - ЗАПРЕЩЕНО использовать технические термины Human Design, соционики и внутренней методологии в клиентских полях.
-- Запрещённые слова и темы: Human Design, Дизайн Человека, бодиграф, ворота, каналы, центры, сакрал, селезёнка, эмоциональный центр, профиль (в смысле HD), авторитет, стратегия (в смысле HD), Генератор, Проектор, Манифестор, Рефлектор, Генный Ключ, соционика, социотип, ЧС, БЭ, БЛ, ЧИ и похожие обозначения.
+- Запрещённые слова и темы: Human Design, Дизайн Человека, бодиграф, ворота, каналы, центры, сакрал, селезёнка, эмоциональный центр, профиль (в смысле HD), авторитет, стратегия (в смысле HD), Генератор, Манифестирующий Генератор, Проектор, Манифестор, Рефлектор, Генный Ключ, соционика, социотип, ЧС, БЭ, БЛ, ЧИ и похожие обозначения.
+- Исключение: технические термины допустимы ТОЛЬКО во внутреннем evidence_map.based_on при client_visible: false. Во всех остальных полях — запрещены.
 - Не придумывай опыт, факты, должности и достижения кандидата — опирайся только на переданный analysis_packet.
 - Все выводы формулируй как HR-гипотезы, не как финальный приговор о найме.
-- Каждый важный риск должен включать практическую проверку (как проверить на интервью или в тестовом).
-- НЕ возвращай fit_score, проценты соответствия и формулировки вроде «подходит на 80%».
+- Каждый важный вывод оформляй как hypothesis_cards (тип talent/risk/condition/management/growth).
+- Каждый важный риск связывай с проверкой в risk_checks (интервью + тестовое + профилактика для руководителя).
+- НЕ считай role-fit, НЕ возвращай fit_score, проценты соответствия и формулировки вроде «подходит на 80%».
 - В working_formula.text можно использовать только теги <em> и <strong> для акцентов.
 - Верни ТОЛЬКО валидный JSON без markdown и без пояснений вне JSON.`;
 }
@@ -159,9 +162,21 @@ function buildUserPrompt(analysisPacket: Record<string, unknown>, reportType: Re
 
 Важно:
 - Это общая карта талантов кандидата (hr_person_talent_map), а НЕ оценка под вакансию.
+- Используй analysis_packet.analysis_layers — каждый слой должен отразиться в layer_map.
 - vacancy_context, если присутствует, используй только как контекст — не для процента соответствия.
-- НЕ возвращай fit_score в executive_summary.
+- НЕ возвращай fit_score в executive_summary или других полях.
 - НЕ возвращай проценты соответствия и формулировки вроде «подходит на 80%».
+- НЕ считай role-fit.
+
+8 слоёв для layer_map (source_layer_id → title):
+- passport_work_format → Рабочий формат и вход в задачи
+- main_axes → Главная рабочая тема
+- channels_talent_links → Связки талантов
+- centers_stability_and_sensitivity → Устойчивость и чувствительность к среде
+- strong_gate_themes → Повторяющиеся рабочие темы
+- planetary_work_roles → Коммуникация, ценности и точки роста
+- variables_environment_motivation → Среда, мотивация и восстановление
+- data_quality_and_next_steps → Качество данных и следующий шаг
 
 analysis_packet:
 ${JSON.stringify(analysisPacket, null, 2)}
@@ -169,6 +184,78 @@ ${JSON.stringify(analysisPacket, null, 2)}
 Верни JSON строго со следующей структурой (все поля обязательны, массивы — не пустые где возможно):
 
 {
+  "schema_version": "hr_person_talent_map_v1_2",
+  "executive_snapshot": {
+    "one_sentence": "string — главный вывод за 30 секунд",
+    "best_use": "string — где кандидат даст максимум пользы",
+    "main_value": "string — главная ценность для команды",
+    "main_risk": "string — главный риск",
+    "how_to_check_first": "string — что проверить первым",
+    "decision_note": "string — заметка для решения"
+  },
+  "layer_map": [{
+    "id": "string",
+    "title": "string",
+    "client_summary": "string",
+    "hr_meaning": "string",
+    "key_signal": "string",
+    "risk_signal": "string",
+    "how_to_check": "string",
+    "confidence": "high|medium|low",
+    "ui_priority": 1,
+    "source_layer_id": "string"
+  }],
+  "hypothesis_cards": [{
+    "id": "string",
+    "type": "talent|risk|condition|management|growth",
+    "title": "string",
+    "statement": "string",
+    "why_it_matters": "string",
+    "workplace_manifestation": "string",
+    "how_to_check": "string",
+    "good_signal": "string",
+    "warning_signal": "string",
+    "related_layer_ids": ["string"],
+    "confidence": "high|medium|low",
+    "client_visible": true
+  }],
+  "risk_checks": [{
+    "id": "string",
+    "risk": "string",
+    "how_it_may_show_up": "string",
+    "interview_check": "string",
+    "test_task_check": "string",
+    "good_signal": "string",
+    "warning_signal": "string",
+    "management_prevention": "string",
+    "related_hypothesis_ids": ["string"],
+    "confidence": "high|medium|low"
+  }],
+  "management_playbook": {
+    "how_to_set_tasks": "string",
+    "how_to_give_feedback": "string",
+    "how_to_motivate": "string",
+    "what_not_to_do": "string",
+    "best_environment": "string",
+    "overload_signals": "string",
+    "first_30_days_focus": "string"
+  },
+  "verification_plan": {
+    "first_check": "string",
+    "interview_focus": "string",
+    "test_task_focus": "string",
+    "what_to_observe": "string",
+    "decision_after_check": "string"
+  },
+  "evidence_map": [{
+    "id": "string",
+    "conclusion": "string",
+    "based_on": ["string — технические ссылки, только если client_visible: false"],
+    "source_layer_ids": ["string"],
+    "confidence": "high|medium|low",
+    "client_visible": false
+  }],
+  "ui": {},
   "hero": {
     "name": "string",
     "subtitle": "string",
@@ -196,12 +283,26 @@ ${JSON.stringify(analysisPacket, null, 2)}
   "roles": [{ "role": "string", "fit": "string", "note": "string" }],
   "work_environment": [{ "title": "string", "body": "string" }],
   "management_style": [{ "title": "string", "body": "string" }],
-  "interview_questions": [{ "title": "string", "body": "string" }],
-  "test_tasks": [{ "title": "string", "body": "string" }],
+  "interview_questions": [{
+    "question": "string",
+    "checks": "string",
+    "related_hypothesis_id": "string",
+    "good_answer": "string",
+    "warning_sign": "string",
+    "how_to_evaluate": "string"
+  }],
+  "test_tasks": [{
+    "task": "string",
+    "checks": "string",
+    "time_estimate": "string",
+    "criteria": "string",
+    "warning_sign": "string",
+    "next_step": "string"
+  }],
   "onboarding_7_30_90": {
-    "day_7": "string",
-    "day_30": "string",
-    "day_90": "string",
+    "day_7": { "summary": "string", "focus": "string", "give": "string", "verify": "string", "success_signal": "string", "risk": "string" },
+    "day_30": { "summary": "string", "focus": "string", "give": "string", "verify": "string", "success_signal": "string", "risk": "string" },
+    "day_90": { "summary": "string", "focus": "string", "give": "string", "verify": "string", "success_signal": "string", "risk": "string" },
     "items": [{ "title": "string", "body": "string" }]
   },
   "final_hr_recommendation": { "text": "string" },
@@ -213,7 +314,8 @@ ${JSON.stringify(analysisPacket, null, 2)}
   }
 }
 
-qa_meta — служебные пометки для HR, без запрещённых терминов.`;
+qa_meta — служебные пометки для HR, без запрещённых терминов.
+evidence_map — служебное поле, по умолчанию client_visible: false.`;
 }
 
 function extractJsonContent(raw: string): Record<string, unknown> {
@@ -620,7 +722,11 @@ export const handler: Handler = async (
     contentJson.hero.headline ||
     (contentJson.hero.name ? `Карта талантов — ${contentJson.hero.name}` : "") ||
     `Карта талантов — ${asString(candidate.name)}`;
-  const summary = contentJson.executive_summary.text || contentJson.final_hr_recommendation.text || null;
+  const summary =
+    contentJson.executive_snapshot?.one_sentence ||
+    contentJson.executive_summary.text ||
+    contentJson.final_hr_recommendation.text ||
+    null;
   const fitScore = null;
 
   const reportPayload = {

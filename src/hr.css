@@ -1907,3 +1907,189 @@
     text-align: left;
   }
 }
+
+/* HR Talent Map v1.2 — layered workspace */
+.hr-tm-page--v12 .hr-tm-layer-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hr-tm-layer-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--hr-radius-md);
+  border: 1px solid var(--hr-line);
+  background: rgba(255, 255, 255, 0.02);
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.hr-tm-layer-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.hr-tm-layer-card--clickable:hover,
+.hr-tm-layer-card--clickable:focus-visible {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  outline: none;
+}
+
+.hr-tm-layer-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.hr-tm-layer-card-title {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--hr-text);
+}
+
+.hr-tm-layer-card-summary {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--hr-muted);
+  line-height: 1.45;
+  flex: 1;
+}
+
+.hr-tm-snapshot-block {
+  margin-bottom: 4px;
+}
+
+.hr-tm-snapshot-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hr-line);
+}
+
+.hr-tm-snapshot-row:last-child {
+  border-bottom: 0;
+}
+
+.hr-tm-snapshot-label {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--hr-muted);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.hr-tm-snapshot-value {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--hr-text);
+}
+
+.hr-tm-confidence {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.hr-tm-confidence--compact {
+  padding: 2px 7px;
+  font-size: 0.68rem;
+}
+
+.hr-tm-confidence--high {
+  background: rgba(76, 175, 120, 0.15);
+  color: #7dd4a0;
+}
+
+.hr-tm-confidence--medium {
+  background: rgba(255, 193, 7, 0.12);
+  color: #e6c04a;
+}
+
+.hr-tm-confidence--low {
+  background: rgba(255, 120, 100, 0.12);
+  color: #f0a090;
+}
+
+.hr-tm-row-badge {
+  display: inline-block;
+  margin-top: 4px;
+}
+
+.hr-tm-verification-plan {
+  padding: 12px 14px;
+  border-radius: var(--hr-radius-md);
+  border: 1px solid var(--hr-line);
+  background: rgba(255, 255, 255, 0.03);
+  margin-bottom: 8px;
+}
+
+.hr-tm-verification-plan-title {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--hr-muted);
+  font-weight: 700;
+}
+
+.hr-tm-playbook-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.hr-tm-playbook-card {
+  padding: 12px 14px;
+  border-radius: var(--hr-radius-md);
+  border: 1px solid var(--hr-line);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.hr-tm-playbook-card-title {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--hr-muted);
+  font-weight: 700;
+}
+
+.hr-tm-playbook-card p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--hr-text);
+}
+
+.hr-tm-evidence-note {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--hr-radius-md);
+  border: 1px dashed var(--hr-line);
+  font-size: 0.84rem;
+  color: var(--hr-muted);
+  line-height: 1.45;
+}
+
+@media (max-width: 768px) {
+  .hr-tm-playbook-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hr-tm-layer-card {
+    flex-direction: column;
+  }
+}

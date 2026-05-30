@@ -3,7 +3,9 @@
  * Single-call today; structured for future multi-layer prompts + synthesis.
  */
 
-type Side = "personality" | "design"; = [
+type Side = "personality" | "design";
+
+const FORBIDDEN_CLIENT_TERMS = [
   "Human Design",
   "Дизайн Человека",
   "бодиграф",

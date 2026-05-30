@@ -679,21 +679,33 @@ export const handler: Handler = async (
         chart: chart as Record<string, unknown>,
         inputHash,
         generatedAt: now,
+        companyId,
+        candidateId,
       });
     } catch (err) {
       const stage =
         err instanceof V2GenerationError ? err.stage : "v2_limited_layers_prompt";
       const message =
         err instanceof Error ? err.message : "Ошибка генерации v2 отчёта.";
+      const details =
+        stage === "v2_limited_layers_prompt_timeout"
+          ? "OpenAI call exceeded safe timeout"
+          : undefined;
       console.error("[hr-generate-candidate-report] v2 limited generation failed", {
         stage,
         message,
+        company_id: companyId,
+        candidate_id: candidateId,
+        report_type: reportType,
+        prompt_version: V2_LIMITED_PROMPT_VERSION,
+        details,
         err,
       });
       return jsonResponse(502, {
         error: message,
         source: "openai",
         stage,
+        ...(details ? { details } : {}),
       });
     }
 
@@ -719,6 +731,14 @@ export const handler: Handler = async (
       updated_at: now,
     };
 
+    console.info("[hr-generate-candidate-report]", {
+      stage: "v2_limited_save_start",
+      company_id: companyId,
+      candidate_id: candidateId,
+      report_type: reportType,
+      prompt_version: V2_LIMITED_PROMPT_VERSION,
+    });
+
     const { saved, error: saveErr } = await saveReport(
       db,
       companyId,
@@ -733,6 +753,8 @@ export const handler: Handler = async (
       console.error("[hr-generate-candidate-report] v2 report save failed", {
         stage: "v2_report_save",
         error: saveErr,
+        company_id: companyId,
+        candidate_id: candidateId,
       });
       return jsonResponse(500, {
         error: saveErr ?? "Ошибка сохранения отчёта.",

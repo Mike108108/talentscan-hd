@@ -12,21 +12,65 @@ export const V2_LIMITED_PROMPT_VERSION = "hr_person_talent_map_v2_limited_layers
 export const V2_SCHEMA_VERSION = "hr_person_talent_map_v2";
 const SOURCE_ANALYSIS_PACKET_VERSION = "analysis_packet_v1_1";
 const CONTENT_CONTRACT_VERSION = "2.0.0";
+const DEFAULT_OPENAI_TIMEOUT_MS = 22_000;
+const MAX_BASE_FIELD_CHARS = 280;
+const OPENAI_MAX_OUTPUT_TOKENS = 2200;
 
-const AI_LAYER_KEYS = [
-  "work_format",
-  "task_entry",
-  "decision_style",
+/** Only these layers use OpenAI on the limited proof-of-concept stage. */
+const AI_LAYER_KEYS = ["work_format", "task_entry", "decision_style"] as const;
+
+const PLANNED_LAYER_KEYS = [
   "work_signature",
   "inner_coherence",
   "stable_zones",
   "sensitive_zones",
-  "data_quality",
 ] as const;
 
 type AiLayerKey = (typeof AI_LAYER_KEYS)[number];
+type PlannedLayerKey = (typeof PLANNED_LAYER_KEYS)[number];
 
-export type V2LayerKey = AiLayerKey | "chart_passport";
+export type V2LayerKey =
+  | AiLayerKey
+  | PlannedLayerKey
+  | "chart_passport"
+  | "data_quality";
+
+export type V2LimitedLogContext = {
+  companyId?: string;
+  candidateId?: string;
+  reportType?: string;
+  promptVersion?: string;
+};
+
+function resolveOpenAiTimeoutMs(): number {
+  const raw = Number.parseInt(
+    process.env.HR_TALENT_MAP_V2_OPENAI_TIMEOUT_MS ?? "",
+    10,
+  );
+  if (Number.isFinite(raw) && raw >= 5_000 && raw <= 25_000) return raw;
+  return DEFAULT_OPENAI_TIMEOUT_MS;
+}
+
+function logV2Stage(
+  stage: string,
+  ctx: V2LimitedLogContext,
+  extra?: Record<string, unknown>,
+) {
+  console.info("[hr-talent-map-v2-limited]", {
+    stage,
+    company_id: ctx.companyId,
+    candidate_id: ctx.candidateId,
+    report_type: ctx.reportType,
+    prompt_version: ctx.promptVersion,
+    ...extra,
+  });
+}
+
+function truncateText(value: string, max = MAX_BASE_FIELD_CHARS): string {
+  const t = value.trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1)}…`;
+}
 
 const LAYER_META: Record<
   V2LayerKey,
@@ -218,10 +262,12 @@ function collectSynthesisClientTexts(blocks: Record<string, unknown>): string[] 
 function scanV2BaseBannedTerms(content: Record<string, unknown>): string[] {
   const layerReports = Array.isArray(content.layer_reports) ? content.layer_reports : [];
   const baseOnly = {
-    layer_reports: layerReports.map((layer) => {
-      const rec = asRecord(layer);
-      return { base: rec.base ?? {} };
-    }),
+    layer_reports: layerReports
+      .filter((layer) => asString(asRecord(layer).status, "ready") === "ready")
+      .map((layer) => {
+        const rec = asRecord(layer);
+        return { base: rec.base ?? {} };
+      }),
     synthesis_blocks: content.synthesis_blocks ?? {},
   };
   return findBannedClientTerms(baseOnly);
@@ -230,7 +276,9 @@ function scanV2BaseBannedTerms(content: Record<string, unknown>): string[] {
 function scanV2BaseHtml(content: Record<string, unknown>): boolean {
   const layerReports = Array.isArray(content.layer_reports) ? content.layer_reports : [];
   for (const layer of layerReports) {
-    for (const text of collectBaseTextFields(asRecord(layer))) {
+    const rec = asRecord(layer);
+    if (asString(rec.status, "ready") !== "ready") continue;
+    for (const text of collectBaseTextFields(rec)) {
       if (hasDisallowedHtml(text)) return true;
     }
   }
@@ -241,66 +289,200 @@ function scanV2BaseHtml(content: Record<string, unknown>): boolean {
   return false;
 }
 
+function buildCompactAiInput(analysisPacket: Record<string, unknown>): Record<string, unknown> {
+  const sourceChart = asRecord(analysisPacket.source_chart);
+  const passport = asRecord(sourceChart.passport);
+  const centers = asRecord(sourceChart.centers);
+  const variables = asRecord(sourceChart.variables);
+  const dq = asRecord(analysisPacket.data_quality);
+  const candidate = asRecord(analysisPacket.candidate);
+  const rules = asRecord(analysisPacket.prompt_rules);
+
+  const analysisLayers = Array.isArray(analysisPacket.analysis_layers)
+    ? analysisPacket.analysis_layers
+    : [];
+  const compactLayers = analysisLayers
+    .filter((layer) => {
+      const id = asString(asRecord(layer).id);
+      return (
+        id === "passport_work_format" ||
+        id === "main_axes" ||
+        id === "centers_stability_and_sensitivity" ||
+        id === "data_quality_and_next_steps"
+      );
+    })
+    .map((layer) => {
+      const rec = asRecord(layer);
+      return {
+        id: rec.id,
+        title: rec.title,
+        priority: rec.priority,
+        input_summary: rec.input_summary,
+        source_refs: rec.source_refs,
+      };
+    });
+
+  return {
+    report_context: analysisPacket.report_context ?? null,
+    candidate: {
+      id: candidate.id ?? null,
+      has_hr_comment: Boolean(asString(candidate.hr_comment)),
+      chart_status: candidate.chart_status ?? null,
+    },
+    source_chart: {
+      passport: {
+        type: passport.type ?? null,
+        strategy: passport.strategy ?? null,
+        authority: passport.authority ?? null,
+        profile: passport.profile ?? null,
+        definition: passport.definition ?? null,
+      },
+      centers: {
+        definedCenters: asStringArray(centers.definedCenters).slice(0, 12),
+        openCenters: asStringArray(centers.openCenters).slice(0, 12),
+      },
+      variables: {
+        environment: variables.environment ?? null,
+        motivation: variables.motivation ?? null,
+        canRenderBodygraph: variables.canRenderBodygraph ?? false,
+        missingForBodygraph: asStringArray(variables.missingForBodygraph).slice(0, 8),
+      },
+    },
+    data_quality: {
+      report_confidence_hint: dq.report_confidence_hint ?? null,
+      chart: asRecord(dq.chart),
+      candidate: asRecord(dq.candidate),
+    },
+    analysis_layers: compactLayers,
+    prompt_rules: {
+      forbidden_client_terms: asStringArray(rules.forbidden_client_terms).slice(0, 12),
+      interpretation_rules: asStringArray(rules.interpretation_rules).slice(0, 4),
+    },
+  };
+}
+
 function buildV2LimitedSystemPrompt(): string {
-  return `Ты — TalentScan HR Layer Engine (ограниченный v2 режим).
+  return `TalentScan HR Layer Engine (v2 limited, 3 layers only).
 
-Задача: по analysis_packet сформировать независимые atomic layer_reports для указанных layer_key.
-
-Правила:
-- Пиши только на русском языке.
-- В полях base — только прикладной HR-язык для работодателя. Без технических терминов Human Design, соционики и внутренней методологии.
-- В полях pro и evidence — можно ссылаться на технические источники карты (type, authority, gates, centers и т.д.).
-- Каждый слой — самостоятельная HR-гипотеза, не финальное решение о найме.
-- Не пиши «брать / не брать», fit_score, проценты соответствия вакансии, role-fit.
-- Не придумывай опыт, факты и должности — только analysis_packet.
-- Каждый ready layer_report обязан иметь base, pro и evidence.
-- В base для рисков укажи, что проверить; в pro/evidence зафиксируй confidence и limitations при нехватке данных.
-- Следуй prompt_rules из analysis_packet.
-- Верни ТОЛЬКО валидный JSON без markdown и без текста вне JSON.`;
+Верни JSON { "layer_reports": [...] } для layer_key: work_format, task_entry, decision_style.
+Короткие формулировки: каждое base-поле до 220 символов, pro.connection_logic до 120, evidence.limitations до 120.
+base — HR-язык без Human Design / соционики. pro/evidence — технические ссылки допустимы.
+Без fit_score, role-fit, «брать/не брать». Только compact_input. Без markdown.`;
 }
 
-function buildV2LimitedUserPrompt(analysisPacket: Record<string, unknown>): string {
+function buildV2LimitedUserPrompt(compactInput: Record<string, unknown>): string {
   const keysList = AI_LAYER_KEYS.join(", ");
-  return `Сгенерируй layer_reports для layer_key: ${keysList}.
+  return `Сгенерируй ровно 3 layer_reports: ${keysList}.
+status=ready. base-поля — строки. Короткий JSON.
 
-Для каждого layer_key верни объект:
-{
-  "layer_key": "<key>",
-  "hr_title": "русское название",
-  "group": "energy_and_decision|core|centers_channels_gates|evidence_and_quality",
-  "status": "ready",
-  "ui_priority": число,
-  "base": {
-    "short_summary": "",
-    "detailed_explanation": "",
-    "how_it_appears_at_work": "",
-    "where_useful": "",
-    "risks": "",
-    "management_tips": "",
-    "what_to_check": ""
-  },
-  "pro": {
-    "technical_sources": [],
-    "source_values": {},
-    "connection_logic": "",
-    "confidence": "high|medium|low|unknown",
-    "human_check": ""
-  },
-  "evidence": {
-    "source_fields": [],
-    "source_layer_keys": [],
-    "confidence": "high|medium|low|unknown",
-    "limitations": "",
-    "warnings": []
-  }
+Шаблон элемента:
+{"layer_key":"","hr_title":"","group":"energy_and_decision","status":"ready","ui_priority":2,"base":{"short_summary":"","detailed_explanation":"","how_it_appears_at_work":"","where_useful":"","risks":"","management_tips":"","what_to_check":""},"pro":{"technical_sources":[],"source_values":{},"connection_logic":"","confidence":"medium","human_check":""},"evidence":{"source_fields":[],"source_layer_keys":[],"confidence":"medium","limitations":"","warnings":[]}}
+
+compact_input:
+${JSON.stringify(compactInput)}`;
 }
 
-Все перечисленные layer_key обязательны. Поля base — строки (не массивы).
+function buildPlannedLayer(layerKey: PlannedLayerKey): Record<string, unknown> {
+  const meta = LAYER_META[layerKey];
+  return {
+    layer_key: layerKey,
+    hr_title: meta.hr_title,
+    group: meta.group,
+    status: "planned",
+    ui_priority: meta.ui_priority,
+    base: {
+      short_summary:
+        "Этот слой будет раскрыт в следующем этапе послойной генерации.",
+      detailed_explanation: "",
+      how_it_appears_at_work: "",
+      where_useful: "",
+      risks: "",
+      management_tips: "",
+      what_to_check: "",
+    },
+    pro: {
+      technical_sources: [],
+      source_values: {},
+      connection_logic: "Слой не генерировался AI на limited этапе.",
+      confidence: "unknown",
+      human_check: "",
+    },
+    evidence: {
+      source_fields: [],
+      source_layer_keys: [],
+      confidence: "unknown",
+      limitations: "Слой не генерировался AI на limited этапе.",
+      warnings: ["planned_on_limited_stage"],
+    },
+  };
+}
 
-analysis_packet:
-${JSON.stringify(analysisPacket, null, 2)}
+function buildDataQualityLayerReport(
+  analysisPacket: Record<string, unknown>,
+): Record<string, unknown> {
+  const dq = asRecord(analysisPacket.data_quality);
+  const hint = asString(dq.report_confidence_hint, "medium");
+  const chart = asRecord(dq.chart);
+  const candidate = asRecord(dq.candidate);
+  const meta = LAYER_META.data_quality;
 
-Верни JSON: { "layer_reports": [ ... ] }`;
+  const missing: string[] = [];
+  if (!candidate.has_hr_comment) missing.push("комментарий HR");
+  if (!candidate.has_birth_time) missing.push("время рождения");
+  if (!candidate.has_birth_place) missing.push("место рождения");
+
+  const shortSummary = chart.has_normalized_chart
+    ? "Данных карты достаточно для ограниченного v2-отчёта; часть слоёв пока в статусе planned."
+    : "Данные карты неполные — выводы по AI-слоям носят осторожный характер.";
+
+  return {
+    layer_key: "data_quality",
+    hr_title: meta.hr_title,
+    group: meta.group,
+    status: "ready",
+    ui_priority: meta.ui_priority,
+    base: {
+      short_summary: shortSummary,
+      detailed_explanation: truncateText(
+        `Режим layered_limited: 3 AI-слоя (work_format, task_entry, decision_style).${
+          missing.length ? ` Не хватает: ${missing.join(", ")}.` : ""
+        }`,
+        400,
+      ),
+      how_it_appears_at_work: "",
+      where_useful: "",
+      risks: missing.length
+        ? "Неполный HR-контекст может снижать точность гипотез."
+        : "",
+      management_tips: "Дополните комментарий HR и контекст команды перед финальным решением.",
+      what_to_check: "Сверить AI-гипотезы с интервью и наблюдением в первые недели.",
+    },
+    pro: {
+      technical_sources: ["data_quality.chart", "data_quality.candidate"],
+      source_values: { chart, candidate },
+      connection_logic: "Детерминированный слой data_quality для limited v2.",
+      confidence: normalizeConfidence(hint),
+      human_check: "Проверить полноту birth data и HR-комментарий.",
+    },
+    evidence: {
+      source_fields: ["data_quality.report_confidence_hint"],
+      source_layer_keys: ["work_format", "task_entry", "decision_style"],
+      confidence: normalizeConfidence(hint),
+      limitations: "Limited stage: не все 34 слоя сгенерированы.",
+      warnings: missing.length ? [`missing: ${missing.join(", ")}`] : [],
+    },
+  };
+}
+
+function buildDeterministicLimitedLayers(
+  analysisPacket: Record<string, unknown>,
+  candidate: Record<string, unknown>,
+): Record<string, unknown>[] {
+  return [
+    buildChartPassportLayer(analysisPacket, candidate),
+    ...PLANNED_LAYER_KEYS.map((key) => buildPlannedLayer(key)),
+    buildDataQualityLayerReport(analysisPacket),
+  ];
 }
 
 function buildChartPassportLayer(
@@ -426,30 +608,30 @@ function normalizeLayerReport(raw: Record<string, unknown>): Record<string, unkn
         ? raw.ui_priority
         : meta?.ui_priority ?? 99,
     base: {
-      short_summary: asString(base.short_summary),
-      detailed_explanation: asString(base.detailed_explanation),
-      how_it_appears_at_work: asString(base.how_it_appears_at_work),
-      where_useful: asString(base.where_useful),
-      risks: asString(base.risks),
-      management_tips: asString(base.management_tips),
-      what_to_check: asString(base.what_to_check),
+      short_summary: truncateText(asString(base.short_summary)),
+      detailed_explanation: truncateText(asString(base.detailed_explanation)),
+      how_it_appears_at_work: truncateText(asString(base.how_it_appears_at_work)),
+      where_useful: truncateText(asString(base.where_useful)),
+      risks: truncateText(asString(base.risks)),
+      management_tips: truncateText(asString(base.management_tips)),
+      what_to_check: truncateText(asString(base.what_to_check)),
     },
     pro: {
-      technical_sources: asStringArray(pro.technical_sources),
+      technical_sources: asStringArray(pro.technical_sources).slice(0, 8),
       source_values:
         pro.source_values && typeof pro.source_values === "object"
           ? pro.source_values
           : {},
-      connection_logic: asString(pro.connection_logic),
+      connection_logic: truncateText(asString(pro.connection_logic), 120),
       confidence: normalizeConfidence(pro.confidence),
-      human_check: asString(pro.human_check),
+      human_check: truncateText(asString(pro.human_check), 120),
     },
     evidence: {
-      source_fields: asStringArray(evidence.source_fields),
-      source_layer_keys: asStringArray(evidence.source_layer_keys),
+      source_fields: asStringArray(evidence.source_fields).slice(0, 8),
+      source_layer_keys: asStringArray(evidence.source_layer_keys).slice(0, 6),
       confidence: normalizeConfidence(evidence.confidence),
-      limitations: asString(evidence.limitations),
-      warnings: asStringArray(evidence.warnings),
+      limitations: truncateText(asString(evidence.limitations), 120),
+      warnings: asStringArray(evidence.warnings).slice(0, 4),
     },
   };
 }
@@ -491,7 +673,11 @@ function buildSynthesisBlocks(
     .filter(Boolean)
     .join(" ");
 
-  const riskSummary = baseField(sensitiveZones, "risks") || baseField(dataQuality, "risks");
+  const riskSummary =
+    baseField(sensitiveZones, "risks") ||
+    baseField(workFormat, "risks") ||
+    baseField(decisionStyle, "risks") ||
+    baseField(dataQuality, "risks");
 
   return {
     executive_summary: {
@@ -529,10 +715,11 @@ function buildSynthesisBlocks(
           title: "Рабочий формат",
           body: baseField(workFormat, "short_summary") || baseField(workFormat, "detailed_explanation"),
         },
-        stableZones && {
-          title: "Устойчивые зоны",
-          body: baseField(stableZones, "short_summary") || baseField(stableZones, "detailed_explanation"),
-        },
+        stableZones &&
+          baseField(stableZones, "short_summary") && {
+            title: "Устойчивые зоны",
+            body: baseField(stableZones, "short_summary"),
+          },
         dataQuality && {
           title: "Опора на данные",
           body: baseField(dataQuality, "short_summary"),
@@ -541,18 +728,30 @@ function buildSynthesisBlocks(
     },
     work_environment: {
       items: [
-        stableZones && {
-          title: "Устойчивость",
-          body: baseField(stableZones, "how_it_appears_at_work"),
-        },
-        sensitiveZones && {
-          title: "Чувствительность к среде",
-          body: baseField(sensitiveZones, "how_it_appears_at_work"),
-        },
-        innerCoherence && {
-          title: "Связность",
-          body: baseField(innerCoherence, "how_it_appears_at_work"),
-        },
+        stableZones &&
+          (baseField(stableZones, "how_it_appears_at_work") ||
+            baseField(stableZones, "short_summary")) && {
+            title: "Устойчивость",
+            body:
+              baseField(stableZones, "how_it_appears_at_work") ||
+              baseField(stableZones, "short_summary"),
+          },
+        sensitiveZones &&
+          (baseField(sensitiveZones, "how_it_appears_at_work") ||
+            baseField(sensitiveZones, "short_summary")) && {
+            title: "Чувствительность к среде",
+            body:
+              baseField(sensitiveZones, "how_it_appears_at_work") ||
+              baseField(sensitiveZones, "short_summary"),
+          },
+        innerCoherence &&
+          (baseField(innerCoherence, "how_it_appears_at_work") ||
+            baseField(innerCoherence, "short_summary")) && {
+            title: "Связность",
+            body:
+              baseField(innerCoherence, "how_it_appears_at_work") ||
+              baseField(innerCoherence, "short_summary"),
+          },
         dataQuality && {
           title: "Качество данных",
           body: baseField(dataQuality, "detailed_explanation"),
@@ -569,22 +768,39 @@ function buildSynthesisBlocks(
           ? { title: "Ограничения данных", body: baseField(dataQuality, "risks") }
           : null,
       ].filter(Boolean),
-      checks: sensitiveZones
-        ? [
-            {
-              id: "risk-limited-sensitive",
-              risk: baseField(sensitiveZones, "risks") || "Чувствительность к среде и нагрузке",
-              how_it_may_show_up: baseField(sensitiveZones, "how_it_appears_at_work"),
-              interview_check: baseField(sensitiveZones, "what_to_check"),
-              test_task_check: baseField(taskEntry, "what_to_check"),
-              good_signal: "Человек называет условия, в которых сохраняет продуктивность.",
-              warning_signal: "Игнорирует вопросы о нагрузке или среде.",
-              management_prevention: baseField(sensitiveZones, "management_tips"),
-              related_hypothesis_ids: [],
-              confidence: "medium",
-            },
-          ]
-        : [],
+      checks:
+        asString(asRecord(sensitiveZones).status) === "ready" &&
+        baseField(sensitiveZones, "risks")
+          ? [
+              {
+                id: "risk-limited-sensitive",
+                risk: baseField(sensitiveZones, "risks"),
+                how_it_may_show_up: baseField(sensitiveZones, "how_it_appears_at_work"),
+                interview_check: baseField(sensitiveZones, "what_to_check"),
+                test_task_check: baseField(taskEntry, "what_to_check"),
+                good_signal: "Человек называет условия, в которых сохраняет продуктивность.",
+                warning_signal: "Игнорирует вопросы о нагрузке или среде.",
+                management_prevention: baseField(sensitiveZones, "management_tips"),
+                related_hypothesis_ids: [],
+                confidence: "medium",
+              },
+            ]
+          : baseField(workFormat, "risks")
+            ? [
+                {
+                  id: "risk-limited-work-format",
+                  risk: baseField(workFormat, "risks"),
+                  how_it_may_show_up: baseField(workFormat, "how_it_appears_at_work"),
+                  interview_check: baseField(workFormat, "what_to_check"),
+                  test_task_check: baseField(taskEntry, "what_to_check"),
+                  good_signal: "Описывает рабочие условия, в которых держит темп.",
+                  warning_signal: "Не может назвать критерии приоритизации.",
+                  management_prevention: baseField(workFormat, "management_tips"),
+                  related_hypothesis_ids: [],
+                  confidence: "medium",
+                },
+              ]
+            : [],
     },
     management: {
       items: [
@@ -666,10 +882,14 @@ function buildCandidateSnapshot(
       : "Карта талантов",
     status_label: "Готово",
     best_work_format: baseField(byKey.get("work_format"), "short_summary"),
-    key_talent: baseField(byKey.get("stable_zones"), "short_summary") || baseField(byKey.get("work_signature"), "short_summary"),
-    main_risk: baseField(byKey.get("sensitive_zones"), "risks") || baseField(byKey.get("sensitive_zones"), "short_summary"),
+    key_talent:
+      baseField(byKey.get("work_format"), "short_summary") ||
+      baseField(byKey.get("decision_style"), "short_summary"),
+    main_risk:
+      baseField(byKey.get("decision_style"), "risks") ||
+      baseField(byKey.get("work_format"), "risks"),
     headline:
-      baseField(byKey.get("work_signature"), "short_summary") ||
+      baseField(byKey.get("work_format"), "short_summary") ||
       (name ? `Карта талантов — ${name}` : "Карта талантов"),
   };
 }
@@ -752,22 +972,72 @@ export async function callOpenAiForLimitedLayers(
   apiKey: string,
   model: string,
   analysisPacket: Record<string, unknown>,
+  logCtx: V2LimitedLogContext,
 ): Promise<Record<string, unknown>[]> {
-  const openAiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.5,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: buildV2LimitedSystemPrompt() },
-        { role: "user", content: buildV2LimitedUserPrompt(analysisPacket) },
-      ],
-    }),
+  const compactInput = buildCompactAiInput(analysisPacket);
+  const timeoutMs = resolveOpenAiTimeoutMs();
+  const startedAt = Date.now();
+
+  logV2Stage("v2_limited_openai_start", logCtx, {
+    timeout_ms: timeoutMs,
+    compact_input_bytes: JSON.stringify(compactInput).length,
+    ai_layer_count: AI_LAYER_KEYS.length,
+  });
+
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+
+  let openAiResponse: Response;
+  try {
+    openAiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model,
+        temperature: 0.35,
+        max_tokens: OPENAI_MAX_OUTPUT_TOKENS,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: buildV2LimitedSystemPrompt() },
+          { role: "user", content: buildV2LimitedUserPrompt(compactInput) },
+        ],
+      }),
+    });
+  } catch (err) {
+    const durationMs = Date.now() - startedAt;
+    if (err instanceof Error && err.name === "AbortError") {
+      console.error("[hr-talent-map-v2-limited] OpenAI timeout", {
+        stage: "v2_limited_layers_prompt_timeout",
+        duration_ms: durationMs,
+        timeout_ms: timeoutMs,
+        ...logCtx,
+      });
+      throw new V2GenerationError(
+        "v2_limited_layers_prompt_timeout",
+        "V2 limited generation timed out",
+      );
+    }
+    console.error("[hr-talent-map-v2-limited] OpenAI fetch failed", {
+      stage: "v2_limited_layers_prompt",
+      duration_ms: durationMs,
+      err,
+      ...logCtx,
+    });
+    throw new V2GenerationError(
+      "v2_limited_layers_prompt",
+      err instanceof Error ? err.message : "Ошибка вызова OpenAI.",
+    );
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+
+  logV2Stage("v2_limited_openai_done", logCtx, {
+    duration_ms: Date.now() - startedAt,
+    http_status: openAiResponse.status,
   });
 
   if (!openAiResponse.ok) {
@@ -786,6 +1056,10 @@ export async function callOpenAiForLimitedLayers(
   if (!rawContent) {
     throw new V2GenerationError("v2_limited_layers_prompt", "OpenAI вернул пустой ответ.");
   }
+
+  logV2Stage("v2_limited_parse_start", logCtx, {
+    raw_content_chars: rawContent.length,
+  });
 
   let parsed: Record<string, unknown>;
   try {
@@ -815,6 +1089,13 @@ export async function callOpenAiForLimitedLayers(
   return normalized;
 }
 
+const ALL_LIMITED_LAYER_KEYS: V2LayerKey[] = [
+  "chart_passport",
+  ...AI_LAYER_KEYS,
+  ...PLANNED_LAYER_KEYS,
+  "data_quality",
+];
+
 export async function buildHrTalentMapV2LimitedContent(args: {
   apiKey: string;
   model: string;
@@ -823,12 +1104,37 @@ export async function buildHrTalentMapV2LimitedContent(args: {
   chart: Record<string, unknown>;
   inputHash: string;
   generatedAt: string;
+  companyId?: string;
+  candidateId?: string;
 }): Promise<Record<string, unknown>> {
-  const { apiKey, model, analysisPacket, candidate, chart, inputHash, generatedAt } = args;
+  const {
+    apiKey,
+    model,
+    analysisPacket,
+    candidate,
+    chart,
+    inputHash,
+    generatedAt,
+    companyId,
+    candidateId,
+  } = args;
+
+  const logCtx: V2LimitedLogContext = {
+    companyId,
+    candidateId,
+    reportType: "hr_person_talent_map",
+    promptVersion: V2_LIMITED_PROMPT_VERSION,
+  };
+
+  const pipelineStartedAt = Date.now();
+  logV2Stage("v2_limited_start", logCtx, {
+    ai_layers: AI_LAYER_KEYS.length,
+    planned_layers: PLANNED_LAYER_KEYS.length,
+  });
 
   let aiLayers: Record<string, unknown>[];
   try {
-    aiLayers = await callOpenAiForLimitedLayers(apiKey, model, analysisPacket);
+    aiLayers = await callOpenAiForLimitedLayers(apiKey, model, analysisPacket, logCtx);
   } catch (err) {
     if (err instanceof V2GenerationError) throw err;
     throw new V2GenerationError(
@@ -837,12 +1143,22 @@ export async function buildHrTalentMapV2LimitedContent(args: {
     );
   }
 
-  const chartPassport = buildChartPassportLayer(analysisPacket, candidate);
-  const layerReports = [chartPassport, ...aiLayers].sort(
+  const deterministicLayers = buildDeterministicLimitedLayers(analysisPacket, candidate);
+  const layerReports = [...deterministicLayers, ...aiLayers].sort(
     (a, b) =>
       (typeof a.ui_priority === "number" ? a.ui_priority : 99) -
       (typeof b.ui_priority === "number" ? b.ui_priority : 99),
   );
+
+  const layerKeys = new Set(layerReports.map((l) => asString(l.layer_key)));
+  for (const key of ALL_LIMITED_LAYER_KEYS) {
+    if (!layerKeys.has(key)) {
+      throw new V2GenerationError(
+        "v2_content_build",
+        `Отсутствует слой в итоговом отчёте: ${key}.`,
+      );
+    }
+  }
 
   let synthesis_blocks: Record<string, unknown>;
   try {
@@ -853,6 +1169,11 @@ export async function buildHrTalentMapV2LimitedContent(args: {
       err instanceof Error ? err.message : "Ошибка сборки synthesis_blocks.",
     );
   }
+
+  logV2Stage("v2_limited_validate_start", logCtx, {
+    layer_report_count: layerReports.length,
+    duration_ms: Date.now() - pipelineStartedAt,
+  });
 
   const normalizedChart =
     chart.normalized_chart_data && typeof chart.normalized_chart_data === "object"
@@ -873,6 +1194,8 @@ export async function buildHrTalentMapV2LimitedContent(args: {
       content_contract_version: CONTENT_CONTRACT_VERSION,
       input_hash: inputHash,
       pipeline_stage: "limited_layers_complete",
+      ai_layer_keys: [...AI_LAYER_KEYS],
+      planned_layer_keys: [...PLANNED_LAYER_KEYS],
     },
     candidate_snapshot: buildCandidateSnapshot(candidate, layerReports),
     source_snapshot: {
@@ -917,6 +1240,7 @@ export async function buildHrTalentMapV2LimitedContent(args: {
       next_best_report: "hr_candidate_role_fit",
       disclaimers: [
         "Карта описывает рабочий стиль, а не пригодность к конкретной вакансии.",
+        "Limited v2: 3 AI-слоя (work_format, task_entry, decision_style); остальные слои planned или детерминированы.",
         "Верхние блоки собраны из atomic layer_reports без полного curated synthesis.",
       ],
     },
@@ -931,6 +1255,11 @@ export async function buildHrTalentMapV2LimitedContent(args: {
       err instanceof Error ? err.message : "Ошибка валидации v2.",
     );
   }
+
+  logV2Stage("v2_limited_done", logCtx, {
+    duration_ms: Date.now() - pipelineStartedAt,
+    layer_report_count: layerReports.length,
+  });
 
   return content;
 }

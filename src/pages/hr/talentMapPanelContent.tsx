@@ -1,8 +1,19 @@
 import type { ReactNode } from "react";
-import type { HrPersonTalentMapV1, HrVacancy, TalentMapRole } from "../../lib/hr/types";
+import type {
+  HrPersonTalentMapV1,
+  HrTalentMapEvidenceItem,
+  HrTalentMapHypothesisCard,
+  HrTalentMapLayer,
+  HrTalentMapManagementPlaybook,
+  HrTalentMapRiskCheck,
+  HrTalentMapVerificationPlan,
+  HrVacancy,
+  TalentMapRole,
+} from "../../lib/hr/types";
 import {
   coerceRolesList,
   coerceStringArray,
+  confidenceLabelRu,
   ensureArray,
   getList,
   getText,
@@ -24,10 +35,13 @@ export type ReportContentCtx = {
 
 export type DetailPanelState =
   | { kind: "risk"; index: number }
+  | { kind: "risk_check"; index: number }
   | { kind: "interview"; index: number }
   | { kind: "test"; index: number }
   | { kind: "onboarding"; phase: "7" | "30" | "90" }
   | { kind: "talent"; index: number }
+  | { kind: "hypothesis"; index: number }
+  | { kind: "layer"; index: number }
   | { kind: "strength"; index: number }
   | { kind: "direction"; index: number }
   | { kind: "role"; index: number };
@@ -37,6 +51,125 @@ function asRec(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>;
   }
   return {};
+}
+
+function ConfidenceBadge({ confidence }: { confidence?: string }) {
+  const label = confidenceLabelRu(confidence);
+  const mod =
+    confidence === "high"
+      ? "hr-tm-confidence--high"
+      : confidence === "low"
+        ? "hr-tm-confidence--low"
+        : "hr-tm-confidence--medium";
+  return <span className={`hr-tm-confidence ${mod}`}>{label} уверенность</span>;
+}
+
+export function VerificationPlanBlock({
+  plan,
+  normalizeHrCopy,
+}: {
+  plan: HrTalentMapVerificationPlan | undefined;
+  normalizeHrCopy: (text: unknown) => string;
+}) {
+  if (!plan) return null;
+  const rows: Array<{ label: string; value?: string }> = [
+    { label: "Первое, что проверить", value: plan.first_check },
+    { label: "Фокус интервью", value: plan.interview_focus },
+    { label: "Фокус тестового", value: plan.test_task_focus },
+    { label: "На что смотреть", value: plan.what_to_observe },
+    { label: "Решение после проверки", value: plan.decision_after_check },
+  ].filter((r) => r.value);
+
+  if (!rows.length) return null;
+
+  return (
+    <div className="hr-tm-verification-plan">
+      <h4 className="hr-tm-verification-plan-title">План проверки гипотез</h4>
+      {rows.map((row) => (
+        <MetaRow key={row.label} label={row.label} value={normalizeHrCopy(row.value ?? "")} />
+      ))}
+    </div>
+  );
+}
+
+export function ManagementPlaybookGrid({
+  playbook,
+  normalizeHrCopy,
+}: {
+  playbook: HrTalentMapManagementPlaybook | undefined;
+  normalizeHrCopy: (text: unknown) => string;
+}) {
+  if (!playbook) return null;
+  const blocks: Array<{ title: string; value?: string }> = [
+    { title: "Как ставить задачи", value: playbook.how_to_set_tasks },
+    { title: "Как давать обратную связь", value: playbook.how_to_give_feedback },
+    { title: "Как мотивировать", value: playbook.how_to_motivate },
+    { title: "Чего не делать", value: playbook.what_not_to_do },
+    { title: "Лучшая рабочая среда", value: playbook.best_environment },
+    { title: "Сигналы перегруза", value: playbook.overload_signals },
+    { title: "Фокус первых 30 дней", value: playbook.first_30_days_focus },
+  ].filter((b) => b.value);
+
+  if (!blocks.length) return null;
+
+  return (
+    <div className="hr-tm-playbook-grid">
+      {blocks.map((block) => (
+        <div key={block.title} className="hr-tm-playbook-card">
+          <h4 className="hr-tm-playbook-card-title">{block.title}</h4>
+          <p>{normalizeHrCopy(block.value ?? "")}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function LayerDetailPanel({ layer }: { layer: HrTalentMapLayer }) {
+  return (
+    <>
+      <SectionBlock title="Краткий вывод">
+        <p className="hr-tm-panel-lead">{layer.client_summary}</p>
+      </SectionBlock>
+      <MetaRow label="Что это значит для HR" value={layer.hr_meaning} />
+      <MetaRow label="Ключевой сигнал" value={layer.key_signal} />
+      <MetaRow label="Риск-сигнал" value={layer.risk_signal} />
+      <MetaRow label="Как проверить" value={layer.how_to_check} />
+      <ConfidenceBadge confidence={layer.confidence} />
+    </>
+  );
+}
+
+export function HypothesisDetailPanel({ card }: { card: HrTalentMapHypothesisCard }) {
+  return (
+    <>
+      <SectionBlock title="Гипотеза">
+        <p className="hr-tm-panel-lead">{card.statement || card.title}</p>
+      </SectionBlock>
+      <MetaRow label="Где проявится в работе" value={card.workplace_manifestation} />
+      <MetaRow label="Почему это важно" value={card.why_it_matters} />
+      <MetaRow label="Как проверить" value={card.how_to_check} />
+      <MetaRow label="Хороший сигнал" value={card.good_signal} />
+      <MetaRow label="Тревожный сигнал" value={card.warning_signal} />
+      <ConfidenceBadge confidence={card.confidence} />
+    </>
+  );
+}
+
+export function RiskCheckDetailPanel({ check }: { check: HrTalentMapRiskCheck }) {
+  return (
+    <>
+      <SectionBlock title="Риск">
+        <p className="hr-tm-panel-lead">{check.risk}</p>
+      </SectionBlock>
+      <MetaRow label="Как может проявиться" value={check.how_it_may_show_up} />
+      <MetaRow label="Чем проверить на интервью" value={check.interview_check} />
+      <MetaRow label="Чем проверить в тестовом" value={check.test_task_check} />
+      <MetaRow label="Хороший сигнал" value={check.good_signal} />
+      <MetaRow label="Тревожный сигнал" value={check.warning_signal} />
+      <MetaRow label="Как руководителю предупредить" value={check.management_prevention} />
+      <ConfidenceBadge confidence={check.confidence} />
+    </>
+  );
 }
 
 function SectionBlock({ title, children }: { title: string; children: ReactNode }) {
@@ -175,9 +308,12 @@ export function ItemDetailPanel({
   detail,
   ctx,
   risks,
+  riskChecks,
   interviews,
   tests,
   talents,
+  hypothesisCards,
+  layers,
   strengths,
   directions,
   roles,
@@ -185,15 +321,36 @@ export function ItemDetailPanel({
   detail: DetailPanelState;
   ctx: ReportContentCtx;
   risks: FlexibleSectionItem[];
+  riskChecks: HrTalentMapRiskCheck[];
   interviews: FlexibleSectionItem[];
   tests: FlexibleSectionItem[];
   talents: FlexibleSectionItem[];
+  hypothesisCards: HrTalentMapHypothesisCard[];
+  layers: HrTalentMapLayer[];
   strengths: FlexibleSectionItem[];
   directions: FlexibleSectionItem[];
   roles: TalentMapRole[];
 }) {
   const { aiContent, rawContent, normalizeHrCopy } = ctx;
   const raw = rawContent;
+
+  if (detail.kind === "layer") {
+    const layer = layers[detail.index];
+    if (!layer) return null;
+    return <LayerDetailPanel layer={layer} />;
+  }
+
+  if (detail.kind === "hypothesis") {
+    const card = hypothesisCards[detail.index];
+    if (!card) return null;
+    return <HypothesisDetailPanel card={card} />;
+  }
+
+  if (detail.kind === "risk_check") {
+    const check = riskChecks[detail.index];
+    if (!check) return null;
+    return <RiskCheckDetailPanel check={check} />;
+  }
 
   if (detail.kind === "risk") {
     const item = risks[detail.index];
@@ -260,6 +417,10 @@ export function ItemDetailPanel({
   }
 
   if (detail.kind === "talent") {
+    const hypothesis = hypothesisCards.filter((c) => c.type === "talent" && c.client_visible)[
+      detail.index
+    ];
+    if (hypothesis) return <HypothesisDetailPanel card={hypothesis} />;
     const item = talents[detail.index];
     if (!item) return null;
     return (
@@ -269,6 +430,9 @@ export function ItemDetailPanel({
           <p>{item.body}</p>
         </SectionBlock>
         {item.fit ? <SectionBlock title="Где особенно полезен"><p>{item.fit}</p></SectionBlock> : null}
+        {item.checks ? <MetaRow label="Как проверить" value={item.checks} /> : null}
+        {item.goodAnswer ? <MetaRow label="Хороший сигнал" value={item.goodAnswer} /> : null}
+        {item.warningSign ? <MetaRow label="Тревожный сигнал" value={item.warningSign} /> : null}
       </>
     );
   }
@@ -334,15 +498,24 @@ export function getDetailPanelTitle(
   detail: DetailPanelState,
   items: {
     risks: FlexibleSectionItem[];
+    riskChecks: HrTalentMapRiskCheck[];
     interviews: FlexibleSectionItem[];
     tests: FlexibleSectionItem[];
     talents: FlexibleSectionItem[];
+    hypothesisCards: HrTalentMapHypothesisCard[];
+    layers: HrTalentMapLayer[];
     strengths: FlexibleSectionItem[];
     directions: FlexibleSectionItem[];
     roles: TalentMapRole[];
   },
 ): string {
   switch (detail.kind) {
+    case "layer":
+      return items.layers[detail.index]?.title ?? "Слой карты";
+    case "hypothesis":
+      return items.hypothesisCards[detail.index]?.title ?? "HR-гипотеза";
+    case "risk_check":
+      return items.riskChecks[detail.index]?.risk ?? "Риск и проверка";
     case "risk":
       return items.risks[detail.index]?.title ?? "Риск";
     case "interview":
@@ -355,8 +528,12 @@ export function getDetailPanelTitle(
         : detail.phase === "30"
           ? "Первые 30 дней"
           : "Первые 90 дней";
-    case "talent":
-      return items.talents[detail.index]?.title ?? "Талант";
+    case "talent": {
+      const hyp = items.hypothesisCards.filter(
+        (c) => c.type === "talent" && c.client_visible,
+      )[detail.index];
+      return hyp?.title ?? items.talents[detail.index]?.title ?? "Талант";
+    }
     case "strength":
       return items.strengths[detail.index]?.title ?? "Сильная сторона";
     case "direction":
@@ -371,7 +548,18 @@ export function getDetailPanelTitle(
 export function buildReportLists(ctx: ReportContentCtx) {
   const { aiContent, rawContent } = ctx;
   const raw = asRec(rawContent);
+  const layers = ensureArray<HrTalentMapLayer>(aiContent.layer_map);
+  const hypothesisCards = ensureArray<HrTalentMapHypothesisCard>(
+    aiContent.hypothesis_cards,
+  ).filter((c) => c.client_visible !== false);
+  const riskChecks = ensureArray<HrTalentMapRiskCheck>(aiContent.risk_checks);
+  const talentHypotheses = hypothesisCards.filter((c) => c.type === "talent");
+
   return {
+    layers,
+    hypothesisCards,
+    talentHypotheses,
+    riskChecks,
     risks: mergeFlexibleItems(ensureArray(aiContent.risks), raw.risks),
     interviews: mergeFlexibleItems(ensureArray(aiContent.interview_questions), raw.interview_questions),
     tests: mergeFlexibleItems(ensureArray(aiContent.test_tasks), raw.test_tasks),
@@ -386,6 +574,12 @@ export function buildReportLists(ctx: ReportContentCtx) {
     mgmt: mergeFlexibleItems(ensureArray(aiContent.management_style), raw.management_style),
     roles: coerceRolesList(aiContent.roles ?? raw.roles),
     onboardingPhases: parseOnboardingTimeline(aiContent.onboarding_7_30_90, rawContent),
+    managementPlaybook: aiContent.management_playbook,
+    verificationPlan: aiContent.verification_plan,
+    executiveSnapshot: aiContent.executive_snapshot,
+    evidenceMap: ensureArray<HrTalentMapEvidenceItem>(aiContent.evidence_map).filter(
+      (e) => e.client_visible === true,
+    ),
   };
 }
 

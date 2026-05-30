@@ -14,15 +14,16 @@ import {
   canParseReportContent,
   getReportContentRoot,
   isReadyTalentMapReport,
+  isTalentMapV12,
   logNormalizedWorkspaceContent,
   logReportContentShape,
   normalizeAiReportContent,
 } from "../../lib/hr/normalizeAiReport";
 import {
-  ensureArray,
-  extractCompletenessPercent,
+  confidenceLabelRu,
   formatReportDate,
   getText,
+  sortLayersByPriority,
 } from "../../lib/hr/talentMapUiHelpers";
 import type { HrCandidate, HrPersonTalentMapV1, HrReport, HrVacancy, TalentMapRole } from "../../lib/hr/types";
 import { formulaToSafeHtml } from "../../lib/safeHtml";
@@ -31,16 +32,21 @@ import {
   DataQualitySection,
   getDetailPanelTitle,
   ItemDetailPanel,
+  ManagementPlaybookGrid,
   type DetailPanelState,
   type ReportContentCtx,
+  VerificationPlanBlock,
 } from "./talentMapPanelContent";
 import type { OnboardingPhase } from "../../lib/hr/talentMapUiHelpers";
 import "../../hr.css";
 
 type SectionId =
   | "overview"
+  | "layers"
+  | "talents"
   | "profile"
   | "risks"
+  | "management"
   | "checks"
   | "interview"
   | "test"
@@ -48,7 +54,20 @@ type SectionId =
   | "data"
   | "roles";
 
-const NAV_SECTIONS: Array<{ id: SectionId; label: string; hint?: string }> = [
+const NAV_SECTIONS_V12: Array<{ id: SectionId; label: string; hint?: string }> = [
+  { id: "overview", label: "Обзор" },
+  { id: "layers", label: "Слои карты", hint: "HR-расшифровка по слоям" },
+  { id: "talents", label: "Таланты" },
+  { id: "risks", label: "Риски и проверки" },
+  { id: "management", label: "Управление и среда" },
+  { id: "interview", label: "Интервью" },
+  { id: "test", label: "Тестовое" },
+  { id: "onboarding", label: "Адаптация" },
+  { id: "data", label: "Данные" },
+  { id: "roles", label: "Роли" },
+];
+
+const NAV_SECTIONS_LEGACY: Array<{ id: SectionId; label: string; hint?: string }> = [
   { id: "overview", label: "Обзор" },
   { id: "profile", label: "Рабочий профиль", hint: "Формула и таланты" },
   { id: "risks", label: "Риски и условия" },
@@ -151,14 +170,111 @@ function normalizeHrMaybe(text: unknown): string | null {
   return t || null;
 }
 
+function MetaOverviewRow({ label, value }: { label: string; value: string }) {
+  if (!value) return null;
+  return (
+    <div className="hr-tm-snapshot-row">
+      <span className="hr-tm-snapshot-label">{label}</span>
+      <p className="hr-tm-snapshot-value">{value}</p>
+    </div>
+  );
+}
+
+function ConfidencePill({ confidence }: { confidence?: string }) {
+  const label = confidenceLabelRu(confidence);
+  const mod =
+    confidence === "high"
+      ? "hr-tm-confidence--high"
+      : confidence === "low"
+        ? "hr-tm-confidence--low"
+        : "hr-tm-confidence--medium";
+  return <span className={`hr-tm-confidence hr-tm-confidence--compact ${mod}`}>{label}</span>;
+}
+
+function LayerCard({
+  title,
+  summary,
+  confidence,
+  onClick,
+}: {
+  title: string;
+  summary: string;
+  confidence?: string;
+  onClick?: () => void;
+}) {
+  const body = (
+    <>
+      <div className="hr-tm-layer-card-head">
+        <span className="hr-tm-layer-card-title">{title}</span>
+        {confidence ? <ConfidencePill confidence={confidence} /> : null}
+      </div>
+      {summary ? <p className="hr-tm-layer-card-summary">{summary}</p> : null}
+      {onClick ? <span className="hr-tm-row-chevron" aria-hidden>→</span> : null}
+    </>
+  );
+  if (onClick) {
+    return (
+      <button type="button" className="hr-tm-layer-card hr-tm-layer-card--clickable" onClick={onClick}>
+        {body}
+      </button>
+    );
+  }
+  return <div className="hr-tm-layer-card">{body}</div>;
+}
+
+function HypothesisCardRow({
+  title,
+  statement,
+  manifestation,
+  confidence,
+  onClick,
+}: {
+  title: string;
+  statement: string;
+  manifestation?: string;
+  confidence?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <CompactRow
+      title={title}
+      subtitle={statement || manifestation}
+      onClick={onClick}
+      badge={confidence ? <ConfidencePill confidence={confidence} /> : undefined}
+    />
+  );
+}
+
+function RiskCheckCardRow({
+  risk,
+  showUp,
+  confidence,
+  onClick,
+}: {
+  risk: string;
+  showUp?: string;
+  confidence?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <CompactRow
+      title={risk}
+      subtitle={showUp}
+      onClick={onClick}
+      badge={confidence ? <ConfidencePill confidence={confidence} /> : undefined}
+    />
+  );
+}
 function CompactRow({
   title,
   subtitle,
   onClick,
+  badge,
 }: {
   title: unknown;
   subtitle?: unknown;
   onClick?: () => void;
+  badge?: ReactNode;
 }) {
   const safeTitle = getText(title, "—");
   const safeSubtitle = subtitle != null ? getText(subtitle) || null : null;
@@ -167,6 +283,7 @@ function CompactRow({
       <span className="hr-tm-row-body">
         <span className="hr-tm-row-title">{safeTitle}</span>
         {safeSubtitle ? <span className="hr-tm-row-sub">{safeSubtitle}</span> : null}
+        {badge ? <span className="hr-tm-row-badge">{badge}</span> : null}
       </span>
       {onClick ? <span className="hr-tm-row-chevron" aria-hidden>→</span> : null}
     </>
@@ -269,12 +386,22 @@ function TalentMapWorkspace({
     normalizeHrMaybe,
   };
 
+  const isV12 = useMemo(
+    () => isTalentMapV12(getReportContentRoot(rawAiContent)),
+    [rawAiContent],
+  );
+  const navSections = isV12 ? NAV_SECTIONS_V12 : NAV_SECTIONS_LEGACY;
+
   const lists = useMemo(() => {
     try {
       return buildReportLists(ctx);
     } catch (err) {
       console.error("[TalentMapWorkspace] buildReportLists failed", err);
       return {
+        layers: [],
+        hypothesisCards: [],
+        talentHypotheses: [],
+        riskChecks: [],
         risks: [],
         interviews: [],
         tests: [],
@@ -286,31 +413,39 @@ function TalentMapWorkspace({
         mgmt: [],
         roles: [],
         onboardingPhases: [],
+        managementPlaybook: undefined,
+        verificationPlan: undefined,
+        executiveSnapshot: undefined,
+        evidenceMap: [],
       };
     }
   }, [aiContent, rawAiContent, vacancies]);
 
-  const hero = aiContent.hero;
-  const bestWorkFormat = normalizeHrMaybe(hero?.best_work_format);
-  const keyTalent = normalizeHrMaybe(hero?.key_talent);
-  const mainRisk = normalizeHrMaybe(hero?.main_risk);
-  const summaryText = normalizeHrMaybe(
-    aiContent.executive_summary?.text ?? hero?.headline,
+  const sortedLayers = useMemo(
+    () => sortLayersByPriority(lists.layers ?? []),
+    [lists.layers],
   );
-  const finalRec = normalizeHrMaybe(aiContent.final_hr_recommendation?.text);
+
+  const hero = aiContent.hero;
+  const snapshot = lists.executiveSnapshot ?? aiContent.executive_snapshot;
+  const bestWorkFormat = normalizeHrMaybe(snapshot?.best_use ?? hero?.best_work_format);
+  const keyTalent = normalizeHrMaybe(snapshot?.main_value ?? hero?.key_talent);
+  const mainRisk = normalizeHrMaybe(snapshot?.main_risk ?? hero?.main_risk);
+  const summaryText = normalizeHrMaybe(
+    snapshot?.one_sentence ??
+      aiContent.executive_summary?.text ??
+      hero?.headline,
+  );
+  const finalRec = normalizeHrMaybe(
+    snapshot?.decision_note ?? aiContent.final_hr_recommendation?.text,
+  );
   const formulaText = getText(aiContent.working_formula?.text);
   const formulaHtml = formulaText ? formulaToSafeHtml(formulaText) : "";
 
-  const metrics = ensureArray(aiContent.data_quality?.metrics);
-  const completenessPct = extractCompletenessPercent(
-    aiContent.data_quality?.completeness,
-    metrics,
-  );
   const confidenceLabel = aiContent.data_quality?.confidence
-    ? normalizeHrCopy(aiContent.data_quality.confidence)
-    : completenessPct != null
-      ? `${completenessPct}%`
-      : "уточняется";
+    ? normalizeHrCopy(aiContent.data_quality.confidence).replace(/\d{1,3}\s*%/g, "").trim() ||
+      "уточняется"
+    : "уточняется";
 
   const updatedLabel = formatReportDate(
     aiReport.generated_at ?? aiReport.updated_at,
@@ -330,6 +465,7 @@ function TalentMapWorkspace({
         : "кейс + встреча";
 
   const nextStep =
+    normalizeHrMaybe(snapshot?.how_to_check_first) ??
     finalRec ??
     (lists.interviews.length > 0
       ? "Провести интервью по вопросам из раздела «Интервью»."
@@ -337,11 +473,23 @@ function TalentMapWorkspace({
 
   const mainConclusion = summaryText ?? finalRec ?? "Разбор готов — откройте разделы ниже для деталей.";
 
+  const showDataQualityWarn =
+    /низк|мало|огранич|неполн|предварит/i.test(confidenceLabel) ||
+    /низк|мало|огранич|неполн/i.test(getText(aiContent.data_quality?.completeness));
+
+  const formatSection = isV12 ? "layers" : "profile";
+  const checkSection: SectionId = isV12 ? "risks" : "checks";
+
+  const topHypotheses = (lists.hypothesisCards ?? []).slice(0, 3);
+
   const detailLists = {
     risks: lists.risks,
+    riskChecks: lists.riskChecks ?? [],
     interviews: lists.interviews,
     tests: lists.tests,
     talents: lists.talents,
+    hypothesisCards: lists.hypothesisCards ?? [],
+    layers: sortedLayers,
     strengths: lists.strengths,
     directions: lists.directions,
     roles: lists.roles,
@@ -358,6 +506,56 @@ function TalentMapWorkspace({
   const renderSection = () => {
     switch (section) {
       case "overview":
+        if (isV12) {
+          return (
+            <div className="hr-tm-section-stack">
+              {summaryText ? (
+                <div className="hr-tm-snapshot-block">
+                  <h3 className="hr-tm-section-h">Главный вывод</h3>
+                  <p className="hr-tm-section-lead">{summaryText}</p>
+                </div>
+              ) : null}
+              {bestWorkFormat ? (
+                <MetaOverviewRow label="Где даст максимум пользы" value={bestWorkFormat} />
+              ) : null}
+              {keyTalent ? (
+                <MetaOverviewRow label="Главная ценность" value={keyTalent} />
+              ) : null}
+              {mainRisk ? (
+                <MetaOverviewRow label="Главный риск" value={mainRisk} />
+              ) : null}
+              {snapshot?.how_to_check_first ? (
+                <MetaOverviewRow label="Что проверить первым" value={snapshot.how_to_check_first} />
+              ) : null}
+              {finalRec ? (
+                <MetaOverviewRow label="Заметка для решения" value={finalRec} />
+              ) : null}
+              {topHypotheses.length > 0 ? (
+                <div>
+                  <h3 className="hr-tm-section-h">Ключевые HR-гипотезы</h3>
+                  {topHypotheses.map((h, i) => {
+                    const fullIndex = (lists.hypothesisCards ?? []).findIndex((x) => x.id === h.id);
+                    return (
+                    <HypothesisCardRow
+                      key={h.id || `${h.title}-${i}`}
+                      title={h.title}
+                      statement={h.statement}
+                      manifestation={h.workplace_manifestation}
+                      confidence={h.confidence}
+                      onClick={() =>
+                        setDetail({
+                          kind: "hypothesis",
+                          index: fullIndex >= 0 ? fullIndex : i,
+                        })
+                      }
+                    />
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          );
+        }
         return (
           <div className="hr-tm-section-stack">
             {formulaHtml ? (
@@ -381,6 +579,94 @@ function TalentMapWorkspace({
                 <p className="hr-muted">{mainRisk}</p>
               </div>
             ) : null}
+          </div>
+        );
+      case "layers":
+        return sortedLayers.length === 0 ? (
+          <p className="hr-muted">Слои HR-расшифровки появятся после генерации карты v1.2.</p>
+        ) : (
+          <div className="hr-tm-layer-grid">
+            {sortedLayers.map((layer, i) => (
+              <LayerCard
+                key={layer.id || `${layer.title}-${i}`}
+                title={layer.title}
+                summary={layer.client_summary}
+                confidence={layer.confidence}
+                onClick={() => setDetail({ kind: "layer", index: i })}
+              />
+            ))}
+          </div>
+        );
+      case "talents": {
+        const talentItems = lists.talentHypotheses?.length
+          ? lists.talentHypotheses
+          : null;
+        if (talentItems && talentItems.length > 0) {
+          return (
+            <div className="hr-tm-section-stack">
+              {talentItems.map((h, i) => (
+                <HypothesisCardRow
+                  key={h.id || `${h.title}-${i}`}
+                  title={h.title}
+                  statement={h.statement}
+                  manifestation={h.workplace_manifestation}
+                  confidence={h.confidence}
+                  onClick={() => setDetail({ kind: "talent", index: i })}
+                />
+              ))}
+            </div>
+          );
+        }
+        return (
+          <div className="hr-tm-section-stack">
+            {lists.talents.length === 0 && lists.strengths.length === 0 ? (
+              <p className="hr-muted">Нет данных</p>
+            ) : null}
+            {lists.talents.map((t, i) => (
+              <CompactRow
+                key={`${t.title}-${i}`}
+                title={t.title}
+                subtitle={t.body}
+                onClick={() => setDetail({ kind: "talent", index: i })}
+              />
+            ))}
+            {lists.strengths.length > 0 ? (
+              <>
+                <h3 className="hr-tm-section-h">Сильные стороны</h3>
+                {lists.strengths.map((s, i) => (
+                  <CompactRow
+                    key={`${s.title}-${i}`}
+                    title={s.title}
+                    subtitle={s.body}
+                    onClick={() => setDetail({ kind: "strength", index: i })}
+                  />
+                ))}
+              </>
+            ) : null}
+          </div>
+        );
+      }
+      case "management":
+        if (lists.managementPlaybook) {
+          return (
+            <div className="hr-tm-section-stack">
+              <ManagementPlaybookGrid
+                playbook={lists.managementPlaybook}
+                normalizeHrCopy={normalizeHrCopy}
+              />
+            </div>
+          );
+        }
+        return (
+          <div className="hr-tm-section-stack">
+            <h3 className="hr-tm-section-h">Среда</h3>
+            {lists.workEnv.map((c, i) => (
+              <CompactRow key={`${c.title}-${i}`} title={c.title} subtitle={c.body} />
+            ))}
+            <h3 className="hr-tm-section-h">Управление</h3>
+            {lists.mgmt.map((c, i) => (
+              <CompactRow key={`${c.title}-${i}`} title={c.title} subtitle={c.body} />
+            ))}
           </div>
         );
       case "profile":
@@ -431,6 +717,25 @@ function TalentMapWorkspace({
           </div>
         );
       case "risks":
+        if (isV12 && (lists.riskChecks?.length ?? 0) > 0) {
+          return (
+            <div className="hr-tm-section-stack">
+              <VerificationPlanBlock
+                plan={lists.verificationPlan}
+                normalizeHrCopy={normalizeHrCopy}
+              />
+              {lists.riskChecks?.map((check, i) => (
+                <RiskCheckCardRow
+                  key={check.id || `${check.risk}-${i}`}
+                  risk={check.risk}
+                  showUp={check.how_it_may_show_up}
+                  confidence={check.confidence}
+                  onClick={() => setDetail({ kind: "risk_check", index: i })}
+                />
+              ))}
+            </div>
+          );
+        }
         return (
           <div className="hr-tm-section-stack">
             {mainRisk ? <p className="hr-tm-section-lead">{mainRisk}</p> : null}
@@ -442,14 +747,18 @@ function TalentMapWorkspace({
                 onClick={() => setDetail({ kind: "risk", index: i })}
               />
             ))}
-            <h3 className="hr-tm-section-h">Среда и управление</h3>
-            {[...lists.workEnv, ...lists.mgmt].map((c, i) => (
-              <CompactRow key={`${c.title}-${i}`} title={c.title} subtitle={c.body} />
-            ))}
-            <h3 className="hr-tm-section-h">Спорные направления</h3>
-            {lists.questionable.map((q, i) => (
-              <CompactRow key={`${q.title}-${i}`} title={q.title} subtitle={q.body} />
-            ))}
+            {!isV12 ? (
+              <>
+                <h3 className="hr-tm-section-h">Среда и управление</h3>
+                {[...lists.workEnv, ...lists.mgmt].map((c, i) => (
+                  <CompactRow key={`${c.title}-${i}`} title={c.title} subtitle={c.body} />
+                ))}
+                <h3 className="hr-tm-section-h">Спорные направления</h3>
+                {lists.questionable.map((q, i) => (
+                  <CompactRow key={`${q.title}-${i}`} title={q.title} subtitle={q.body} />
+                ))}
+              </>
+            ) : null}
           </div>
         );
       case "checks":
@@ -555,7 +864,7 @@ function TalentMapWorkspace({
   };
 
   return (
-    <div className="hr-tm-page hr-tm-page--workspace">
+    <div className={`hr-tm-page hr-tm-page--workspace${isV12 ? " hr-tm-page--v12" : ""}`}>
       <div className="hr-tm-header">
         <div className="hr-tm-header-top">
           <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
@@ -599,7 +908,7 @@ function TalentMapWorkspace({
           <p className="hr-tm-conclusion-next">
             <span className="hr-tm-conclusion-next-label">Следующий шаг:</span> {nextStep}
           </p>
-          {completenessPct != null && completenessPct < 60 ? (
+          {showDataQualityWarn ? (
             <p className="hr-tm-conclusion-warn">
               Данных пока мало — выводы предварительные. Добавьте контекст вакансии и перегенерируйте
               карту.
@@ -616,7 +925,7 @@ function TalentMapWorkspace({
           <StatPill
             label="Лучший формат"
             value={bestWorkFormat ?? "—"}
-            onClick={() => setSection("profile")}
+            onClick={() => setSection(formatSection)}
           />
           <StatPill
             label="Главный риск"
@@ -626,7 +935,7 @@ function TalentMapWorkspace({
           <StatPill
             label="Что проверить"
             value={checkHint}
-            onClick={() => setSection("checks")}
+            onClick={() => setSection(checkSection)}
           />
         </div>
       </div>
@@ -634,7 +943,7 @@ function TalentMapWorkspace({
       <div className="hr-tm-workspace">
         <nav className="hr-tm-nav" aria-label="Разделы карты">
           <div className="hr-tm-nav-chips" role="tablist">
-            {NAV_SECTIONS.map((s) => (
+            {navSections.map((s) => (
               <button
                 key={s.id}
                 type="button"
@@ -648,7 +957,7 @@ function TalentMapWorkspace({
             ))}
           </div>
           <ul className="hr-tm-nav-list">
-            {NAV_SECTIONS.map((s) => (
+            {navSections.map((s) => (
               <li key={s.id}>
                 <button
                   type="button"
@@ -667,11 +976,11 @@ function TalentMapWorkspace({
 
         <div className="hr-tm-section-panel" role="tabpanel">
           <h3 className="hr-tm-section-panel-title">
-            {NAV_SECTIONS.find((s) => s.id === section)?.label}
+            {navSections.find((s) => s.id === section)?.label}
           </h3>
           <SectionErrorBoundary
             key={section}
-            title={NAV_SECTIONS.find((s) => s.id === section)?.label ?? section}
+            title={navSections.find((s) => s.id === section)?.label ?? section}
           >
             {renderSection()}
           </SectionErrorBoundary>
@@ -690,9 +999,12 @@ function TalentMapWorkspace({
               detail={detail}
               ctx={ctx}
               risks={lists.risks}
+              riskChecks={lists.riskChecks ?? []}
               interviews={lists.interviews}
               tests={lists.tests}
               talents={lists.talents}
+              hypothesisCards={lists.hypothesisCards ?? []}
+              layers={sortedLayers}
               strengths={lists.strengths}
               directions={lists.directions}
               roles={lists.roles}

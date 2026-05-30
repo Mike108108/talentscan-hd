@@ -227,8 +227,95 @@ export type HrPersonTalentMapQaMeta = {
   disclaimers?: string[];
 };
 
+export type HrTalentMapConfidence = "high" | "medium" | "low";
+
+export type HrTalentMapExecutiveSnapshot = {
+  one_sentence?: string;
+  best_use?: string;
+  main_value?: string;
+  main_risk?: string;
+  how_to_check_first?: string;
+  decision_note?: string;
+};
+
+export type HrTalentMapLayer = {
+  id: string;
+  title: string;
+  client_summary: string;
+  hr_meaning: string;
+  key_signal: string;
+  risk_signal: string;
+  how_to_check: string;
+  confidence: HrTalentMapConfidence;
+  ui_priority: number;
+  source_layer_id: string;
+};
+
+export type HrTalentMapHypothesisType =
+  | "talent"
+  | "risk"
+  | "condition"
+  | "management"
+  | "growth";
+
+export type HrTalentMapHypothesisCard = {
+  id: string;
+  type: HrTalentMapHypothesisType;
+  title: string;
+  statement: string;
+  why_it_matters: string;
+  workplace_manifestation: string;
+  how_to_check: string;
+  good_signal: string;
+  warning_signal: string;
+  related_layer_ids: string[];
+  confidence: HrTalentMapConfidence;
+  client_visible: boolean;
+};
+
+export type HrTalentMapRiskCheck = {
+  id: string;
+  risk: string;
+  how_it_may_show_up: string;
+  interview_check: string;
+  test_task_check: string;
+  good_signal: string;
+  warning_signal: string;
+  management_prevention: string;
+  related_hypothesis_ids: string[];
+  confidence: HrTalentMapConfidence;
+};
+
+export type HrTalentMapManagementPlaybook = {
+  how_to_set_tasks?: string;
+  how_to_give_feedback?: string;
+  how_to_motivate?: string;
+  what_not_to_do?: string;
+  best_environment?: string;
+  overload_signals?: string;
+  first_30_days_focus?: string;
+};
+
+export type HrTalentMapVerificationPlan = {
+  first_check?: string;
+  interview_focus?: string;
+  test_task_focus?: string;
+  what_to_observe?: string;
+  decision_after_check?: string;
+};
+
+export type HrTalentMapEvidenceItem = {
+  id: string;
+  conclusion: string;
+  based_on: string[];
+  source_layer_ids: string[];
+  confidence: HrTalentMapConfidence;
+  client_visible: boolean;
+};
+
 /** Structured JSON for hr_person_talent_map AI reports (client-facing HR language). */
 export type HrPersonTalentMapV1 = {
+  schema_version?: string;
   hero: HrPersonTalentMapHero;
   data_quality: HrPersonTalentMapDataQuality;
   executive_summary: HrPersonTalentMapExecutiveSummary;
@@ -246,6 +333,14 @@ export type HrPersonTalentMapV1 = {
   onboarding_7_30_90: HrPersonTalentMapOnboarding;
   final_hr_recommendation: { text: string };
   qa_meta?: HrPersonTalentMapQaMeta;
+  executive_snapshot?: HrTalentMapExecutiveSnapshot;
+  layer_map?: HrTalentMapLayer[];
+  hypothesis_cards?: HrTalentMapHypothesisCard[];
+  risk_checks?: HrTalentMapRiskCheck[];
+  management_playbook?: HrTalentMapManagementPlaybook;
+  verification_plan?: HrTalentMapVerificationPlan;
+  evidence_map?: HrTalentMapEvidenceItem[];
+  ui?: unknown;
 };
 
 export type HrReport = {

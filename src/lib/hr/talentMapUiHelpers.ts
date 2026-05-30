@@ -366,3 +366,20 @@ export function formatReportDate(iso: string | null | undefined): string | null 
     return null;
   }
 }
+
+export function confidenceLabelRu(confidence: string | undefined): string {
+  switch (confidence) {
+    case "high":
+      return "Высокая";
+    case "low":
+      return "Низкая";
+    default:
+      return "Средняя";
+  }
+}
+
+export function sortLayersByPriority<T extends { ui_priority?: number }>(layers: T[]): T[] {
+  return [...layers].sort(
+    (a, b) => (a.ui_priority ?? 99) - (b.ui_priority ?? 99),
+  );
+}

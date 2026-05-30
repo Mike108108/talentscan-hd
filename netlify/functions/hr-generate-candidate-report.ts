@@ -8,6 +8,13 @@ import {
   findBannedClientTerms,
   normalizePersonTalentMapContent,
 } from "./hr-report-normalize";
+import {
+  V2GenerationError,
+  V2_LIMITED_PROMPT_VERSION,
+  buildHrTalentMapV2LimitedContent,
+  buildV2LimitedReportSummary,
+  buildV2LimitedReportTitle,
+} from "./hr-talent-map-v2-limited";
 
 const PROMPT_VERSION = "hr_person_talent_map_v1_2";
 const DEFAULT_REPORT_TYPE = "hr_person_talent_map";
@@ -560,6 +567,10 @@ export const handler: Handler = async (
   const reportType: ReportType =
     body.report_type === "hr_person_talent_map" ? body.report_type : DEFAULT_REPORT_TYPE;
   const forceRegenerate = body.force_regenerate === true;
+  const useV2LimitedLayers =
+    process.env.HR_TALENT_MAP_V2_LIMITED_LAYERS_ENABLED === "true" &&
+    reportType === "hr_person_talent_map";
+  const promptVersion = useV2LimitedLayers ? V2_LIMITED_PROMPT_VERSION : PROMPT_VERSION;
 
   const db = createSupabaseClient(supabaseUrl, supabaseAnonKey, token);
 
@@ -616,7 +627,7 @@ export const handler: Handler = async (
     candidate: candidate as Record<string, unknown>,
     vacancy,
     normalizedChart,
-    promptVersion: PROMPT_VERSION,
+    promptVersion,
   });
 
   const inputHash = computeInputHash(buildInputHashPayload(reportType, analysisPacket));
@@ -656,6 +667,82 @@ export const handler: Handler = async (
 
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-4o";
   const now = new Date().toISOString();
+
+  if (useV2LimitedLayers) {
+    let contentJson: Record<string, unknown>;
+    try {
+      contentJson = await buildHrTalentMapV2LimitedContent({
+        apiKey,
+        model,
+        analysisPacket,
+        candidate: candidate as Record<string, unknown>,
+        chart: chart as Record<string, unknown>,
+        inputHash,
+        generatedAt: now,
+      });
+    } catch (err) {
+      const stage =
+        err instanceof V2GenerationError ? err.stage : "v2_limited_layers_prompt";
+      const message =
+        err instanceof Error ? err.message : "Ошибка генерации v2 отчёта.";
+      console.error("[hr-generate-candidate-report] v2 limited generation failed", {
+        stage,
+        message,
+        err,
+      });
+      return jsonResponse(502, {
+        error: message,
+        source: "openai",
+        stage,
+      });
+    }
+
+    const title = buildV2LimitedReportTitle(contentJson, asString(candidate.name));
+    const summary = buildV2LimitedReportSummary(contentJson);
+
+    const reportPayload = {
+      company_id: companyId,
+      candidate_id: candidateId,
+      vacancy_id: vacancyId,
+      report_type: reportType,
+      report_status: "ready",
+      title,
+      summary: summary || null,
+      fit_score: null,
+      content_json: contentJson,
+      input_snapshot: analysisPacket,
+      input_hash: inputHash,
+      model,
+      prompt_version: V2_LIMITED_PROMPT_VERSION,
+      generation_error: null,
+      generated_at: now,
+      updated_at: now,
+    };
+
+    const { saved, error: saveErr } = await saveReport(
+      db,
+      companyId,
+      candidateId,
+      reportType,
+      inputHash,
+      vacancyId,
+      reportPayload,
+    );
+
+    if (saveErr || !saved) {
+      console.error("[hr-generate-candidate-report] v2 report save failed", {
+        stage: "v2_report_save",
+        error: saveErr,
+      });
+      return jsonResponse(500, {
+        error: saveErr ?? "Ошибка сохранения отчёта.",
+        source: "db",
+        stage: "v2_report_save",
+      });
+    }
+
+    return jsonResponse(200, { report: saved });
+  }
 
   let rawContentJson: Record<string, unknown>;
   try {

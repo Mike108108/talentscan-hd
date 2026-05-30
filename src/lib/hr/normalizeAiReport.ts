@@ -1,5 +1,6 @@
 import type {
   HrPersonTalentMapV1,
+  HrPersonTalentMapV2,
   HrReport,
   HrTalentMapConfidence,
   HrTalentMapExecutiveSnapshot,
@@ -10,6 +11,8 @@ import type {
   HrTalentMapRiskCheck,
   HrTalentMapVerificationPlan,
 } from "./types";
+import { isTalentMapV2, isTalentMapV2Ready } from "./talentMapContentV2";
+import { mapV2ToLegacyWorkspaceContent } from "./talentMapWorkspaceAdapter";
 
 const POSSIBLE_ROOT_KEYS = [
   "content",
@@ -229,6 +232,7 @@ export function canParseReportContent(raw: unknown): boolean {
 export function getReportContentRoot(raw: unknown): Record<string, unknown> {
   const parsed = parseReportContentJson(raw);
   if (!parsed) return {};
+  if (isTalentMapV2(parsed)) return parsed;
   return unwrapReportContent(parsed);
 }
 
@@ -370,13 +374,23 @@ function normalizeEvidenceMap(raw: unknown): HrTalentMapEvidenceItem[] {
   });
 }
 
-/** Whether workspace should use v1.2 layered layout. */
-export function isTalentMapV12(root: Record<string, unknown>): boolean {
+function isTalentMapV12Legacy(root: Record<string, unknown>): boolean {
   if (asString(root.schema_version) === "hr_person_talent_map_v1_2") return true;
   if (Array.isArray(root.layer_map) && root.layer_map.length > 0) return true;
   if (Array.isArray(root.hypothesis_cards) && root.hypothesis_cards.length > 0) return true;
   if (Array.isArray(root.risk_checks) && root.risk_checks.length > 0) return true;
   return false;
+}
+
+/** Whether workspace should use layered v1.2 or v2 shell layout. */
+export function isTalentMapV2OrLayered(root: Record<string, unknown>): boolean {
+  if (isTalentMapV2Ready(root)) return true;
+  return isTalentMapV12Legacy(root);
+}
+
+/** Whether workspace should use v1.2 layered layout (includes v2). */
+export function isTalentMapV12(root: Record<string, unknown>): boolean {
+  return isTalentMapV2OrLayered(root);
 }
 
 function buildNormalizedContent(root: Record<string, unknown>): HrPersonTalentMapV1 {
@@ -495,7 +509,14 @@ export function logNormalizedWorkspaceContent(content: HrPersonTalentMapV1): voi
 /** Defensive normalization so incomplete AI JSON does not break the UI. */
 export function normalizeAiReportContent(raw: unknown): HrPersonTalentMapV1 {
   try {
-    const root = getReportContentRoot(raw);
+    const parsed = parseReportContentJson(raw);
+    if (parsed && isTalentMapV2(parsed)) {
+      return mapV2ToLegacyWorkspaceContent(parsed as HrPersonTalentMapV2);
+    }
+    const root = parsed ? unwrapReportContent(parsed) : {};
+    if (isTalentMapV2(root)) {
+      return mapV2ToLegacyWorkspaceContent(root as HrPersonTalentMapV2);
+    }
     return buildNormalizedContent(root);
   } catch (err) {
     console.error("[normalizeAiReportContent] failed", err);

@@ -7,6 +7,7 @@ import type {
   HrTalentMapEvidenceItem,
   HrTalentMapHypothesisCard,
   HrTalentMapLayer,
+  HrTalentMapLayerReportV2,
   HrTalentMapManagementPlaybook,
   HrTalentMapRiskCheck,
   HrTalentMapVerificationPlan,
@@ -14,6 +15,7 @@ import type {
   MergedLayerCatalogItem,
   TalentMapRole,
 } from "../../lib/hr/types";
+import { getV2LayerReports } from "../../lib/hr/talentMapContentV2";
 import {
   coerceRolesList,
   coerceStringArray,
@@ -379,21 +381,57 @@ function resolveLayerStatus(
   return fallbackStatus;
 }
 
+function resolveV2LayerStatus(
+  report: HrTalentMapLayerReportV2 | undefined,
+  fallbackStatus: HrLayerCatalogStatus,
+): HrLayerCatalogStatus {
+  if (!report) return fallbackStatus;
+  if (
+    report.status === "ready" ||
+    report.status === "partial" ||
+    report.status === "planned"
+  ) {
+    return report.status;
+  }
+  const base = report.base ?? {};
+  const hasSummary = Boolean(base.short_summary?.trim());
+  const hasDetail = Boolean(
+    base.detailed_explanation?.trim() ||
+      base.how_it_appears_at_work?.trim() ||
+      base.where_useful?.trim() ||
+      base.risks?.trim() ||
+      base.management_tips?.trim() ||
+      base.what_to_check?.trim(),
+  );
+  if (hasSummary && hasDetail) return "ready";
+  if (hasSummary || hasDetail) return "partial";
+  return fallbackStatus;
+}
+
 export function buildMergedLayerCatalog(
   layerMap: HrTalentMapLayer[],
   evidenceMap: HrTalentMapEvidenceItem[],
+  rawContent?: unknown,
 ): MergedLayerCatalogItem[] {
+  const v2ByKey = new Map(
+    getV2LayerReports(rawContent).map((report) => [report.layer_key, report]),
+  );
+
   return LAYER_CATALOG_FALLBACK.map((entry) => {
+    const v2LayerReport = v2ByKey.get(entry.layer_key);
     const aiLayer = findAiLayerForKey(entry.layer_key, layerMap);
     const relatedEvidence = evidenceMap.filter((item) =>
       item.source_layer_ids?.some(
         (id) => id === entry.layer_key || id === aiLayer?.id || id === aiLayer?.source_layer_id,
       ),
     );
-    const resolvedStatus = resolveLayerStatus(aiLayer, entry.status);
+    const resolvedStatus = v2LayerReport
+      ? resolveV2LayerStatus(v2LayerReport, entry.status)
+      : resolveLayerStatus(aiLayer, entry.status);
     return {
       ...entry,
       aiLayer,
+      v2LayerReport,
       resolvedStatus,
       relatedEvidence,
     };
@@ -526,6 +564,120 @@ const PRO_PLACEHOLDER =
 const BASE_PLACEHOLDER =
   "Подробная расшифровка этого слоя появится после обновления AI-структуры карты.";
 
+function V2LayerBasePanel({ report }: { report: HrTalentMapLayerReportV2 }) {
+  const base = report.base ?? {};
+  const hasContent = [
+    base.short_summary,
+    base.detailed_explanation,
+    base.how_it_appears_at_work,
+    base.where_useful,
+    base.risks,
+    base.management_tips,
+    base.what_to_check,
+  ].some((v) => Boolean(v?.trim()));
+
+  if (!hasContent) {
+    return <p className="hr-tm-panel-lead hr-muted">{BASE_PLACEHOLDER}</p>;
+  }
+
+  return (
+    <>
+      {base.short_summary ? (
+        <SectionBlock title="Краткий вывод">
+          <p className="hr-tm-panel-lead">{base.short_summary}</p>
+        </SectionBlock>
+      ) : null}
+      <MetaRow label="Подробное объяснение" value={base.detailed_explanation ?? ""} />
+      <MetaRow label="Как проявляется в работе" value={base.how_it_appears_at_work ?? ""} />
+      <MetaRow label="Где особенно полезен" value={base.where_useful ?? ""} />
+      <MetaRow label="Риски" value={base.risks ?? ""} />
+      <MetaRow label="Советы по управлению" value={base.management_tips ?? ""} />
+      <MetaRow label="Что проверить" value={base.what_to_check ?? ""} />
+    </>
+  );
+}
+
+function formatSourceValues(values: Record<string, unknown> | unknown[] | undefined): string[] {
+  if (!values) return [];
+  if (Array.isArray(values)) {
+    return values.map((v) => String(v)).filter(Boolean);
+  }
+  return Object.entries(values).map(([key, val]) => `${key}: ${String(val)}`);
+}
+
+function V2LayerProPanel({ report }: { report: HrTalentMapLayerReportV2 }) {
+  const pro = report.pro ?? {};
+  const evidence = report.evidence ?? {};
+  const technicalSources = Array.isArray(pro.technical_sources)
+    ? pro.technical_sources.filter(Boolean)
+    : [];
+  const sourceValueLines = formatSourceValues(pro.source_values);
+  const sourceFields = Array.isArray(evidence.source_fields)
+    ? evidence.source_fields.filter(Boolean)
+    : [];
+  const sourceLayerKeys = Array.isArray(evidence.source_layer_keys)
+    ? evidence.source_layer_keys.filter(Boolean)
+    : [];
+  const warnings = Array.isArray(evidence.warnings) ? evidence.warnings.filter(Boolean) : [];
+
+  const hasPro =
+    technicalSources.length > 0 ||
+    sourceValueLines.length > 0 ||
+    Boolean(pro.connection_logic?.trim()) ||
+    Boolean(pro.human_check?.trim()) ||
+    Boolean(evidence.limitations?.trim()) ||
+    sourceFields.length > 0 ||
+    sourceLayerKeys.length > 0 ||
+    warnings.length > 0;
+
+  if (!hasPro) {
+    return <p className="hr-tm-panel-lead hr-muted">{PRO_PLACEHOLDER}</p>;
+  }
+
+  return (
+    <>
+      {technicalSources.length > 0 ? (
+        <SectionBlock title="Технические источники">
+          <ul className="hr-tm-bullets">
+            {technicalSources.map((src) => (
+              <li key={src}>{src}</li>
+            ))}
+          </ul>
+        </SectionBlock>
+      ) : null}
+      {sourceValueLines.length > 0 ? (
+        <SectionBlock title="Значения источников">
+          <ul className="hr-tm-bullets">
+            {sourceValueLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </SectionBlock>
+      ) : null}
+      <MetaRow label="Логика связи" value={pro.connection_logic ?? ""} />
+      {pro.confidence ? <ConfidenceBadge confidence={pro.confidence} /> : null}
+      <MetaRow label="Что проверить человеку" value={pro.human_check ?? ""} />
+      {sourceFields.length > 0 ? (
+        <SectionBlock title="Поля источника">
+          <BulletList items={sourceFields} />
+        </SectionBlock>
+      ) : null}
+      {sourceLayerKeys.length > 0 ? (
+        <SectionBlock title="Связанные слои">
+          <BulletList items={sourceLayerKeys} />
+        </SectionBlock>
+      ) : null}
+      {evidence.confidence ? <ConfidenceBadge confidence={evidence.confidence} /> : null}
+      <MetaRow label="Ограничения" value={evidence.limitations ?? ""} />
+      {warnings.length > 0 ? (
+        <SectionBlock title="Предупреждения">
+          <BulletList items={warnings} />
+        </SectionBlock>
+      ) : null}
+    </>
+  );
+}
+
 export function CatalogLayerDetailPanel({ item }: { item: MergedLayerCatalogItem }) {
   const [mode, setMode] = useState<"base" | "pro">("base");
 
@@ -534,7 +686,9 @@ export function CatalogLayerDetailPanel({ item }: { item: MergedLayerCatalogItem
   }, [item.layer_key]);
 
   const hasProEvidence =
-    item.relatedEvidence.length > 0 || item.technical_sources.length > 0;
+    Boolean(item.v2LayerReport?.pro || item.v2LayerReport?.evidence) ||
+    item.relatedEvidence.length > 0 ||
+    item.technical_sources.length > 0;
 
   return (
     <>
@@ -560,11 +714,15 @@ export function CatalogLayerDetailPanel({ item }: { item: MergedLayerCatalogItem
       </div>
 
       {mode === "base" ? (
-        item.aiLayer ? (
+        item.v2LayerReport ? (
+          <V2LayerBasePanel report={item.v2LayerReport} />
+        ) : item.aiLayer ? (
           <LayerDetailPanel layer={item.aiLayer} />
         ) : (
           <p className="hr-tm-panel-lead hr-muted">{BASE_PLACEHOLDER}</p>
         )
+      ) : item.v2LayerReport ? (
+        <V2LayerProPanel report={item.v2LayerReport} />
       ) : hasProEvidence ? (
         <>
           {item.technical_sources.length > 0 ? (

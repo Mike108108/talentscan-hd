@@ -1,5 +1,8 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type {
+  HrLayerCatalogEntry,
+  HrLayerCatalogGroup,
+  HrLayerCatalogStatus,
   HrPersonTalentMapV1,
   HrTalentMapEvidenceItem,
   HrTalentMapHypothesisCard,
@@ -8,6 +11,7 @@ import type {
   HrTalentMapRiskCheck,
   HrTalentMapVerificationPlan,
   HrVacancy,
+  MergedLayerCatalogItem,
   TalentMapRole,
 } from "../../lib/hr/types";
 import {
@@ -42,9 +46,387 @@ export type DetailPanelState =
   | { kind: "talent"; index: number }
   | { kind: "hypothesis"; index: number }
   | { kind: "layer"; index: number }
+  | { kind: "catalog_layer"; layerKey: string }
   | { kind: "strength"; index: number }
   | { kind: "direction"; index: number }
   | { kind: "role"; index: number };
+
+export const LAYER_GROUP_LABELS: Record<HrLayerCatalogGroup, string> = {
+  core: "Базовый профиль",
+  energy_and_decision: "Энергия и решения",
+  centers_channels_gates: "Таланты и связи",
+  main_activations: "Основные активации",
+  planetary_activations: "Рабочие темы",
+  environment_and_motivation: "Среда и мотивация",
+  evidence_and_quality: "Качество данных",
+};
+
+export const LAYER_STATUS_LABELS: Record<HrLayerCatalogStatus, string> = {
+  ready: "Готово",
+  partial: "Частично",
+  planned: "Запланировано",
+};
+
+const LAYER_CATALOG_FALLBACK: HrLayerCatalogEntry[] = [
+  {
+    layer_key: "chart_passport",
+    hr_title: "Паспорт рабочей карты",
+    group: "core",
+    short_description: "Сводный портрет рабочего стиля и базовых паттернов человека.",
+    technical_sources: ["type", "profile", "strategy", "authority", "definition", "incarnationCross", "signature", "notSelfTheme"],
+    status: "planned",
+  },
+  {
+    layer_key: "work_format",
+    hr_title: "Рабочий формат",
+    group: "energy_and_decision",
+    short_description: "Как человеку комфортно включаться в работу и держать продуктивный ритм.",
+    technical_sources: ["type"],
+    status: "planned",
+  },
+  {
+    layer_key: "task_entry",
+    hr_title: "Вход в задачи",
+    group: "energy_and_decision",
+    short_description: "Что помогает человеку начать задачу и быстро войти в рабочий поток.",
+    technical_sources: ["strategy"],
+    status: "planned",
+  },
+  {
+    layer_key: "decision_style",
+    hr_title: "Принятие решений",
+    group: "energy_and_decision",
+    short_description: "Как человек принимает решения и в каких условиях решения надёжнее.",
+    technical_sources: ["authority"],
+    status: "planned",
+  },
+  {
+    layer_key: "work_signature",
+    hr_title: "Рабочий почерк",
+    group: "core",
+    short_description: "Устойчивый стиль поведения и типичный способ проявления в работе.",
+    technical_sources: ["profile"],
+    status: "planned",
+  },
+  {
+    layer_key: "inner_coherence",
+    hr_title: "Внутренняя связность",
+    group: "core",
+    short_description: "Насколько согласованы внутренние рабочие паттерны и внешнее поведение.",
+    technical_sources: ["definition"],
+    status: "planned",
+  },
+  {
+    layer_key: "stable_zones",
+    hr_title: "Устойчивые зоны",
+    group: "centers_channels_gates",
+    short_description: "Где у человека стабильная опора и предсказуемая сила в работе.",
+    technical_sources: ["definedCenters"],
+    status: "planned",
+  },
+  {
+    layer_key: "sensitive_zones",
+    hr_title: "Чувствительные зоны",
+    group: "centers_channels_gates",
+    short_description: "Где человек сильнее реагирует на среду и чужое давление.",
+    technical_sources: ["openCenters"],
+    status: "planned",
+  },
+  {
+    layer_key: "talent_links",
+    hr_title: "Связки талантов",
+    group: "centers_channels_gates",
+    short_description: "Сочетания способностей, которые усиливают друг друга в задачах.",
+    technical_sources: ["channelsShort", "channelsLong"],
+    status: "planned",
+  },
+  {
+    layer_key: "point_talents",
+    hr_title: "Точечные таланты",
+    group: "centers_channels_gates",
+    short_description: "Отдельные сильные качества, которые проявляются точечно и заметно.",
+    technical_sources: ["gatesAll", "gatesPersonality", "gatesDesign", "gateSources"],
+    status: "planned",
+  },
+  {
+    layer_key: "amplified_themes",
+    hr_title: "Усиленные темы",
+    group: "centers_channels_gates",
+    short_description: "Темы и качества, которые у человека проявляются особенно ярко.",
+    technical_sources: ["gatesBoth", "gateSources"],
+    status: "planned",
+  },
+  {
+    layer_key: "personality_activations",
+    hr_title: "Сознательный слой проявления",
+    group: "main_activations",
+    short_description: "То, что человек осознанно приносит в работу и коммуникацию.",
+    technical_sources: ["activations.personality"],
+    status: "planned",
+  },
+  {
+    layer_key: "design_activations",
+    hr_title: "Фоновый слой проявления",
+    group: "main_activations",
+    short_description: "Фоновые паттерны, которые влияют на стиль работы изнутри.",
+    technical_sources: ["activations.design"],
+    status: "planned",
+  },
+  {
+    layer_key: "conscious_axis",
+    hr_title: "Сознательная рабочая ось",
+    group: "main_activations",
+    short_description: "Главная сознательная линия мотивации и направления в работе.",
+    technical_sources: ["activations.personality.sun", "activations.personality.earth"],
+    status: "planned",
+  },
+  {
+    layer_key: "background_axis",
+    hr_title: "Фоновая рабочая ось",
+    group: "main_activations",
+    short_description: "Глубинная линия, которая задаёт устойчивый фон поведения.",
+    technical_sources: ["activations.design.sun", "activations.design.earth"],
+    status: "planned",
+  },
+  {
+    layer_key: "work_impulse",
+    hr_title: "Рабочий импульс",
+    group: "planetary_activations",
+    short_description: "Что быстро запускает человека в действие и даёт рабочий импульс.",
+    technical_sources: ["activations.personality.moon", "activations.design.moon"],
+    status: "planned",
+  },
+  {
+    layer_key: "communication_style",
+    hr_title: "Коммуникация и объяснение",
+    group: "planetary_activations",
+    short_description: "Как человек формулирует мысли и доносит их до команды.",
+    technical_sources: ["activations.personality.mercury", "activations.design.mercury"],
+    status: "planned",
+  },
+  {
+    layer_key: "values_and_culture",
+    hr_title: "Ценности и культура взаимодействия",
+    group: "planetary_activations",
+    short_description: "Какие ценности и правила взаимодействия для человека естественны.",
+    technical_sources: ["activations.personality.venus", "activations.design.venus"],
+    status: "planned",
+  },
+  {
+    layer_key: "growth_tension",
+    hr_title: "Напряжение и рост",
+    group: "planetary_activations",
+    short_description: "Где человек растёт через вызов и как проявляется рабочее напряжение.",
+    technical_sources: ["activations.personality.mars", "activations.design.mars"],
+    status: "planned",
+  },
+  {
+    layer_key: "principles_and_rules",
+    hr_title: "Принципы и правила",
+    group: "planetary_activations",
+    short_description: "Внутренние принципы, по которым человек выстраивает рабочие решения.",
+    technical_sources: ["activations.personality.jupiter", "activations.design.jupiter"],
+    status: "planned",
+  },
+  {
+    layer_key: "responsibility_maturity",
+    hr_title: "Ответственность и зрелость",
+    group: "planetary_activations",
+    short_description: "Как человек берёт ответственность и проявляет зрелость в задачах.",
+    technical_sources: ["activations.personality.saturn", "activations.design.saturn"],
+    status: "planned",
+  },
+  {
+    layer_key: "nonstandard_contribution",
+    hr_title: "Нестандартный вклад",
+    group: "planetary_activations",
+    short_description: "Чем человек может неожиданно усилить команду и результат.",
+    technical_sources: ["activations.personality.uranus", "activations.design.uranus"],
+    status: "planned",
+  },
+  {
+    layer_key: "blind_spots",
+    hr_title: "Слепые зоны",
+    group: "planetary_activations",
+    short_description: "Где человек может недооценивать риски или терять ясность.",
+    technical_sources: ["activations.personality.neptune", "activations.design.neptune"],
+    status: "planned",
+  },
+  {
+    layer_key: "deep_potential",
+    hr_title: "Глубинный потенциал",
+    group: "planetary_activations",
+    short_description: "Скрытый ресурс, который раскрывается в правильной среде.",
+    technical_sources: ["activations.personality.pluto", "activations.design.pluto"],
+    status: "planned",
+  },
+  {
+    layer_key: "environment_direction",
+    hr_title: "Среда и направление",
+    group: "environment_and_motivation",
+    short_description: "Какая среда и траектория развития лучше поддерживают человека.",
+    technical_sources: ["activations.personality.northNode", "activations.personality.southNode", "activations.design.northNode", "activations.design.southNode"],
+    status: "planned",
+  },
+  {
+    layer_key: "perception_settings",
+    hr_title: "Настройка восприятия",
+    group: "environment_and_motivation",
+    short_description: "Как человек воспринимает информацию и контекст вокруг себя.",
+    technical_sources: ["variables"],
+    status: "planned",
+  },
+  {
+    layer_key: "information_sensing",
+    hr_title: "Способ считывания",
+    group: "environment_and_motivation",
+    short_description: "Как человек считывает детали, сигналы и рабочую информацию.",
+    technical_sources: ["cognition"],
+    status: "planned",
+  },
+  {
+    layer_key: "resource_recovery",
+    hr_title: "Ресурс и восстановление",
+    group: "environment_and_motivation",
+    short_description: "Что помогает человеку восстанавливаться и держать энергию.",
+    technical_sources: ["determination"],
+    status: "planned",
+  },
+  {
+    layer_key: "driving_motivation",
+    hr_title: "Движущая мотивация",
+    group: "environment_and_motivation",
+    short_description: "Что по-настоящему мотивирует человека в работе.",
+    technical_sources: ["motivation"],
+    status: "planned",
+  },
+  {
+    layer_key: "pressure_shift",
+    hr_title: "Сдвиг под давлением",
+    group: "environment_and_motivation",
+    short_description: "Как меняется поведение человека под давлением и дедлайнами.",
+    technical_sources: ["transference"],
+    status: "planned",
+  },
+  {
+    layer_key: "focus_perspective",
+    hr_title: "Фокус взгляда",
+    group: "environment_and_motivation",
+    short_description: "На что человек естественно направляет внимание в работе.",
+    technical_sources: ["perspective"],
+    status: "planned",
+  },
+  {
+    layer_key: "focus_distraction",
+    hr_title: "Что сбивает фокус",
+    group: "environment_and_motivation",
+    short_description: "Что чаще всего отвлекает и снижает концентрацию.",
+    technical_sources: ["distraction"],
+    status: "planned",
+  },
+  {
+    layer_key: "work_environment",
+    hr_title: "Рабочая среда",
+    group: "environment_and_motivation",
+    short_description: "Какие условия среды помогают человеку раскрыться.",
+    technical_sources: ["environment"],
+    status: "planned",
+  },
+  {
+    layer_key: "team_contribution_type",
+    hr_title: "Тип вклада в команду",
+    group: "environment_and_motivation",
+    short_description: "Какой тип вклада человек приносит в командную динамику.",
+    technical_sources: ["circuitries"],
+    status: "planned",
+  },
+  {
+    layer_key: "data_quality",
+    hr_title: "Надёжность данных",
+    group: "evidence_and_quality",
+    short_description: "Насколько можно опираться на текущие данные при выводах.",
+    technical_sources: ["data_quality", "birthDateUtc", "canRenderBodygraph", "missingForBodygraph"],
+    status: "planned",
+  },
+];
+
+function findAiLayerForKey(
+  layerKey: string,
+  layerMap: HrTalentMapLayer[],
+): HrTalentMapLayer | undefined {
+  return layerMap.find(
+    (layer) =>
+      layer.source_layer_id === layerKey ||
+      layer.id === layerKey ||
+      layer.source_layer_id?.toLowerCase() === layerKey.toLowerCase(),
+  );
+}
+
+function resolveLayerStatus(
+  aiLayer: HrTalentMapLayer | undefined,
+  fallbackStatus: HrLayerCatalogStatus,
+): HrLayerCatalogStatus {
+  if (!aiLayer) return fallbackStatus;
+  const hasSummary = Boolean(aiLayer.client_summary?.trim());
+  const hasDetail = Boolean(
+    aiLayer.hr_meaning?.trim() ||
+      aiLayer.key_signal?.trim() ||
+      aiLayer.risk_signal?.trim() ||
+      aiLayer.how_to_check?.trim(),
+  );
+  if (hasSummary && hasDetail) return "ready";
+  if (hasSummary || hasDetail) return "partial";
+  return fallbackStatus;
+}
+
+export function buildMergedLayerCatalog(
+  layerMap: HrTalentMapLayer[],
+  evidenceMap: HrTalentMapEvidenceItem[],
+): MergedLayerCatalogItem[] {
+  return LAYER_CATALOG_FALLBACK.map((entry) => {
+    const aiLayer = findAiLayerForKey(entry.layer_key, layerMap);
+    const relatedEvidence = evidenceMap.filter((item) =>
+      item.source_layer_ids?.some(
+        (id) => id === entry.layer_key || id === aiLayer?.id || id === aiLayer?.source_layer_id,
+      ),
+    );
+    const resolvedStatus = resolveLayerStatus(aiLayer, entry.status);
+    return {
+      ...entry,
+      aiLayer,
+      resolvedStatus,
+      relatedEvidence,
+    };
+  });
+}
+
+export function getCatalogLayerByKey(
+  catalog: MergedLayerCatalogItem[],
+  layerKey: string,
+): MergedLayerCatalogItem | undefined {
+  return catalog.find((item) => item.layer_key === layerKey);
+}
+
+export function groupLayerCatalog(
+  catalog: MergedLayerCatalogItem[],
+): Array<{ group: HrLayerCatalogGroup; label: string; items: MergedLayerCatalogItem[] }> {
+  const order: HrLayerCatalogGroup[] = [
+    "core",
+    "energy_and_decision",
+    "centers_channels_gates",
+    "main_activations",
+    "planetary_activations",
+    "environment_and_motivation",
+    "evidence_and_quality",
+  ];
+  return order
+    .map((group) => ({
+      group,
+      label: LAYER_GROUP_LABELS[group],
+      items: catalog.filter((item) => item.group === group),
+    }))
+    .filter((g) => g.items.length > 0);
+}
 
 function asRec(value: unknown): Record<string, unknown> {
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -136,6 +518,124 @@ export function LayerDetailPanel({ layer }: { layer: HrTalentMapLayer }) {
       <MetaRow label="Как проверить" value={layer.how_to_check} />
       <ConfidenceBadge confidence={layer.confidence} />
     </>
+  );
+}
+
+const PRO_PLACEHOLDER =
+  "Pro-основание будет доступно после обновления структуры AI-расшифровки.";
+const BASE_PLACEHOLDER =
+  "Подробная расшифровка этого слоя появится после обновления AI-структуры карты.";
+
+export function CatalogLayerDetailPanel({ item }: { item: MergedLayerCatalogItem }) {
+  const [mode, setMode] = useState<"base" | "pro">("base");
+
+  useEffect(() => {
+    setMode("base");
+  }, [item.layer_key]);
+
+  const hasProEvidence =
+    item.relatedEvidence.length > 0 || item.technical_sources.length > 0;
+
+  return (
+    <>
+      <div className="hr-layer-mode-toggle" role="tablist" aria-label="Режим просмотра слоя">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "base"}
+          className={`hr-layer-mode-btn${mode === "base" ? " hr-layer-mode-btn--active" : ""}`}
+          onClick={() => setMode("base")}
+        >
+          Base
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "pro"}
+          className={`hr-layer-mode-btn${mode === "pro" ? " hr-layer-mode-btn--active" : ""}`}
+          onClick={() => setMode("pro")}
+        >
+          Pro
+        </button>
+      </div>
+
+      {mode === "base" ? (
+        item.aiLayer ? (
+          <LayerDetailPanel layer={item.aiLayer} />
+        ) : (
+          <p className="hr-tm-panel-lead hr-muted">{BASE_PLACEHOLDER}</p>
+        )
+      ) : hasProEvidence ? (
+        <>
+          {item.technical_sources.length > 0 ? (
+            <SectionBlock title="Технические источники">
+              <ul className="hr-tm-bullets">
+                {item.technical_sources.map((src) => (
+                  <li key={src}>{src}</li>
+                ))}
+              </ul>
+            </SectionBlock>
+          ) : null}
+          {item.relatedEvidence.map((evidence) => (
+            <SectionBlock key={evidence.id} title="Основание">
+              <p className="hr-tm-panel-lead">{evidence.conclusion}</p>
+              {evidence.based_on?.length ? (
+                <MetaRow label="На основе" value={evidence.based_on.join(", ")} />
+              ) : null}
+              <ConfidenceBadge confidence={evidence.confidence} />
+            </SectionBlock>
+          ))}
+          {item.aiLayer?.confidence ? (
+            <ConfidenceBadge confidence={item.aiLayer.confidence} />
+          ) : null}
+        </>
+      ) : (
+        <p className="hr-tm-panel-lead hr-muted">{PRO_PLACEHOLDER}</p>
+      )}
+    </>
+  );
+}
+
+export function LayerCatalogList({
+  catalog,
+  onSelectLayer,
+}: {
+  catalog: MergedLayerCatalogItem[];
+  onSelectLayer: (layerKey: string) => void;
+}) {
+  const groups = groupLayerCatalog(catalog);
+
+  return (
+    <div className="hr-layer-catalog">
+      {groups.map((group) => (
+        <div key={group.group} className="hr-layer-catalog-group">
+          <h4 className="hr-layer-catalog-group-title">{group.label}</h4>
+          <div className="hr-layer-catalog-list">
+            {group.items.map((item) => (
+              <button
+                key={item.layer_key}
+                type="button"
+                className="hr-layer-catalog-item"
+                onClick={() => onSelectLayer(item.layer_key)}
+              >
+                <div className="hr-layer-catalog-item-head">
+                  <span className="hr-layer-catalog-item-title">{item.hr_title}</span>
+                  <span
+                    className={`hr-layer-status hr-layer-status--${item.resolvedStatus}`}
+                  >
+                    {LAYER_STATUS_LABELS[item.resolvedStatus]}
+                  </span>
+                </div>
+                <p className="hr-layer-catalog-item-desc">{item.short_description}</p>
+                <span className="hr-tm-row-chevron" aria-hidden>
+                  →
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -334,6 +834,10 @@ export function ItemDetailPanel({
   const { aiContent, rawContent, normalizeHrCopy } = ctx;
   const raw = rawContent;
 
+  if (detail.kind === "catalog_layer") {
+    return null;
+  }
+
   if (detail.kind === "layer") {
     const layer = layers[detail.index];
     if (!layer) return null;
@@ -510,6 +1014,8 @@ export function getDetailPanelTitle(
   },
 ): string {
   switch (detail.kind) {
+    case "catalog_layer":
+      return "Слой карты";
     case "layer":
       return items.layers[detail.index]?.title ?? "Слой карты";
     case "hypothesis":

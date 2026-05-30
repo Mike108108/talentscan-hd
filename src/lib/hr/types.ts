@@ -210,7 +210,7 @@ export type HrPersonTalentMapDataQuality = {
 
 export type HrPersonTalentMapExecutiveSummary = {
   text: string;
-  fit_score?: number;
+  fit_score?: number | null;
 };
 
 export type HrPersonTalentMapOnboarding = {
@@ -222,6 +222,8 @@ export type HrPersonTalentMapOnboarding = {
 
 export type HrPersonTalentMapQaMeta = {
   hypothesis_level?: string;
+  report_type_note?: string;
+  next_best_report?: string;
   disclaimers?: string[];
 };
 

@@ -591,9 +591,6 @@ function TalentMapWorkspace({
           <span className="hr-status hr-status--ok">Разбор готов</span>
           {updatedLabel ? <span>· обновлено {updatedLabel}</span> : null}
           <span>· вакансия {vacancyLabel}</span>
-          {aiReport.fit_score != null ? (
-            <span>· соответствие ~{aiReport.fit_score}%</span>
-          ) : null}
         </p>
 
         <div className="hr-tm-conclusion">

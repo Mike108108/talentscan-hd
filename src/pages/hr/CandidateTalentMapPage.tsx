@@ -29,9 +29,15 @@ import type { HrCandidate, HrPersonTalentMapV1, HrReport, HrVacancy, TalentMapRo
 import { formulaToSafeHtml } from "../../lib/safeHtml";
 import {
   buildReportLists,
+  buildMergedLayerCatalog,
+  CatalogLayerDetailPanel,
   DataQualitySection,
+  formatDataQuality,
+  getCatalogLayerByKey,
   getDetailPanelTitle,
   ItemDetailPanel,
+  LayerCatalogList,
+  LAYER_GROUP_LABELS,
   ManagementPlaybookGrid,
   type DetailPanelState,
   type ReportContentCtx,
@@ -42,11 +48,13 @@ import "../../hr.css";
 
 type SectionId =
   | "overview"
-  | "layers"
+  | "formula"
   | "talents"
-  | "profile"
+  | "work_env"
   | "risks"
   | "management"
+  | "layers"
+  | "profile"
   | "checks"
   | "interview"
   | "test"
@@ -56,27 +64,22 @@ type SectionId =
 
 const NAV_SECTIONS_V12: Array<{ id: SectionId; label: string; hint?: string }> = [
   { id: "overview", label: "Обзор" },
-  { id: "layers", label: "Слои карты", hint: "HR-расшифровка по слоям" },
+  { id: "formula", label: "Рабочая формула" },
   { id: "talents", label: "Таланты" },
-  { id: "risks", label: "Риски и проверки" },
-  { id: "management", label: "Управление и среда" },
-  { id: "interview", label: "Интервью" },
-  { id: "test", label: "Тестовое" },
-  { id: "onboarding", label: "Адаптация" },
-  { id: "data", label: "Данные" },
-  { id: "roles", label: "Роли" },
+  { id: "work_env", label: "Рабочая среда" },
+  { id: "risks", label: "Риски" },
+  { id: "management", label: "Управление" },
+  { id: "layers", label: "Слои карты", hint: "HR-расшифровка по слоям" },
 ];
 
 const NAV_SECTIONS_LEGACY: Array<{ id: SectionId; label: string; hint?: string }> = [
   { id: "overview", label: "Обзор" },
-  { id: "profile", label: "Рабочий профиль", hint: "Формула и таланты" },
-  { id: "risks", label: "Риски и условия" },
-  { id: "checks", label: "Проверка" },
-  { id: "interview", label: "Интервью" },
-  { id: "test", label: "Тестовое" },
-  { id: "onboarding", label: "Адаптация" },
-  { id: "data", label: "Данные" },
-  { id: "roles", label: "Роли и вакансии" },
+  { id: "formula", label: "Рабочая формула" },
+  { id: "talents", label: "Таланты" },
+  { id: "work_env", label: "Рабочая среда" },
+  { id: "risks", label: "Риски" },
+  { id: "management", label: "Управление" },
+  { id: "layers", label: "Слои карты" },
 ];
 
 type ReportSnapshot = {
@@ -189,37 +192,6 @@ function ConfidencePill({ confidence }: { confidence?: string }) {
         ? "hr-tm-confidence--low"
         : "hr-tm-confidence--medium";
   return <span className={`hr-tm-confidence hr-tm-confidence--compact ${mod}`}>{label}</span>;
-}
-
-function LayerCard({
-  title,
-  summary,
-  confidence,
-  onClick,
-}: {
-  title: string;
-  summary: string;
-  confidence?: string;
-  onClick?: () => void;
-}) {
-  const body = (
-    <>
-      <div className="hr-tm-layer-card-head">
-        <span className="hr-tm-layer-card-title">{title}</span>
-        {confidence ? <ConfidencePill confidence={confidence} /> : null}
-      </div>
-      {summary ? <p className="hr-tm-layer-card-summary">{summary}</p> : null}
-      {onClick ? <span className="hr-tm-row-chevron" aria-hidden>→</span> : null}
-    </>
-  );
-  if (onClick) {
-    return (
-      <button type="button" className="hr-tm-layer-card hr-tm-layer-card--clickable" onClick={onClick}>
-        {body}
-      </button>
-    );
-  }
-  return <div className="hr-tm-layer-card">{body}</div>;
 }
 
 function HypothesisCardRow({
@@ -426,6 +398,11 @@ function TalentMapWorkspace({
     [lists.layers],
   );
 
+  const mergedCatalog = useMemo(
+    () => buildMergedLayerCatalog(lists.layers ?? [], lists.evidenceMap ?? []),
+    [lists.layers, lists.evidenceMap],
+  );
+
   const hero = aiContent.hero;
   const snapshot = lists.executiveSnapshot ?? aiContent.executive_snapshot;
   const bestWorkFormat = normalizeHrMaybe(snapshot?.best_use ?? hero?.best_work_format);
@@ -442,10 +419,7 @@ function TalentMapWorkspace({
   const formulaText = getText(aiContent.working_formula?.text);
   const formulaHtml = formulaText ? formulaToSafeHtml(formulaText) : "";
 
-  const confidenceLabel = aiContent.data_quality?.confidence
-    ? normalizeHrCopy(aiContent.data_quality.confidence).replace(/\d{1,3}\s*%/g, "").trim() ||
-      "уточняется"
-    : "уточняется";
+  const confidenceLabel = formatDataQuality(aiContent.data_quality?.confidence);
 
   const updatedLabel = formatReportDate(
     aiReport.generated_at ?? aiReport.updated_at,
@@ -474,13 +448,14 @@ function TalentMapWorkspace({
   const mainConclusion = summaryText ?? finalRec ?? "Разбор готов — откройте разделы ниже для деталей.";
 
   const showDataQualityWarn =
-    /низк|мало|огранич|неполн|предварит/i.test(confidenceLabel) ||
+    (aiContent.data_quality?.confidence ?? "").trim().toLowerCase() === "low" ||
+    confidenceLabel === "низкая" ||
     /низк|мало|огранич|неполн/i.test(getText(aiContent.data_quality?.completeness));
 
-  const formatSection = isV12 ? "layers" : "profile";
+  const formatSection: SectionId = isV12 ? "formula" : "profile";
   const checkSection: SectionId = isV12 ? "risks" : "checks";
 
-  const topHypotheses = (lists.hypothesisCards ?? []).slice(0, 3);
+  const topHypotheses = (lists.hypothesisCards ?? []).slice(0, 5);
 
   const detailLists = {
     risks: lists.risks,
@@ -532,7 +507,7 @@ function TalentMapWorkspace({
               ) : null}
               {topHypotheses.length > 0 ? (
                 <div>
-                  <h3 className="hr-tm-section-h">Ключевые HR-гипотезы</h3>
+                  <h3 className="hr-tm-section-h">Быстрые выводы</h3>
                   {topHypotheses.map((h, i) => {
                     const fullIndex = (lists.hypothesisCards ?? []).findIndex((x) => x.id === h.id);
                     return (
@@ -581,21 +556,63 @@ function TalentMapWorkspace({
             ) : null}
           </div>
         );
-      case "layers":
-        return sortedLayers.length === 0 ? (
-          <p className="hr-muted">Слои HR-расшифровки появятся после генерации карты v1.2.</p>
-        ) : (
-          <div className="hr-tm-layer-grid">
-            {sortedLayers.map((layer, i) => (
-              <LayerCard
-                key={layer.id || `${layer.title}-${i}`}
-                title={layer.title}
-                summary={layer.client_summary}
-                confidence={layer.confidence}
-                onClick={() => setDetail({ kind: "layer", index: i })}
-              />
-            ))}
+      case "formula":
+        return (
+          <div className="hr-tm-section-stack">
+            {formulaHtml ? (
+              <div>
+                <h3 className="hr-tm-section-h">Как человек работает</h3>
+                <div
+                  className="hr-tm-overview-formula"
+                  dangerouslySetInnerHTML={{ __html: formulaHtml }}
+                />
+              </div>
+            ) : summaryText ? (
+              <p className="hr-tm-section-lead">{summaryText}</p>
+            ) : null}
+            {bestWorkFormat ? (
+              <MetaOverviewRow label="Как включается в задачи" value={bestWorkFormat} />
+            ) : null}
+            {keyTalent ? (
+              <MetaOverviewRow label="Как проявляет пользу" value={keyTalent} />
+            ) : null}
+            {snapshot?.decision_note ? (
+              <MetaOverviewRow label="Как принимает решения" value={snapshot.decision_note} />
+            ) : null}
+            {!formulaHtml && !summaryText && !bestWorkFormat && !keyTalent ? (
+              <p className="hr-muted">Рабочая формула появится после генерации карты.</p>
+            ) : null}
           </div>
+        );
+      case "work_env":
+        return (
+          <div className="hr-tm-section-stack">
+            {lists.managementPlaybook?.best_environment ? (
+              <div className="hr-tm-playbook-card">
+                <h4 className="hr-tm-playbook-card-title">Подходящая среда</h4>
+                <p>{normalizeHrCopy(lists.managementPlaybook.best_environment)}</p>
+              </div>
+            ) : null}
+            {lists.workEnv.length === 0 && !lists.managementPlaybook?.best_environment ? (
+              <p className="hr-muted">Нет данных о рабочей среде</p>
+            ) : null}
+            {lists.workEnv.map((c, i) => (
+              <CompactRow key={`${c.title}-${i}`} title={c.title} subtitle={c.body} />
+            ))}
+            {lists.managementPlaybook?.overload_signals ? (
+              <div className="hr-tm-playbook-card">
+                <h4 className="hr-tm-playbook-card-title">Что может перегружать</h4>
+                <p>{normalizeHrCopy(lists.managementPlaybook.overload_signals)}</p>
+              </div>
+            ) : null}
+          </div>
+        );
+      case "layers":
+        return (
+          <LayerCatalogList
+            catalog={mergedCatalog}
+            onSelectLayer={(layerKey) => setDetail({ kind: "catalog_layer", layerKey })}
+          />
         );
       case "talents": {
         const talentItems = lists.talentHypotheses?.length
@@ -648,25 +665,31 @@ function TalentMapWorkspace({
       }
       case "management":
         if (lists.managementPlaybook) {
+          const pb = lists.managementPlaybook;
+          const playbookForMgmt = {
+            ...pb,
+            best_environment: undefined,
+            overload_signals: undefined,
+          };
           return (
             <div className="hr-tm-section-stack">
               <ManagementPlaybookGrid
-                playbook={lists.managementPlaybook}
+                playbook={playbookForMgmt}
                 normalizeHrCopy={normalizeHrCopy}
               />
+              {lists.mgmt.map((c, i) => (
+                <CompactRow key={`${c.title}-${i}`} title={c.title} subtitle={c.body} />
+              ))}
             </div>
           );
         }
         return (
           <div className="hr-tm-section-stack">
-            <h3 className="hr-tm-section-h">Среда</h3>
-            {lists.workEnv.map((c, i) => (
-              <CompactRow key={`${c.title}-${i}`} title={c.title} subtitle={c.body} />
-            ))}
             <h3 className="hr-tm-section-h">Управление</h3>
             {lists.mgmt.map((c, i) => (
               <CompactRow key={`${c.title}-${i}`} title={c.title} subtitle={c.body} />
             ))}
+            {lists.mgmt.length === 0 ? <p className="hr-muted">Нет данных</p> : null}
           </div>
         );
       case "profile":
@@ -863,6 +886,18 @@ function TalentMapWorkspace({
     }
   };
 
+  const catalogLayerDetail =
+    detail?.kind === "catalog_layer"
+      ? getCatalogLayerByKey(mergedCatalog, detail.layerKey)
+      : null;
+
+  const sidePanelTitle =
+    detail?.kind === "catalog_layer"
+      ? (catalogLayerDetail?.hr_title ?? "Слой карты")
+      : detail
+        ? getDetailPanelTitle(detail, detailLists)
+        : "";
+
   return (
     <div className={`hr-tm-page hr-tm-page--workspace${isV12 ? " hr-tm-page--v12" : ""}`}>
       <div className="hr-tm-header">
@@ -990,10 +1025,20 @@ function TalentMapWorkspace({
       <HrSidePanel
         open={detail !== null}
         onClose={() => setDetail(null)}
-        title={detail ? getDetailPanelTitle(detail, detailLists) : ""}
-        description="Детали для проверки на интервью"
+        title={sidePanelTitle}
+        description={
+          detail?.kind === "catalog_layer"
+            ? catalogLayerDetail
+              ? LAYER_GROUP_LABELS[catalogLayerDetail.group]
+              : undefined
+            : "Детали для проверки на интервью"
+        }
       >
-        {detail ? (
+        {detail?.kind === "catalog_layer" && catalogLayerDetail ? (
+          <SectionErrorBoundary title="Слой карты">
+            <CatalogLayerDetailPanel item={catalogLayerDetail} />
+          </SectionErrorBoundary>
+        ) : detail ? (
           <SectionErrorBoundary title="Детали">
             <ItemDetailPanel
               detail={detail}

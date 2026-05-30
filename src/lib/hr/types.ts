@@ -251,6 +251,32 @@ export type HrTalentMapLayer = {
   source_layer_id: string;
 };
 
+export type HrLayerCatalogGroup =
+  | "core"
+  | "energy_and_decision"
+  | "centers_channels_gates"
+  | "main_activations"
+  | "planetary_activations"
+  | "environment_and_motivation"
+  | "evidence_and_quality";
+
+export type HrLayerCatalogStatus = "ready" | "partial" | "planned";
+
+export type HrLayerCatalogEntry = {
+  layer_key: string;
+  hr_title: string;
+  group: HrLayerCatalogGroup;
+  short_description: string;
+  technical_sources: string[];
+  status: HrLayerCatalogStatus;
+};
+
+export type MergedLayerCatalogItem = HrLayerCatalogEntry & {
+  aiLayer?: HrTalentMapLayer;
+  resolvedStatus: HrLayerCatalogStatus;
+  relatedEvidence: HrTalentMapEvidenceItem[];
+};
+
 export type HrTalentMapHypothesisType =
   | "talent"
   | "risk"

@@ -22,7 +22,7 @@ export type NormalizedPersonTalentMap = {
     notes: string;
     metrics: NormalizedMetric[];
   };
-  executive_summary: { text: string; fit_score: number };
+  executive_summary: { text: string; fit_score?: number | null };
   working_formula: { text: string };
   talents: NormalizedSectionItem[];
   strengths: NormalizedSectionItem[];
@@ -41,7 +41,12 @@ export type NormalizedPersonTalentMap = {
     items: NormalizedSectionItem[];
   };
   final_hr_recommendation: { text: string };
-  qa_meta: { hypothesis_level: string; disclaimers: string[] };
+  qa_meta: {
+    hypothesis_level: string;
+    report_type_note?: string;
+    next_best_report?: string;
+    disclaimers: string[];
+  };
 };
 
 function asString(value: unknown, fallback = ""): string {
@@ -50,11 +55,11 @@ function asString(value: unknown, fallback = ""): string {
   return fallback;
 }
 
-function asNumber(value: unknown, fallback = 0): number {
+function asOptionalNumber(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.round(Math.min(100, Math.max(0, value)));
   }
-  return fallback;
+  return undefined;
 }
 
 function normalizeSectionItems(raw: unknown): NormalizedSectionItem[] {
@@ -112,6 +117,8 @@ export function normalizePersonTalentMapContent(raw: unknown): NormalizedPersonT
   const finalRec = normalizeObject(root.final_hr_recommendation);
   const qaMeta = normalizeObject(root.qa_meta);
 
+  const fitScore = asOptionalNumber(executive.fit_score);
+
   const disclaimers = Array.isArray(qaMeta.disclaimers)
     ? qaMeta.disclaimers.map((d) => asString(d)).filter(Boolean)
     : [];
@@ -134,7 +141,7 @@ export function normalizePersonTalentMapContent(raw: unknown): NormalizedPersonT
     },
     executive_summary: {
       text: asString(executive.text),
-      fit_score: asNumber(executive.fit_score),
+      ...(fitScore !== undefined ? { fit_score: fitScore } : {}),
     },
     working_formula: { text: asString(workingFormula.text) },
     talents: normalizeSectionItems(root.talents),
@@ -156,6 +163,12 @@ export function normalizePersonTalentMapContent(raw: unknown): NormalizedPersonT
     final_hr_recommendation: { text: asString(finalRec.text) },
     qa_meta: {
       hypothesis_level: asString(qaMeta.hypothesis_level),
+      ...(asString(qaMeta.report_type_note)
+        ? { report_type_note: asString(qaMeta.report_type_note) }
+        : {}),
+      ...(asString(qaMeta.next_best_report)
+        ? { next_best_report: asString(qaMeta.next_best_report) }
+        : {}),
       disclaimers,
     },
   };
@@ -242,12 +255,20 @@ export function buildInputHashPayload(
   reportType: string,
   analysisPacket: Record<string, unknown>,
 ): Record<string, unknown> {
+  const reportContext = analysisPacket.report_context ?? null;
+  const promptVersion =
+    reportContext &&
+    typeof reportContext === "object" &&
+    !Array.isArray(reportContext)
+      ? (reportContext as Record<string, unknown>).prompt_version ?? null
+      : analysisPacket.prompt_version ?? null;
+
   return {
     report_type: reportType,
+    prompt_version: promptVersion,
     company: analysisPacket.company ?? null,
     candidate: analysisPacket.candidate ?? null,
-    vacancy: analysisPacket.vacancy ?? null,
-    normalized_chart: analysisPacket.normalized_chart ?? null,
-    prompt_version: analysisPacket.prompt_version ?? null,
+    vacancy_context: analysisPacket.vacancy_context ?? analysisPacket.vacancy ?? null,
+    source_chart: analysisPacket.source_chart ?? analysisPacket.normalized_chart ?? null,
   };
 }

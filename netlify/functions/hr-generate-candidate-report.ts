@@ -1,6 +1,7 @@
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
 import { createHash } from "crypto";
 import { createClient } from "@supabase/supabase-js";
+import { buildHrPersonTalentMapAnalysisPacketV11 } from "./hr-analysis-packet";
 import {
   BANNED_TERMS_USER_MESSAGE,
   buildInputHashPayload,
@@ -8,7 +9,7 @@ import {
   normalizePersonTalentMapContent,
 } from "./hr-report-normalize";
 
-const PROMPT_VERSION = "hr_person_talent_map_v1";
+const PROMPT_VERSION = "hr_person_talent_map_v1_1";
 const DEFAULT_REPORT_TYPE = "hr_person_talent_map";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -132,19 +133,35 @@ function computeInputHash(parts: Record<string, unknown>): string {
 function buildSystemPrompt(): string {
   return `Ты — TalentScan HR Analysis Engine.
 
+Режим работы:
+- Сначала прочитай analysis_layers в analysis_packet по порядку priority (1 → 8).
+- Пакет слойный и подготовлен для будущей многошаговой генерации, но сейчас ты работаешь в режиме single-call.
+- Не перечисляй технические слои и analysis_layers клиенту — синтезируй выводы в цельную HR-карту кандидата.
+- Это hr_person_talent_map — общая карта талантов кандидата, НЕ оценка под конкретную вакансию.
+- vacancy_context, если есть, используй только как контекст — не для процента соответствия и не для role-fit score.
+
 Правила:
 - Пиши только на русском языке.
 - Используй HR-язык для работодателя: рабочий формат, сильные стороны, риски, условия, интервью, онбординг.
+- Следуй prompt_rules из analysis_packet: forbidden_client_terms, interpretation_rules, priority_rules.
 - ЗАПРЕЩЕНО использовать технические термины Human Design, соционики и внутренней методологии в клиентских полях.
 - Запрещённые слова и темы: Human Design, Дизайн Человека, бодиграф, ворота, каналы, центры, сакрал, селезёнка, эмоциональный центр, профиль (в смысле HD), авторитет, стратегия (в смысле HD), Генератор, Проектор, Манифестор, Рефлектор, Генный Ключ, соционика, социотип, ЧС, БЭ, БЛ, ЧИ и похожие обозначения.
 - Не придумывай опыт, факты, должности и достижения кандидата — опирайся только на переданный analysis_packet.
 - Все выводы формулируй как HR-гипотезы, не как финальный приговор о найме.
+- Каждый важный риск должен включать практическую проверку (как проверить на интервью или в тестовом).
+- НЕ возвращай fit_score, проценты соответствия и формулировки вроде «подходит на 80%».
 - В working_formula.text можно использовать только теги <em> и <strong> для акцентов.
 - Верни ТОЛЬКО валидный JSON без markdown и без пояснений вне JSON.`;
 }
 
 function buildUserPrompt(analysisPacket: Record<string, unknown>, reportType: ReportType): string {
   return `Сгенерируй отчёт типа "${reportType}" на основе analysis_packet ниже.
+
+Важно:
+- Это общая карта талантов кандидата (hr_person_talent_map), а НЕ оценка под вакансию.
+- vacancy_context, если присутствует, используй только как контекст — не для процента соответствия.
+- НЕ возвращай fit_score в executive_summary.
+- НЕ возвращай проценты соответствия и формулировки вроде «подходит на 80%».
 
 analysis_packet:
 ${JSON.stringify(analysisPacket, null, 2)}
@@ -168,8 +185,7 @@ ${JSON.stringify(analysisPacket, null, 2)}
     "metrics": [{ "label": "string", "value": "string", "hint": "string" }]
   },
   "executive_summary": {
-    "text": "string",
-    "fit_score": 0
+    "text": "string"
   },
   "working_formula": { "text": "string" },
   "talents": [{ "title": "string", "body": "string" }],
@@ -191,65 +207,13 @@ ${JSON.stringify(analysisPacket, null, 2)}
   "final_hr_recommendation": { "text": "string" },
   "qa_meta": {
     "hypothesis_level": "string",
+    "report_type_note": "general_candidate_talent_map",
+    "next_best_report": "hr_candidate_role_fit",
     "disclaimers": ["string"]
   }
 }
 
-fit_score — целое 0–100, предварительная оценка соответствия (гипотеза).
-qa_meta — служебные пометки для HR, тоже без запрещённых терминов.`;
-}
-
-function buildAnalysisPacket(
-  company: Record<string, unknown>,
-  candidate: Record<string, unknown>,
-  vacancy: Record<string, unknown> | null,
-  normalizedChart: Record<string, unknown> | null,
-): Record<string, unknown> {
-  return {
-    company: {
-      id: company.id,
-      name: company.name,
-      industry: company.industry ?? null,
-    },
-    candidate: {
-      id: candidate.id,
-      name: candidate.name,
-      email: candidate.email ?? null,
-      phone: candidate.phone ?? null,
-      vacancy_title: candidate.vacancy_title ?? null,
-      status: candidate.status ?? null,
-      hr_comment: candidate.hr_comment ?? null,
-      birth_date: candidate.birth_date ?? null,
-      birth_time: candidate.birth_time ?? null,
-      birth_place_text: candidate.birth_place_text ?? null,
-      birth_timezone: candidate.birth_timezone ?? null,
-      chart_status: candidate.chart_status ?? null,
-    },
-    vacancy: vacancy
-      ? {
-          id: vacancy.id,
-          title: vacancy.title,
-          status: vacancy.status,
-          department: vacancy.department ?? null,
-          employment_format: vacancy.employment_format ?? null,
-          work_format: vacancy.work_format ?? null,
-          location: vacancy.location ?? null,
-          schedule: vacancy.schedule ?? null,
-          role_description: vacancy.role_description ?? null,
-          responsibilities: vacancy.responsibilities ?? null,
-          kpi: vacancy.kpi ?? null,
-          must_have: vacancy.must_have ?? null,
-          nice_to_have: vacancy.nice_to_have ?? null,
-          working_conditions: vacancy.working_conditions ?? null,
-          manager_context: vacancy.manager_context ?? null,
-          team_context: vacancy.team_context ?? null,
-          hiring_priorities: vacancy.hiring_priorities ?? null,
-          risks_to_check: vacancy.risks_to_check ?? null,
-        }
-      : null,
-    normalized_chart: normalizedChart,
-    prompt_version: PROMPT_VERSION,
-  };
+qa_meta — служебные пометки для HR, без запрещённых терминов.`;
 }
 
 function extractJsonContent(raw: string): Record<string, unknown> {
@@ -545,12 +509,13 @@ export const handler: Handler = async (
       ? (chart.normalized_chart_data as Record<string, unknown>)
       : null;
 
-  const analysisPacket = buildAnalysisPacket(
-    company as Record<string, unknown>,
-    candidate as Record<string, unknown>,
+  const analysisPacket = buildHrPersonTalentMapAnalysisPacketV11({
+    company: company as Record<string, unknown>,
+    candidate: candidate as Record<string, unknown>,
     vacancy,
     normalizedChart,
-  );
+    promptVersion: PROMPT_VERSION,
+  });
 
   const inputHash = computeInputHash(buildInputHashPayload(reportType, analysisPacket));
 
@@ -656,7 +621,7 @@ export const handler: Handler = async (
     (contentJson.hero.name ? `Карта талантов — ${contentJson.hero.name}` : "") ||
     `Карта талантов — ${asString(candidate.name)}`;
   const summary = contentJson.executive_summary.text || contentJson.final_hr_recommendation.text || null;
-  const fitScore = contentJson.executive_summary.fit_score;
+  const fitScore = null;
 
   const reportPayload = {
     company_id: companyId,

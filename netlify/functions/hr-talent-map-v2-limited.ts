@@ -19,6 +19,8 @@ const OPENAI_MAX_OUTPUT_TOKENS = 2200;
 /** Only these layers use OpenAI on the limited proof-of-concept stage. */
 const AI_LAYER_KEYS = ["work_format", "task_entry", "decision_style"] as const;
 
+type AiLayerKey = (typeof AI_LAYER_KEYS)[number];
+
 const PLANNED_LAYER_KEYS = [
   "work_signature",
   "inner_coherence",
@@ -26,7 +28,6 @@ const PLANNED_LAYER_KEYS = [
   "sensitive_zones",
 ] as const;
 
-type AiLayerKey = (typeof AI_LAYER_KEYS)[number];
 type PlannedLayerKey = (typeof PLANNED_LAYER_KEYS)[number];
 
 export type V2LayerKey =
@@ -34,6 +35,46 @@ export type V2LayerKey =
   | PlannedLayerKey
   | "chart_passport"
   | "data_quality";
+
+const PLANNED_LAYER_PLACEHOLDER =
+  "Этот слой будет раскрыт в следующем этапе послойной генерации.";
+
+const LIMITED_SYNTHESIS_FALLBACK =
+  "Этот блок собран по ограниченному набору готовых слоёв: рабочий формат, вход в задачи и стиль принятия решений. Для полной версии потребуется раскрыть дополнительные слои.";
+
+/** Known source paths per ready AI layer — used for server-side pro/evidence fallback. */
+const LIMITED_LAYER_SOURCE_MAP: Record<
+  AiLayerKey,
+  { passport_keys: string[]; evidence_paths: string[] }
+> = {
+  work_format: {
+    passport_keys: ["type", "strategy", "signature", "notSelfTheme", "profile"],
+    evidence_paths: [
+      "source_chart.passport.type",
+      "source_chart.passport.strategy",
+      "source_chart.passport.signature",
+      "source_chart.passport.notSelfTheme",
+      "source_chart.passport.profile",
+    ],
+  },
+  task_entry: {
+    passport_keys: ["strategy", "authority", "type", "profile"],
+    evidence_paths: [
+      "source_chart.passport.strategy",
+      "source_chart.passport.authority",
+      "source_chart.passport.type",
+      "source_chart.passport.profile",
+    ],
+  },
+  decision_style: {
+    passport_keys: ["authority", "strategy", "type"],
+    evidence_paths: [
+      "source_chart.passport.authority",
+      "source_chart.passport.strategy",
+      "source_chart.passport.type",
+    ],
+  },
+};
 
 export type V2LimitedLogContext = {
   companyId?: string;
@@ -149,6 +190,38 @@ function asRecord(value: unknown): Record<string, unknown> {
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map((v) => asString(v)).filter(Boolean);
+}
+
+function getValueByPath(root: Record<string, unknown>, path: string): unknown {
+  const parts = path.split(".");
+  let current: unknown = root;
+  for (const part of parts) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+function hasMeaningfulSourceValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0 && value.trim() !== "—";
+  if (typeof value === "number" && Number.isFinite(value)) return true;
+  if (typeof value === "boolean") return true;
+  return false;
+}
+
+function isLayerReady(layer: Record<string, unknown> | undefined): boolean {
+  if (!layer) return false;
+  return asString(layer.status, "ready") === "ready";
+}
+
+function isPlannedLayerText(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  return (
+    t.includes("Этот слой будет раскрыт") ||
+    t.includes("Слой не генерировался AI на limited этапе")
+  );
 }
 
 function normalizeConfidence(raw: unknown): "high" | "medium" | "low" | "unknown" {
@@ -336,6 +409,8 @@ function buildCompactAiInput(analysisPacket: Record<string, unknown>): Record<st
         authority: passport.authority ?? null,
         profile: passport.profile ?? null,
         definition: passport.definition ?? null,
+        signature: passport.signature ?? null,
+        notSelfTheme: passport.notSelfTheme ?? null,
       },
       centers: {
         definedCenters: asStringArray(centers.definedCenters).slice(0, 12),
@@ -367,6 +442,14 @@ function buildV2LimitedSystemPrompt(): string {
 Верни JSON { "layer_reports": [...] } для layer_key: work_format, task_entry, decision_style.
 Короткие формулировки: каждое base-поле до 220 символов, pro.connection_logic до 120, evidence.limitations до 120.
 base — HR-язык без Human Design / соционики. pro/evidence — технические ссылки допустимы.
+
+Обязательно для каждого ready-слоя:
+- pro.technical_sources — непустой массив ключей из compact_input (type, strategy, authority, profile, signature, notSelfTheme)
+- pro.source_values — объект с реальными значениями из compact_input (не выдумывать)
+- evidence.source_fields — пути вида source_chart.passport.* для использованных полей
+- evidence.source_chart_elements — при наличии релевантных центров/переменных
+Если точного поля нет — confidence medium/low, limitations с причиной, human_check что проверить на интервью.
+
 Без fit_score, role-fit, «брать/не брать». Только compact_input. Без markdown.`;
 }
 
@@ -375,8 +458,13 @@ function buildV2LimitedUserPrompt(compactInput: Record<string, unknown>): string
   return `Сгенерируй ровно 3 layer_reports: ${keysList}.
 status=ready. base-поля — строки. Короткий JSON.
 
+Источники по слоям (только если есть в compact_input):
+- work_format: type, strategy, signature, notSelfTheme, profile
+- task_entry: strategy, authority, type, profile
+- decision_style: authority, strategy, type и decision-related поля passport
+
 Шаблон элемента:
-{"layer_key":"","hr_title":"","group":"energy_and_decision","status":"ready","ui_priority":2,"base":{"short_summary":"","detailed_explanation":"","how_it_appears_at_work":"","where_useful":"","risks":"","management_tips":"","what_to_check":""},"pro":{"technical_sources":[],"source_values":{},"connection_logic":"","confidence":"medium","human_check":""},"evidence":{"source_fields":[],"source_layer_keys":[],"confidence":"medium","limitations":"","warnings":[]}}
+{"layer_key":"","hr_title":"","group":"energy_and_decision","status":"ready","ui_priority":2,"base":{"short_summary":"","detailed_explanation":"","how_it_appears_at_work":"","where_useful":"","risks":"","management_tips":"","what_to_check":""},"pro":{"technical_sources":[],"source_values":{},"connection_logic":"","confidence":"medium","human_check":""},"evidence":{"source_fields":[],"source_layer_keys":[],"source_chart_elements":[],"confidence":"medium","limitations":"","warnings":[]}}
 
 compact_input:
 ${JSON.stringify(compactInput)}`;
@@ -392,7 +480,7 @@ function buildPlannedLayer(layerKey: PlannedLayerKey): Record<string, unknown> {
     ui_priority: meta.ui_priority,
     base: {
       short_summary:
-        "Этот слой будет раскрыт в следующем этапе послойной генерации.",
+        PLANNED_LAYER_PLACEHOLDER,
       detailed_explanation: "",
       how_it_appears_at_work: "",
       where_useful: "",
@@ -629,11 +717,114 @@ function normalizeLayerReport(raw: Record<string, unknown>): Record<string, unkn
     evidence: {
       source_fields: asStringArray(evidence.source_fields).slice(0, 8),
       source_layer_keys: asStringArray(evidence.source_layer_keys).slice(0, 6),
+      source_chart_elements: asStringArray(evidence.source_chart_elements).slice(0, 8),
       confidence: normalizeConfidence(evidence.confidence),
       limitations: truncateText(asString(evidence.limitations), 120),
       warnings: asStringArray(evidence.warnings).slice(0, 4),
     },
   };
+}
+
+function postProcessAiLayerReports(
+  layers: Record<string, unknown>[],
+  analysisPacket: Record<string, unknown>,
+): Record<string, unknown>[] {
+  const sourceChart = asRecord(analysisPacket.source_chart);
+  const passport = asRecord(sourceChart.passport);
+  const centers = asRecord(sourceChart.centers);
+  const variables = asRecord(sourceChart.variables);
+
+  return layers.map((layer) => {
+    const layerKey = asString(layer.layer_key) as AiLayerKey;
+    if (!AI_LAYER_KEYS.includes(layerKey)) return layer;
+
+    const sourceMap = LIMITED_LAYER_SOURCE_MAP[layerKey];
+    const pro = asRecord(layer.pro);
+    const evidence = asRecord(layer.evidence);
+
+    const existingSources = new Set(asStringArray(pro.technical_sources));
+    const sourceValues = asRecord(pro.source_values);
+    const filledValues: Record<string, unknown> = { ...sourceValues };
+
+    for (const key of sourceMap.passport_keys) {
+      const value = passport[key];
+      if (hasMeaningfulSourceValue(value)) {
+        existingSources.add(key);
+        if (!(key in filledValues)) filledValues[key] = value;
+      }
+    }
+
+    const existingFields = new Set(asStringArray(evidence.source_fields));
+    for (const path of sourceMap.evidence_paths) {
+      const value = getValueByPath(analysisPacket, path);
+      if (hasMeaningfulSourceValue(value)) {
+        existingFields.add(path);
+      }
+    }
+
+    const chartElements = new Set(asStringArray(evidence.source_chart_elements));
+    const definedCenters = asStringArray(centers.definedCenters);
+    const openCenters = asStringArray(centers.openCenters);
+    if (definedCenters.length > 0) {
+      chartElements.add(`definedCenters:${definedCenters.slice(0, 4).join(",")}`);
+    }
+    if (openCenters.length > 0) {
+      chartElements.add(`openCenters:${openCenters.slice(0, 4).join(",")}`);
+    }
+    if (layerKey === "decision_style" && hasMeaningfulSourceValue(variables.environment)) {
+      chartElements.add(`variables.environment:${asString(variables.environment)}`);
+    }
+
+    const hasProTrace = existingSources.size > 0 || Object.keys(filledValues).length > 0;
+    const hasEvidenceTrace = existingFields.size > 0 || chartElements.size > 0;
+
+    let confidence = normalizeConfidence(pro.confidence);
+    let limitations = asString(evidence.limitations);
+    let humanCheck = asString(pro.human_check);
+    let connectionLogic = asString(pro.connection_logic);
+
+    const availableKeys = [...existingSources];
+    if (!connectionLogic && availableKeys.length > 0) {
+      connectionLogic = `Связь выведена из полей passport: ${availableKeys.join(", ")}.`;
+    }
+
+    if (!hasProTrace && !hasEvidenceTrace) {
+      confidence = confidence === "high" ? "medium" : confidence === "unknown" ? "low" : confidence;
+      if (!limitations) {
+        limitations = `В analysis_packet нет значений для ${sourceMap.passport_keys.join(", ")} — вывод ограничен.`;
+      }
+      if (!humanCheck) {
+        humanCheck = "На интервью проверить соответствие описанного паттерна реальному опыту кандидата.";
+      }
+    } else if (!limitations && availableKeys.length < sourceMap.passport_keys.length) {
+      const missing = sourceMap.passport_keys.filter((k) => !existingSources.has(k));
+      limitations = `Часть полей passport отсутствует: ${missing.join(", ")}.`;
+      if (confidence === "high") confidence = "medium";
+    }
+
+    if (!humanCheck) {
+      humanCheck = "Сверить описание с примерами из прошлого опыта на интервью.";
+    }
+
+    return {
+      ...layer,
+      pro: {
+        ...pro,
+        technical_sources: [...existingSources].slice(0, 8),
+        source_values: filledValues,
+        connection_logic: truncateText(connectionLogic, 120),
+        confidence,
+        human_check: truncateText(humanCheck, 120),
+      },
+      evidence: {
+        ...evidence,
+        source_fields: [...existingFields].slice(0, 8),
+        source_chart_elements: [...chartElements].slice(0, 8),
+        confidence: normalizeConfidence(evidence.confidence) === "unknown" ? confidence : normalizeConfidence(evidence.confidence),
+        limitations: truncateText(limitations, 120),
+      },
+    };
+  });
 }
 
 function layerMap(
@@ -652,6 +843,21 @@ function baseField(layer: Record<string, unknown> | undefined, field: string): s
   return asString(asRecord(layer.base)[field]);
 }
 
+function readyBaseField(
+  layer: Record<string, unknown> | undefined,
+  field: string,
+): string {
+  if (!isLayerReady(layer)) return "";
+  const value = baseField(layer, field);
+  return isPlannedLayerText(value) ? "" : value;
+}
+
+function synthesisItem(title: string, body: string): { title: string; body: string } | null {
+  const trimmedBody = body.trim();
+  if (!trimmedBody || isPlannedLayerText(trimmedBody)) return null;
+  return { title, body: trimmedBody };
+}
+
 function buildSynthesisBlocks(
   reports: Record<string, unknown>[],
 ): Record<string, unknown> {
@@ -660,174 +866,247 @@ function buildSynthesisBlocks(
   const workFormat = byKey.get("work_format");
   const taskEntry = byKey.get("task_entry");
   const decisionStyle = byKey.get("decision_style");
-  const workSignature = byKey.get("work_signature");
-  const innerCoherence = byKey.get("inner_coherence");
-  const stableZones = byKey.get("stable_zones");
-  const sensitiveZones = byKey.get("sensitive_zones");
   const dataQuality = byKey.get("data_quality");
 
   const execSentence = [
-    baseField(workFormat, "short_summary"),
-    baseField(decisionStyle, "short_summary"),
+    readyBaseField(workFormat, "short_summary"),
+    readyBaseField(decisionStyle, "short_summary"),
   ]
     .filter(Boolean)
     .join(" ");
 
-  const riskSummary =
-    baseField(sensitiveZones, "risks") ||
-    baseField(workFormat, "risks") ||
-    baseField(decisionStyle, "risks") ||
-    baseField(dataQuality, "risks");
+  const mainValueParts = [
+    readyBaseField(workFormat, "short_summary"),
+    readyBaseField(taskEntry, "short_summary"),
+    readyBaseField(decisionStyle, "short_summary"),
+  ].filter(Boolean);
 
-  return {
+  const riskSummary =
+    readyBaseField(workFormat, "risks") ||
+    readyBaseField(decisionStyle, "risks") ||
+    readyBaseField(dataQuality, "risks");
+
+  const workFormulaParts = [
+    readyBaseField(workFormat, "how_it_appears_at_work"),
+    readyBaseField(taskEntry, "how_it_appears_at_work"),
+    readyBaseField(decisionStyle, "how_it_appears_at_work"),
+  ].filter(Boolean);
+
+  const rawBlocks = {
     executive_summary: {
-      one_sentence: execSentence || baseField(workSignature, "short_summary"),
-      best_use: baseField(workFormat, "where_useful") || baseField(stableZones, "where_useful"),
-      main_value: baseField(workSignature, "short_summary") || baseField(innerCoherence, "short_summary"),
+      one_sentence: execSentence || LIMITED_SYNTHESIS_FALLBACK,
+      best_use:
+        readyBaseField(workFormat, "where_useful") ||
+        readyBaseField(taskEntry, "where_useful") ||
+        readyBaseField(decisionStyle, "where_useful"),
+      main_value:
+        mainValueParts.length > 0
+          ? mainValueParts.join(" ")
+          : LIMITED_SYNTHESIS_FALLBACK,
       main_risk: riskSummary,
       how_to_check_first:
-        baseField(dataQuality, "what_to_check") || baseField(sensitiveZones, "what_to_check"),
+        readyBaseField(dataQuality, "what_to_check") ||
+        readyBaseField(workFormat, "what_to_check") ||
+        readyBaseField(decisionStyle, "what_to_check"),
       decision_note:
         "Сводка собрана из ограниченного набора слоёв v2; перед решением о найме проверьте гипотезы на интервью.",
       text:
         [
-          baseField(workFormat, "detailed_explanation"),
-          baseField(decisionStyle, "detailed_explanation"),
+          readyBaseField(workFormat, "detailed_explanation"),
+          readyBaseField(decisionStyle, "detailed_explanation"),
         ]
           .filter(Boolean)
           .join(" ") ||
-        execSentence,
+        execSentence ||
+        LIMITED_SYNTHESIS_FALLBACK,
     },
     work_formula: {
-      text: [
-        baseField(workFormat, "how_it_appears_at_work"),
-        baseField(taskEntry, "how_it_appears_at_work"),
-        baseField(decisionStyle, "how_it_appears_at_work"),
-        baseField(workSignature, "how_it_appears_at_work"),
-        baseField(innerCoherence, "how_it_appears_at_work"),
-      ]
-        .filter(Boolean)
-        .join(" → "),
+      text: workFormulaParts.join(" → "),
     },
     talents: {
       items: [
-        workFormat && {
-          title: "Рабочий формат",
-          body: baseField(workFormat, "short_summary") || baseField(workFormat, "detailed_explanation"),
-        },
-        stableZones &&
-          baseField(stableZones, "short_summary") && {
-            title: "Устойчивые зоны",
-            body: baseField(stableZones, "short_summary"),
-          },
-        dataQuality && {
-          title: "Опора на данные",
-          body: baseField(dataQuality, "short_summary"),
-        },
+        synthesisItem(
+          "Рабочий формат",
+          readyBaseField(workFormat, "short_summary") ||
+            readyBaseField(workFormat, "detailed_explanation"),
+        ),
+        synthesisItem(
+          "Вход в задачи",
+          readyBaseField(taskEntry, "short_summary") ||
+            readyBaseField(taskEntry, "detailed_explanation"),
+        ),
+        synthesisItem(
+          "Принятие решений",
+          readyBaseField(decisionStyle, "short_summary") ||
+            readyBaseField(decisionStyle, "detailed_explanation"),
+        ),
+        synthesisItem("Опора на данные", readyBaseField(dataQuality, "short_summary")),
       ].filter(Boolean),
     },
     work_environment: {
       items: [
-        stableZones &&
-          (baseField(stableZones, "how_it_appears_at_work") ||
-            baseField(stableZones, "short_summary")) && {
-            title: "Устойчивость",
-            body:
-              baseField(stableZones, "how_it_appears_at_work") ||
-              baseField(stableZones, "short_summary"),
-          },
-        sensitiveZones &&
-          (baseField(sensitiveZones, "how_it_appears_at_work") ||
-            baseField(sensitiveZones, "short_summary")) && {
-            title: "Чувствительность к среде",
-            body:
-              baseField(sensitiveZones, "how_it_appears_at_work") ||
-              baseField(sensitiveZones, "short_summary"),
-          },
-        innerCoherence &&
-          (baseField(innerCoherence, "how_it_appears_at_work") ||
-            baseField(innerCoherence, "short_summary")) && {
-            title: "Связность",
-            body:
-              baseField(innerCoherence, "how_it_appears_at_work") ||
-              baseField(innerCoherence, "short_summary"),
-          },
-        dataQuality && {
-          title: "Качество данных",
-          body: baseField(dataQuality, "detailed_explanation"),
-        },
+        synthesisItem(
+          "Рабочий формат",
+          readyBaseField(workFormat, "how_it_appears_at_work") ||
+            readyBaseField(workFormat, "where_useful"),
+        ),
+        synthesisItem(
+          "Вход в задачи",
+          readyBaseField(taskEntry, "how_it_appears_at_work") ||
+            readyBaseField(taskEntry, "where_useful"),
+        ),
+        synthesisItem(
+          "Качество данных",
+          readyBaseField(dataQuality, "detailed_explanation") ||
+            readyBaseField(dataQuality, "short_summary"),
+        ),
       ].filter(Boolean),
     },
     risks: {
       items: [
-        sensitiveZones && {
-          title: "Чувствительные зоны",
-          body: baseField(sensitiveZones, "risks") || baseField(sensitiveZones, "short_summary"),
-        },
-        dataQuality && baseField(dataQuality, "risks")
-          ? { title: "Ограничения данных", body: baseField(dataQuality, "risks") }
-          : null,
+        synthesisItem(
+          "Рабочий формат",
+          readyBaseField(workFormat, "risks"),
+        ),
+        synthesisItem(
+          "Принятие решений",
+          readyBaseField(decisionStyle, "risks"),
+        ),
+        synthesisItem("Ограничения данных", readyBaseField(dataQuality, "risks")),
       ].filter(Boolean),
-      checks:
-        asString(asRecord(sensitiveZones).status) === "ready" &&
-        baseField(sensitiveZones, "risks")
-          ? [
-              {
-                id: "risk-limited-sensitive",
-                risk: baseField(sensitiveZones, "risks"),
-                how_it_may_show_up: baseField(sensitiveZones, "how_it_appears_at_work"),
-                interview_check: baseField(sensitiveZones, "what_to_check"),
-                test_task_check: baseField(taskEntry, "what_to_check"),
-                good_signal: "Человек называет условия, в которых сохраняет продуктивность.",
-                warning_signal: "Игнорирует вопросы о нагрузке или среде.",
-                management_prevention: baseField(sensitiveZones, "management_tips"),
-                related_hypothesis_ids: [],
-                confidence: "medium",
-              },
-            ]
-          : baseField(workFormat, "risks")
-            ? [
-                {
-                  id: "risk-limited-work-format",
-                  risk: baseField(workFormat, "risks"),
-                  how_it_may_show_up: baseField(workFormat, "how_it_appears_at_work"),
-                  interview_check: baseField(workFormat, "what_to_check"),
-                  test_task_check: baseField(taskEntry, "what_to_check"),
-                  good_signal: "Описывает рабочие условия, в которых держит темп.",
-                  warning_signal: "Не может назвать критерии приоритизации.",
-                  management_prevention: baseField(workFormat, "management_tips"),
-                  related_hypothesis_ids: [],
-                  confidence: "medium",
-                },
-              ]
-            : [],
+      checks: [] as Record<string, unknown>[],
     },
     management: {
       items: [
-        taskEntry && {
-          title: "Постановка задач",
-          body: baseField(taskEntry, "management_tips") || baseField(taskEntry, "short_summary"),
-        },
-        decisionStyle && {
-          title: "Решения",
-          body: baseField(decisionStyle, "management_tips"),
-        },
-        workSignature && {
-          title: "Стиль работы",
-          body: baseField(workSignature, "management_tips"),
-        },
+        synthesisItem(
+          "Постановка задач",
+          readyBaseField(taskEntry, "management_tips") ||
+            readyBaseField(taskEntry, "short_summary"),
+        ),
+        synthesisItem(
+          "Решения",
+          readyBaseField(decisionStyle, "management_tips") ||
+            readyBaseField(decisionStyle, "short_summary"),
+        ),
+        synthesisItem(
+          "Рабочий формат",
+          readyBaseField(workFormat, "management_tips"),
+        ),
       ].filter(Boolean),
       playbook: {
-        how_to_set_tasks: baseField(taskEntry, "management_tips"),
-        how_to_give_feedback: baseField(decisionStyle, "management_tips"),
-        how_to_motivate: baseField(stableZones, "where_useful"),
-        what_not_to_do: baseField(sensitiveZones, "risks"),
-        best_environment: baseField(stableZones, "where_useful"),
-        overload_signals: baseField(sensitiveZones, "how_it_appears_at_work"),
-        first_30_days_focus: baseField(dataQuality, "what_to_check"),
+        how_to_set_tasks: readyBaseField(taskEntry, "management_tips"),
+        how_to_give_feedback: readyBaseField(decisionStyle, "management_tips"),
+        how_to_motivate: readyBaseField(workFormat, "where_useful"),
+        what_not_to_do: readyBaseField(workFormat, "risks") || readyBaseField(decisionStyle, "risks"),
+        best_environment: readyBaseField(workFormat, "where_useful"),
+        overload_signals: readyBaseField(workFormat, "how_it_appears_at_work"),
+        first_30_days_focus: readyBaseField(dataQuality, "what_to_check"),
       },
     },
   };
+
+  const risksBlock = asRecord(rawBlocks.risks);
+  if (readyBaseField(workFormat, "risks")) {
+    risksBlock.checks = [
+      {
+        id: "risk-limited-work-format",
+        risk: readyBaseField(workFormat, "risks"),
+        how_it_may_show_up: readyBaseField(workFormat, "how_it_appears_at_work"),
+        interview_check: readyBaseField(workFormat, "what_to_check"),
+        test_task_check: readyBaseField(taskEntry, "what_to_check"),
+        good_signal: "Описывает рабочие условия, в которых держит темп.",
+        warning_signal: "Не может назвать критерии приоритизации.",
+        management_prevention: readyBaseField(workFormat, "management_tips"),
+        related_hypothesis_ids: [],
+        confidence: "medium",
+      },
+    ];
+  } else if (readyBaseField(decisionStyle, "risks")) {
+    risksBlock.checks = [
+      {
+        id: "risk-limited-decision-style",
+        risk: readyBaseField(decisionStyle, "risks"),
+        how_it_may_show_up: readyBaseField(decisionStyle, "how_it_appears_at_work"),
+        interview_check: readyBaseField(decisionStyle, "what_to_check"),
+        test_task_check: readyBaseField(taskEntry, "what_to_check"),
+        good_signal: "Называет условия для взвешенных решений.",
+        warning_signal: "Игнорирует вопросы о сроках и приоритетах.",
+        management_prevention: readyBaseField(decisionStyle, "management_tips"),
+        related_hypothesis_ids: [],
+        confidence: "medium",
+      },
+    ];
+  }
+  rawBlocks.risks = risksBlock;
+
+  return cleanSynthesisBlocks(rawBlocks);
+}
+
+function cleanSynthesisBlocks(
+  blocks: Record<string, unknown>,
+): Record<string, unknown> {
+  const cleaned: Record<string, unknown> = { ...blocks };
+
+  const exec = asRecord(cleaned.executive_summary);
+  for (const key of [
+    "one_sentence",
+    "best_use",
+    "main_value",
+    "main_risk",
+    "how_to_check_first",
+    "text",
+  ]) {
+    const value = asString(exec[key]);
+    if (isPlannedLayerText(value)) exec[key] = "";
+  }
+  if (!asString(exec.main_value)) {
+    exec.main_value = LIMITED_SYNTHESIS_FALLBACK;
+  }
+  if (!asString(exec.one_sentence) && !asString(exec.text)) {
+    exec.one_sentence = LIMITED_SYNTHESIS_FALLBACK;
+  }
+  cleaned.executive_summary = exec;
+
+  const wf = asRecord(cleaned.work_formula);
+  const wfText = asString(wf.text);
+  if (isPlannedLayerText(wfText)) wf.text = "";
+  cleaned.work_formula = wf;
+
+  for (const blockKey of ["talents", "work_environment", "management", "risks"] as const) {
+    const block = asRecord(cleaned[blockKey]);
+
+    if (Array.isArray(block.items)) {
+      block.items = block.items
+        .map((item) => asRecord(item))
+        .filter((item) => {
+          const body = asString(item.body);
+          return body.length > 0 && !isPlannedLayerText(body);
+        });
+    }
+
+    if (blockKey === "risks" && Array.isArray(block.checks)) {
+      block.checks = block.checks.filter((check) => {
+        const c = asRecord(check);
+        const risk = asString(c.risk);
+        return risk.length > 0 && !isPlannedLayerText(risk);
+      });
+    }
+
+    if (blockKey === "management" && block.playbook) {
+      const playbook = asRecord(block.playbook);
+      const cleanedPlaybook: Record<string, string> = {};
+      for (const [k, v] of Object.entries(playbook)) {
+        if (typeof v === "string" && v.trim() && !isPlannedLayerText(v)) {
+          cleanedPlaybook[k] = v.trim();
+        }
+      }
+      block.playbook = cleanedPlaybook;
+    }
+
+    cleaned[blockKey] = block;
+  }
+
+  return cleaned;
 }
 
 function buildDataQualityBlock(
@@ -894,6 +1173,42 @@ function buildCandidateSnapshot(
   };
 }
 
+function collectSynthesisItemsWithEmptyBody(blocks: Record<string, unknown>): string[] {
+  const problems: string[] = [];
+  for (const [blockKey, block] of Object.entries(blocks)) {
+    const rec = asRecord(block);
+    const items = Array.isArray(rec.items) ? rec.items : [];
+    for (const item of items) {
+      const row = asRecord(item);
+      const body = asString(row.body);
+      const title = asString(row.title, blockKey);
+      if (!body.trim()) {
+        problems.push(`${blockKey}: пустой body у «${title}»`);
+      }
+    }
+  }
+  return problems;
+}
+
+function synthesisContainsPlannedText(blocks: Record<string, unknown>): boolean {
+  return collectSynthesisClientTexts(blocks).some((text) => isPlannedLayerText(text));
+}
+
+function aiLayerHasSourceTrace(layer: Record<string, unknown>): boolean {
+  const pro = asRecord(layer.pro);
+  const evidence = asRecord(layer.evidence);
+  const hasProTrace =
+    asStringArray(pro.technical_sources).length > 0 ||
+    Object.keys(asRecord(pro.source_values)).some((k) =>
+      hasMeaningfulSourceValue(asRecord(pro.source_values)[k]),
+    );
+  const hasEvidenceTrace =
+    asStringArray(evidence.source_fields).length > 0 ||
+    asStringArray(evidence.source_chart_elements).length > 0;
+  const hasLimitation = Boolean(asString(evidence.limitations));
+  return hasProTrace || hasEvidenceTrace || hasLimitation;
+}
+
 export function validateV2LimitedContent(content: Record<string, unknown>): void {
   if (asString(content.schema_version) !== V2_SCHEMA_VERSION) {
     throw new V2GenerationError("v2_limited_layers_validate", "Неверный schema_version.");
@@ -916,26 +1231,49 @@ export function validateV2LimitedContent(content: Record<string, unknown>): void
     if (status !== "ready") continue;
     if (!rec.base || typeof rec.base !== "object") {
       throw new V2GenerationError(
-        "v2_limited_layers_validate",
+        "v2_limited_quality_validate",
         `Слой ${asString(rec.layer_key)} без base.`,
       );
     }
     if (!rec.pro || typeof rec.pro !== "object") {
       throw new V2GenerationError(
-        "v2_limited_layers_validate",
+        "v2_limited_quality_validate",
         `Слой ${asString(rec.layer_key)} без pro.`,
       );
     }
     if (!rec.evidence || typeof rec.evidence !== "object") {
       throw new V2GenerationError(
-        "v2_limited_layers_validate",
+        "v2_limited_quality_validate",
         `Слой ${asString(rec.layer_key)} без evidence.`,
       );
     }
     if (!asString(asRecord(rec.base).short_summary)) {
       throw new V2GenerationError(
-        "v2_limited_layers_validate",
+        "v2_limited_quality_validate",
         `Слой ${asString(rec.layer_key)} без short_summary.`,
+      );
+    }
+  }
+
+  for (const key of AI_LAYER_KEYS) {
+    const aiLayer = layerReports.find((l) => asString(asRecord(l).layer_key) === key);
+    if (!aiLayer) {
+      throw new V2GenerationError(
+        "v2_limited_quality_validate",
+        `Отсутствует AI-слой: ${key}.`,
+      );
+    }
+    const rec = asRecord(aiLayer);
+    if (asString(rec.status) !== "ready") {
+      throw new V2GenerationError(
+        "v2_limited_quality_validate",
+        `AI-слой ${key} не в статусе ready.`,
+      );
+    }
+    if (!aiLayerHasSourceTrace(rec)) {
+      throw new V2GenerationError(
+        "v2_limited_quality_validate",
+        `AI-слой ${key} без source trace и без limitation.`,
       );
     }
   }
@@ -951,20 +1289,35 @@ export function validateV2LimitedContent(content: Record<string, unknown>): void
   ];
   for (const key of requiredBlocks) {
     if (!synthesis[key] || typeof synthesis[key] !== "object") {
-      throw new V2GenerationError("v2_limited_layers_validate", `Нет synthesis_blocks.${key}.`);
+      throw new V2GenerationError("v2_limited_quality_validate", `Нет synthesis_blocks.${key}.`);
     }
+  }
+
+  if (synthesisContainsPlannedText(synthesis)) {
+    throw new V2GenerationError(
+      "v2_limited_quality_validate",
+      "synthesis_blocks содержит planned-текст слоёв.",
+    );
+  }
+
+  const emptyItems = collectSynthesisItemsWithEmptyBody(synthesis);
+  if (emptyItems.length > 0) {
+    throw new V2GenerationError(
+      "v2_limited_quality_validate",
+      `synthesis_blocks содержит пустые items: ${emptyItems.join("; ")}`,
+    );
   }
 
   const banned = scanV2BaseBannedTerms(content);
   if (banned.length > 0) {
     throw new V2GenerationError(
-      "v2_limited_layers_validate",
+      "v2_limited_quality_validate",
       `${BANNED_TERMS_USER_MESSAGE}: ${banned.join(", ")}`,
     );
   }
 
   if (scanV2BaseHtml(content)) {
-    throw new V2GenerationError("v2_limited_layers_validate", "Base-текст содержит недопустимый HTML.");
+    throw new V2GenerationError("v2_limited_quality_validate", "Base-текст содержит недопустимый HTML.");
   }
 }
 
@@ -1143,6 +1496,18 @@ export async function buildHrTalentMapV2LimitedContent(args: {
     );
   }
 
+  try {
+    aiLayers = postProcessAiLayerReports(aiLayers, analysisPacket);
+    logV2Stage("v2_limited_quality_postprocess", logCtx, {
+      ai_layer_keys: AI_LAYER_KEYS,
+    });
+  } catch (err) {
+    throw new V2GenerationError(
+      "v2_limited_quality_postprocess",
+      err instanceof Error ? err.message : "Ошибка post-processing AI-слоёв.",
+    );
+  }
+
   const deterministicLayers = buildDeterministicLimitedLayers(analysisPacket, candidate);
   const layerReports = [...deterministicLayers, ...aiLayers].sort(
     (a, b) =>
@@ -1163,14 +1528,17 @@ export async function buildHrTalentMapV2LimitedContent(args: {
   let synthesis_blocks: Record<string, unknown>;
   try {
     synthesis_blocks = buildSynthesisBlocks(layerReports);
+    logV2Stage("v2_limited_synthesis_clean", logCtx, {
+      synthesis_block_keys: Object.keys(synthesis_blocks),
+    });
   } catch (err) {
     throw new V2GenerationError(
-      "v2_content_build",
+      "v2_limited_synthesis_clean",
       err instanceof Error ? err.message : "Ошибка сборки synthesis_blocks.",
     );
   }
 
-  logV2Stage("v2_limited_validate_start", logCtx, {
+  logV2Stage("v2_limited_quality_validate", logCtx, {
     layer_report_count: layerReports.length,
     duration_ms: Date.now() - pipelineStartedAt,
   });
@@ -1251,7 +1619,7 @@ export async function buildHrTalentMapV2LimitedContent(args: {
   } catch (err) {
     if (err instanceof V2GenerationError) throw err;
     throw new V2GenerationError(
-      "v2_limited_layers_validate",
+      "v2_limited_quality_validate",
       err instanceof Error ? err.message : "Ошибка валидации v2.",
     );
   }

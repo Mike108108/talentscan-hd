@@ -8,7 +8,7 @@ import {
   findBannedClientTerms,
 } from "./hr-report-normalize";
 
-export const V2_LIMITED_PROMPT_VERSION = "hr_person_talent_map_v2_limited_layers_0_1";
+export const V2_LIMITED_PROMPT_VERSION = "hr_person_talent_map_v2_limited_layers_0_2";
 export const V2_SCHEMA_VERSION = "hr_person_talent_map_v2";
 const SOURCE_ANALYSIS_PACKET_VERSION = "analysis_packet_v1_1";
 const CONTENT_CONTRACT_VERSION = "2.0.0";
@@ -437,31 +437,117 @@ function buildCompactAiInput(analysisPacket: Record<string, unknown>): Record<st
 }
 
 function buildV2LimitedSystemPrompt(): string {
-  return `TalentScan HR Layer Engine (v2 limited, 3 layers only).
+  return `TalentScan HR Layer Engine (v2 limited, 3 AI-слоя).
 
-Верни JSON { "layer_reports": [...] } для layer_key: work_format, task_entry, decision_style.
-Короткие формулировки: каждое base-поле до 220 символов, pro.connection_logic до 120, evidence.limitations до 120.
-base — HR-язык без Human Design / соционики. pro/evidence — технические ссылки допустимы.
+Верни JSON { "layer_reports": [...] } ровно для layer_key: work_format, task_entry, decision_style.
+status=ready для всех трёх. Короткий JSON, без markdown.
 
-Обязательно для каждого ready-слоя:
-- pro.technical_sources — непустой массив ключей из compact_input (type, strategy, authority, profile, signature, notSelfTheme)
-- pro.source_values — объект с реальными значениями из compact_input (не выдумывать)
-- evidence.source_fields — пути вида source_chart.passport.* для использованных полей
-- evidence.source_chart_elements — при наличии релевантных центров/переменных
-Если точного поля нет — confidence medium/low, limitations с причиной, human_check что проверить на интервью.
+Лимиты: каждое base-поле до 220 символов; pro.connection_logic до 120; evidence.limitations до 120.
 
-Без fit_score, role-fit, «брать/не брать». Только compact_input. Без markdown.`;
+=== Продуктовый контекст ===
+Это общая карта кандидата (hr_person_talent_map), НЕ оценка под вакансию.
+Запрещено: fit_score, проценты соответствия, role-fit, «брать/не брать», «подходит на XX%».
+
+=== Base: HR-гипотезы, не пересказ карты ===
+Base описывает рабочее поведение и управленческие гипотезы. Не пересказывай технические поля карты.
+
+Base должен отвечать на практические вопросы HR:
+- как человек включается в работу;
+- где приносит пользу;
+- какой формат постановки задач помогает;
+- как проверить гипотезу на интервью/тестовом;
+- какие условия усиливают результат;
+- какие условия создают риск;
+- как руководителю с этим работать.
+
+Base НЕ должен использовать как основной язык:
+Human Design, бодиграф, ворота, каналы, центры, профиль, авторитет, стратегия,
+Генератор, Проектор, Projector, Splenic, Wait for Invitation, signature, not-self,
+соционика, социотип и похожие термины методологии.
+Технические термины допустимы ТОЛЬКО в pro/evidence.
+
+=== Pro/evidence: техническое основание ===
+Сохраняй source trace для каждого слоя:
+- pro.technical_sources — ключи из compact_input.source_chart.passport
+- pro.source_values — реальные значения (не выдумывать)
+- pro.connection_logic — почему эти поля дают такой HR-вывод
+- pro.confidence — high/medium/low/unknown
+- pro.human_check — что сверить с человеком
+- evidence.source_fields — пути вида source_chart.passport.*
+- evidence.source_chart_elements — центры/переменные при релевантности
+- evidence.confidence, evidence.limitations — что ограничивает уверенность
+Если поля нет — confidence medium/low, limitations с причиной.
+
+=== Источники данных ===
+Приоритет: compact_input.source_chart + LIMITED_LAYER_SOURCE_MAP по слоям.
+Дополнительно используй compact_input.analysis_layers[].input_summary и source_refs, если они есть —
+как контекст интерпретации, но не подменяй ими passport-поля.
+
+=== Три слоя — три разных HR-фокуса ===
+
+work_format — «Рабочий формат»
+Вопрос: в каком рабочем режиме человек приносит пользу и как с ним строить взаимодействие?
+Base раскрывает: оптимальный формат участия; где полезен; тип задач/контекста; что снижает эффективность;
+как руководителю включать без давления.
+НЕ сводить только к «нужно приглашение/признание».
+
+task_entry — «Вход в задачи»
+Вопрос: как человеку лучше получать задачи, стартовать и входить в рабочий процесс?
+Base раскрывает: как формулировать задачу; какой контекст дать перед стартом; что считать ясным входом;
+что будет плохим входом; как проверить на интервью умение входить в задачи.
+НЕ повторять work_format — фокус на старте задачи, а не на общем формате работы.
+
+decision_style — «Принятие решений»
+Вопрос: как человек выбирает, уточняет и принимает рабочие решения?
+Base раскрывает: как считывает решение; какие данные/сигналы нужны; где решения сильные;
+где риск поспешности или необъяснённости; как руководителю давать рамку; как проверить на интервью/кейсе.
+НЕ упрощать до «интуиция против рациональности» — пиши про управляемую проверку решений.
+
+=== Анти-повторы ===
+- short_summary трёх слоёв должны звучать по-разному;
+- не повторять формулу «приглашение и признание» во всех слоях;
+- не дублировать management_tips, what_to_check, risks между слоями;
+- каждый слой — свой HR-фокус и свои формулировки.
+
+Только compact_input. Без markdown.`;
 }
 
 function buildV2LimitedUserPrompt(compactInput: Record<string, unknown>): string {
   const keysList = AI_LAYER_KEYS.join(", ");
-  return `Сгенерируй ровно 3 layer_reports: ${keysList}.
-status=ready. base-поля — строки. Короткий JSON.
+  const hasAnalysisLayers =
+    Array.isArray(compactInput.analysis_layers) &&
+    (compactInput.analysis_layers as unknown[]).length > 0;
 
-Источники по слоям (только если есть в compact_input):
+  return `Сгенерируй ровно 3 layer_reports: ${keysList}.
+status=ready. Все base-поля — строки (не массивы). Короткий JSON.
+
+Источники по слоям (только если есть в compact_input.source_chart.passport):
 - work_format: type, strategy, signature, notSelfTheme, profile
 - task_entry: strategy, authority, type, profile
-- decision_style: authority, strategy, type и decision-related поля passport
+- decision_style: authority, strategy, type
+
+${
+  hasAnalysisLayers
+    ? `В compact_input.analysis_layers есть input_summary и source_refs — используй их как дополнительный контекст интерпретации, но passport-поля остаются главным источником.`
+    : ""
+}
+
+=== Качество каждого base-поля ===
+short_summary — одна короткая HR-гипотеза своего слоя; без технических терминов; не повторять другие слои.
+detailed_explanation — практическое объяснение: как паттерн проявляется в работе, с примерами ситуаций.
+how_it_appears_at_work — наблюдаемое поведение: что HR/руководитель увидит в первые недели.
+where_useful — конкретные зоны задач/команды, где паттерн усиливает результат.
+risks — конкретное рабочее искажение (не абстрактный «риск выгорания»); свой для каждого слоя.
+management_tips — одно конкретное действие руководителя (не общий совет «давать обратную связь»).
+what_to_check — проверяемая гипотеза: что спросить/проверить; хороший сигнал; тревожный сигнал (в одной строке).
+
+=== Качество pro/evidence ===
+pro.connection_logic — почему именно эти passport-поля дают такой HR-вывод (технический язык допустим).
+pro.human_check — что сверить с кандидатом на интервью.
+evidence.limitations — что ограничивает уверенность (неполные данные, слабая связь полей и вывода).
+
+ui_priority: work_format=2, task_entry=3, decision_style=4.
+group: energy_and_decision.
 
 Шаблон элемента:
 {"layer_key":"","hr_title":"","group":"energy_and_decision","status":"ready","ui_priority":2,"base":{"short_summary":"","detailed_explanation":"","how_it_appears_at_work":"","where_useful":"","risks":"","management_tips":"","what_to_check":""},"pro":{"technical_sources":[],"source_values":{},"connection_logic":"","confidence":"medium","human_check":""},"evidence":{"source_fields":[],"source_layer_keys":[],"source_chart_elements":[],"confidence":"medium","limitations":"","warnings":[]}}
@@ -858,6 +944,32 @@ function synthesisItem(title: string, body: string): { title: string; body: stri
   return { title, body: trimmedBody };
 }
 
+/** Derive risk-check signals from layer base fields; fall back to layer-specific defaults. */
+function buildRiskCheckSignals(
+  layer: Record<string, unknown> | undefined,
+  defaults: { good: string; warning: string },
+): { good_signal: string; warning_signal: string } {
+  const whatToCheck = readyBaseField(layer, "what_to_check");
+  const howItAppears = readyBaseField(layer, "how_it_appears_at_work");
+  const managementTips = readyBaseField(layer, "management_tips");
+  const risks = readyBaseField(layer, "risks");
+
+  const good =
+    managementTips ||
+    howItAppears ||
+    whatToCheck ||
+    defaults.good;
+
+  const warning = risks
+    ? truncateText(`Тревожный сигнал: ${risks}`, 120)
+    : defaults.warning;
+
+  return {
+    good_signal: truncateText(good, 120),
+    warning_signal: truncateText(warning, 120),
+  };
+}
+
 function buildSynthesisBlocks(
   reports: Record<string, unknown>[],
 ): Record<string, unknown> {
@@ -1007,6 +1119,10 @@ function buildSynthesisBlocks(
 
   const risksBlock = asRecord(rawBlocks.risks);
   if (readyBaseField(workFormat, "risks")) {
+    const signals = buildRiskCheckSignals(workFormat, {
+      good: "Называет условия, в которых стабильно включается в работу.",
+      warning: "Теряет темп при неясной роли или частых внеплановых переключениях.",
+    });
     risksBlock.checks = [
       {
         id: "risk-limited-work-format",
@@ -1014,14 +1130,18 @@ function buildSynthesisBlocks(
         how_it_may_show_up: readyBaseField(workFormat, "how_it_appears_at_work"),
         interview_check: readyBaseField(workFormat, "what_to_check"),
         test_task_check: readyBaseField(taskEntry, "what_to_check"),
-        good_signal: "Описывает рабочие условия, в которых держит темп.",
-        warning_signal: "Не может назвать критерии приоритизации.",
+        good_signal: signals.good_signal,
+        warning_signal: signals.warning_signal,
         management_prevention: readyBaseField(workFormat, "management_tips"),
         related_hypothesis_ids: [],
         confidence: "medium",
       },
     ];
   } else if (readyBaseField(decisionStyle, "risks")) {
+    const signals = buildRiskCheckSignals(decisionStyle, {
+      good: "Объясняет, какие данные и рамка нужны перед решением.",
+      warning: "Принимает решение без критериев и не может пересказать логику выбора.",
+    });
     risksBlock.checks = [
       {
         id: "risk-limited-decision-style",
@@ -1029,8 +1149,8 @@ function buildSynthesisBlocks(
         how_it_may_show_up: readyBaseField(decisionStyle, "how_it_appears_at_work"),
         interview_check: readyBaseField(decisionStyle, "what_to_check"),
         test_task_check: readyBaseField(taskEntry, "what_to_check"),
-        good_signal: "Называет условия для взвешенных решений.",
-        warning_signal: "Игнорирует вопросы о сроках и приоритетах.",
+        good_signal: signals.good_signal,
+        warning_signal: signals.warning_signal,
         management_prevention: readyBaseField(decisionStyle, "management_tips"),
         related_hypothesis_ids: [],
         confidence: "medium",

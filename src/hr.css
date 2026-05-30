@@ -1150,6 +1150,19 @@
   color: var(--hr-muted);
 }
 
+.hr-tm-dev-fixture-pill {
+  display: inline-block;
+  margin: 10px 0 0;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #b45309;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: 999px;
+}
+
 .hr-tm-conclusion {
   margin-top: 14px;
   padding: 16px 18px;

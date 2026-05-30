@@ -25,6 +25,7 @@ import {
   getText,
   sortLayersByPriority,
 } from "../../lib/hr/talentMapUiHelpers";
+import { hrPersonTalentMapV2Fixture } from "../../lib/hr/fixtures/hrPersonTalentMapV2Fixture";
 import type { HrCandidate, HrPersonTalentMapV1, HrReport, HrVacancy, TalentMapRole } from "../../lib/hr/types";
 import { formulaToSafeHtml } from "../../lib/safeHtml";
 import {
@@ -91,6 +92,39 @@ type ReportSnapshot = {
   has_content_json?: boolean;
   generation_error?: string | null;
 };
+
+function shouldUseV2FixturePreview(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  const wantsV2Fixture = params.get("tm_v2_fixture") === "1";
+  const canUseV2Fixture =
+    import.meta.env.DEV ||
+    import.meta.env.VITE_ENABLE_HR_TALENT_MAP_V2_FIXTURE === "true";
+  return wantsV2Fixture && canUseV2Fixture;
+}
+
+function buildV2FixtureReport(companyId: string, candidateId: string): HrReport {
+  const now = new Date().toISOString();
+  return {
+    id: "dev-v2-fixture",
+    company_id: companyId,
+    candidate_id: candidateId,
+    vacancy_id: null,
+    report_type: "hr_person_talent_map",
+    report_status: "ready",
+    title: "Dev fixture: HR Talent Map v2",
+    summary: "Локальный preview content_json v2",
+    fit_score: null,
+    content_json: hrPersonTalentMapV2Fixture,
+    input_snapshot: {},
+    input_hash: "dev-v2-fixture",
+    model: "fixture",
+    prompt_version: "hr_person_talent_map_v2_fixture",
+    generation_error: null,
+    generated_at: now,
+    created_at: now,
+    updated_at: now,
+  };
+}
 
 function snapshotReport(report: HrReport | null): ReportSnapshot | null {
   if (!report) return null;
@@ -329,6 +363,7 @@ type WorkspaceProps = {
   onRegenerate: () => void;
   generating: boolean;
   genError: string | null;
+  isFixturePreview?: boolean;
 };
 
 function TalentMapWorkspace({
@@ -342,6 +377,7 @@ function TalentMapWorkspace({
   onRegenerate,
   generating,
   genError,
+  isFixturePreview = false,
 }: WorkspaceProps) {
   const [section, setSection] = useState<SectionId>("overview");
   const [detail, setDetail] = useState<DetailPanelState | null>(null);
@@ -905,15 +941,21 @@ function TalentMapWorkspace({
           <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
             ← К кандидату
           </Link>
-          <button
-            type="button"
-            className="hr-btn hr-btn--ghost"
-            disabled={generating}
-            onClick={onRegenerate}
-          >
-            {generating ? "Генерируем карту…" : "Перегенерировать карту"}
-          </button>
+          {!isFixturePreview ? (
+            <button
+              type="button"
+              className="hr-btn hr-btn--ghost"
+              disabled={generating}
+              onClick={onRegenerate}
+            >
+              {generating ? "Генерируем карту…" : "Перегенерировать карту"}
+            </button>
+          ) : null}
         </div>
+
+        {isFixturePreview ? (
+          <p className="hr-tm-dev-fixture-pill">DEV: показан content_json v2 fixture</p>
+        ) : null}
 
         {generating && (
           <p className="hr-tm-banner hr-tm-banner--info">Генерируем карту кандидата…</p>
@@ -1465,8 +1507,83 @@ function EmptyReportState({
   );
 }
 
+function renderTalentMapWorkspace(
+  candidate: HrCandidate,
+  companyId: string,
+  candidateId: string,
+  vacancies: HrVacancy[],
+  report: HrReport,
+  opts: {
+    onRegenerate: () => void;
+    generating: boolean;
+    genError: string | null;
+    isFixturePreview?: boolean;
+  },
+) {
+  logReportContentShape(report.content_json, report.id);
+  const contentRoot = getReportContentRoot(report.content_json);
+  const safeContent = normalizeAiReportContent(report.content_json);
+  const contentKeys = Object.keys(contentRoot);
+
+  if (!canParseReportContent(report.content_json)) {
+    return (
+      <BrokenReportState
+        candidate={candidate}
+        companyId={companyId}
+        candidateId={candidateId}
+        diagnostic={{
+          reportId: report.id,
+          reportStatus: report.report_status,
+          reportType: report.report_type,
+          contentType: typeof report.content_json,
+          topLevelKeys: contentKeys,
+          parseError: "content_json не является объектом или валидной JSON-строкой",
+        }}
+      />
+    );
+  }
+
+  const diagnosticBase = {
+    reportId: report.id,
+    reportStatus: report.report_status,
+    reportType: report.report_type,
+    contentType: typeof report.content_json,
+    topLevelKeys: contentKeys,
+  };
+
+  logNormalizedWorkspaceContent(safeContent);
+
+  return (
+    <WorkspaceErrorBoundary
+      fallback={(error, errorInfo) => (
+        <BrokenReportState
+          candidate={candidate}
+          companyId={companyId}
+          candidateId={candidateId}
+          diagnostic={buildRenderDiagnostic(error, errorInfo, diagnosticBase)}
+        />
+      )}
+    >
+      <TalentMapWorkspace
+        candidate={candidate}
+        companyId={companyId}
+        candidateId={candidateId}
+        vacancies={vacancies}
+        aiContent={safeContent}
+        rawAiContent={contentRoot}
+        aiReport={report}
+        onRegenerate={opts.onRegenerate}
+        generating={opts.generating}
+        genError={opts.genError}
+        isFixturePreview={opts.isFixturePreview}
+      />
+    </WorkspaceErrorBoundary>
+  );
+}
+
 export default function CandidateTalentMapPage() {
   const { companyId, candidateId } = useParams<{ companyId: string; candidateId: string }>();
+  const useV2Fixture = useMemo(() => shouldUseV2FixturePreview(), []);
   const [candidate, setCandidate] = useState<HrCandidate | null>(null);
   const [aiReport, setAiReport] = useState<HrReport | null>(null);
   const [vacancies, setVacancies] = useState<HrVacancy[]>([]);
@@ -1611,69 +1728,24 @@ export default function CandidateTalentMapPage() {
     return <p>Загрузка…</p>;
   }
 
+  if (useV2Fixture) {
+    const fixtureReport = buildV2FixtureReport(companyId, candidateId);
+    return renderTalentMapWorkspace(candidate, companyId, candidateId, vacancies, fixtureReport, {
+      onRegenerate: () => {},
+      generating: false,
+      genError: null,
+      isFixturePreview: true,
+    });
+  }
+
   const hasReadyReport = isReadyTalentMapReport(aiReport);
 
   if (hasReadyReport && aiReport) {
-    logReportContentShape(aiReport.content_json, aiReport.id);
-    const contentRoot = getReportContentRoot(aiReport.content_json);
-    const safeContent = normalizeAiReportContent(aiReport.content_json);
-    const contentKeys = Object.keys(contentRoot);
-
-    if (!canParseReportContent(aiReport.content_json)) {
-      return (
-        <BrokenReportState
-          candidate={candidate}
-          companyId={companyId}
-          candidateId={candidateId}
-          onRegenerate={() => onGenerate(true)}
-          generating={generating}
-          diagnostic={{
-            reportId: aiReport.id,
-            reportStatus: aiReport.report_status,
-            reportType: aiReport.report_type,
-            contentType: typeof aiReport.content_json,
-            topLevelKeys: contentKeys,
-            parseError: "content_json не является объектом или валидной JSON-строкой",
-          }}
-        />
-      );
-    }
-
-    const diagnosticBase = {
-      reportId: aiReport.id,
-      reportStatus: aiReport.report_status,
-      reportType: aiReport.report_type,
-      contentType: typeof aiReport.content_json,
-      topLevelKeys: contentKeys,
-    };
-
-    logNormalizedWorkspaceContent(safeContent);
-
-    return (
-      <WorkspaceErrorBoundary
-        fallback={(error, errorInfo) => (
-          <BrokenReportState
-            candidate={candidate}
-            companyId={companyId}
-            candidateId={candidateId}
-            diagnostic={buildRenderDiagnostic(error, errorInfo, diagnosticBase)}
-          />
-        )}
-      >
-        <TalentMapWorkspace
-          candidate={candidate}
-          companyId={companyId}
-          candidateId={candidateId}
-          vacancies={vacancies}
-          aiContent={safeContent}
-          rawAiContent={contentRoot}
-          aiReport={aiReport}
-          onRegenerate={() => onGenerate(true)}
-          generating={generating}
-          genError={genError}
-        />
-      </WorkspaceErrorBoundary>
-    );
+    return renderTalentMapWorkspace(candidate, companyId, candidateId, vacancies, aiReport, {
+      onRegenerate: () => onGenerate(true),
+      generating,
+      genError,
+    });
   }
 
   if (aiReport && !hasReadyReport) {

@@ -702,6 +702,31 @@ function MetaRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+export function formatDataQuality(value?: string | null): string {
+  switch ((value ?? "").trim().toLowerCase()) {
+    case "high":
+      return "высокая";
+    case "medium":
+      return "средняя";
+    case "low":
+      return "низкая";
+    default:
+      return "не указана";
+  }
+}
+
+function formatDataQualityDisplay(
+  value: string | undefined,
+  normalizeHrCopy: (text: unknown) => string,
+): string {
+  if (!value?.trim()) return "не указана";
+  const key = value.trim().toLowerCase();
+  if (key === "high" || key === "medium" || key === "low") {
+    return formatDataQuality(value);
+  }
+  return normalizeHrCopy(value);
+}
+
 const DATA_QUALITY_FALLBACK = `Данных пока недостаточно для детальной оценки точности.
 
 Сейчас карта строится на доступных данных кандидата и компании. Чтобы повысить точность, добавьте:
@@ -749,7 +774,9 @@ export function DataQualitySection({ ctx }: { ctx: ReportContentCtx }) {
       ) : null}
       {dq?.confidence ? (
         <SectionBlock title="Уверенность выводов">
-          <p className="hr-tm-panel-lead">{normalizeHrCopy(dq.confidence)}</p>
+          <p className="hr-tm-panel-lead">
+            {formatDataQualityDisplay(dq.confidence, normalizeHrCopy)}
+          </p>
         </SectionBlock>
       ) : null}
       {metrics.length > 0 ? (

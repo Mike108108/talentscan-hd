@@ -30,13 +30,13 @@ function technicalStatusLabel(status: ReturnType<typeof deriveChartStatus>): str
 
 function aiStatusLabel(report: HrReport | null): { label: string; ok: boolean } {
   if (!report) {
-    return { label: "AI-расшифровка не создана", ok: false };
+    return { label: "Подробная AI-расшифровка ещё не создана", ok: false };
   }
   if (isReadyTalentMapReport(report)) {
     return { label: "AI-расшифровка готова", ok: true };
   }
   if (report.report_status === "generating") {
-    return { label: "AI-расшифровка генерируется…", ok: false };
+    return { label: "AI-расшифровка формируется…", ok: false };
   }
   if (report.report_status === "error") {
     return {
@@ -46,7 +46,38 @@ function aiStatusLabel(report: HrReport | null): { label: string; ok: boolean } 
       ok: false,
     };
   }
-  return { label: "AI-расшифровка не готова", ok: false };
+  return { label: "Подробная AI-расшифровка ещё не создана", ok: false };
+}
+
+function technicalStatusHint(status: ReturnType<typeof deriveChartStatus>): string {
+  switch (status) {
+    case "calculated":
+      return "Расчёт по данным рождения выполнен. Эти данные используются как основа карты талантов.";
+    case "calculating":
+      return "Идёт расчёт основы карты по данным рождения.";
+    case "calculation_error":
+      return "Не удалось рассчитать основу карты. Проверьте данные рождения и повторите расчёт.";
+    case "ready_to_calculate":
+      return "Данные готовы — можно рассчитать основу карты талантов.";
+    default:
+      return "Нужны дата, время и место рождения, чтобы рассчитать основу карты талантов.";
+  }
+}
+
+function aiStatusHint(report: HrReport | null): string {
+  if (!report) {
+    return "Подробная AI-расшифровка ещё не создана.";
+  }
+  if (isReadyTalentMapReport(report)) {
+    return "AI-расшифровка карты талантов готова.";
+  }
+  if (report.report_status === "generating") {
+    return "Подробная AI-расшифровка формируется — обычно это занимает около минуты.";
+  }
+  if (report.report_status === "error") {
+    return "Не удалось создать AI-расшифровку. Попробуйте перегенерировать карту.";
+  }
+  return "Подробная AI-расшифровка ещё не создана.";
 }
 
 const FUTURE_ACTIONS = [
@@ -155,7 +186,7 @@ export default function HrCandidateDetailPage() {
               <dt>HR-комментарий</dt>
               <dd>
                 {candidate.hr_comment ||
-                  (candidate.vacancy_title ? `Legacy-роль: ${candidate.vacancy_title}` : "—")}
+                  (candidate.vacancy_title ? candidate.vacancy_title : "—")}
               </dd>
             </div>
           )}
@@ -188,18 +219,14 @@ export default function HrCandidateDetailPage() {
             >
               {techLabel}
             </span>
-            <p className="hr-map-status-hint">
-              Расчёт по данным рождения → карта в hr_candidate_charts
-            </p>
+            <p className="hr-map-status-hint">{technicalStatusHint(chartStatus)}</p>
           </div>
           <div className="hr-map-status-item">
             <span className="hr-map-status-label">AI-расшифровка</span>
             <span className={`hr-status ${ai.ok ? "hr-status--ok" : "hr-status--warn"}`}>
               {ai.label}
             </span>
-            <p className="hr-map-status-hint">
-              HR-карта талантов из hr_reports (hr_person_talent_map)
-            </p>
+            <p className="hr-map-status-hint">{aiStatusHint(aiReport)}</p>
           </div>
         </div>
       </section>
@@ -223,7 +250,7 @@ export default function HrCandidateDetailPage() {
                 {calculating ? "Считаем карту…" : "Рассчитать карту талантов"}
               </span>
               <span className="hr-quick-action-desc">
-                Рассчитать техническую карту и перейти к AI-расшифровке
+                Рассчитать основу карты и перейти к AI-расшифровке
               </span>
             </button>
           ) : (

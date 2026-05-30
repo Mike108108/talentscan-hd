@@ -32,6 +32,7 @@ import {
   buildMergedLayerCatalog,
   CatalogLayerDetailPanel,
   DataQualitySection,
+  formatDataQuality,
   getCatalogLayerByKey,
   getDetailPanelTitle,
   ItemDetailPanel,
@@ -418,10 +419,7 @@ function TalentMapWorkspace({
   const formulaText = getText(aiContent.working_formula?.text);
   const formulaHtml = formulaText ? formulaToSafeHtml(formulaText) : "";
 
-  const confidenceLabel = aiContent.data_quality?.confidence
-    ? normalizeHrCopy(aiContent.data_quality.confidence).replace(/\d{1,3}\s*%/g, "").trim() ||
-      "уточняется"
-    : "уточняется";
+  const confidenceLabel = formatDataQuality(aiContent.data_quality?.confidence);
 
   const updatedLabel = formatReportDate(
     aiReport.generated_at ?? aiReport.updated_at,
@@ -450,7 +448,8 @@ function TalentMapWorkspace({
   const mainConclusion = summaryText ?? finalRec ?? "Разбор готов — откройте разделы ниже для деталей.";
 
   const showDataQualityWarn =
-    /низк|мало|огранич|неполн|предварит/i.test(confidenceLabel) ||
+    (aiContent.data_quality?.confidence ?? "").trim().toLowerCase() === "low" ||
+    confidenceLabel === "низкая" ||
     /низк|мало|огранич|неполн/i.test(getText(aiContent.data_quality?.completeness));
 
   const formatSection: SectionId = isV12 ? "formula" : "profile";

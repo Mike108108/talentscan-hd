@@ -1,0 +1,121 @@
+import type {
+  HrPersonTalentMapV2,
+  HrTalentMapLayerReportV2,
+  HrTalentMapSynthesisBlocksV2,
+} from "./types";
+
+const V2_SCHEMA = "hr_person_talent_map_v2";
+const REPORT_TYPE = "hr_person_talent_map";
+
+function parseContentRoot(raw: unknown): Record<string, unknown> | null {
+  if (raw == null) return null;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof raw === "object" && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  return null;
+}
+
+function asString(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return "";
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasLayerReportsArray(root: Record<string, unknown>): boolean {
+  return Array.isArray(root.layer_reports);
+}
+
+function hasSynthesisBlocksObject(root: Record<string, unknown>): boolean {
+  return isPlainObject(root.synthesis_blocks);
+}
+
+/** Conservative v2 shape check on a parsed object root. */
+export function isTalentMapV2(root: unknown): root is HrPersonTalentMapV2 {
+  if (!isPlainObject(root)) return false;
+
+  const schemaVersion = asString(root.schema_version);
+  const reportType = asString(root.report_type);
+  const hasV2Schema = schemaVersion === V2_SCHEMA;
+  const hasReportType = reportType === REPORT_TYPE;
+
+  if (!hasLayerReportsArray(root) || !hasSynthesisBlocksObject(root)) {
+    return false;
+  }
+
+  if (hasV2Schema) return true;
+  if (hasReportType && hasLayerReportsArray(root) && hasSynthesisBlocksObject(root)) {
+    return true;
+  }
+
+  return false;
+}
+
+/** Best-effort schema version from parsed content. */
+export function getTalentMapSchemaVersion(root: unknown): string {
+  if (!isPlainObject(root)) return "";
+  const direct = asString(root.schema_version);
+  if (direct) return direct;
+  const parsed = parseContentRoot(root);
+  if (parsed) return asString(parsed.schema_version);
+  return "";
+}
+
+/** Whether v2 has enough structure for layered workspace rendering. */
+export function isTalentMapV2Ready(root: unknown): boolean {
+  const parsed = parseContentRoot(root);
+  if (!parsed || !isTalentMapV2(parsed)) return false;
+  const layerReports = parsed.layer_reports;
+  const synthesis = parsed.synthesis_blocks;
+  if (!Array.isArray(layerReports) || layerReports.length === 0) return false;
+  if (!synthesis || typeof synthesis !== "object") return false;
+  return true;
+}
+
+function normalizeLayerReports(raw: unknown): HrTalentMapLayerReportV2[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((item): item is HrTalentMapLayerReportV2 => {
+    if (!isPlainObject(item)) return false;
+    return asString(item.layer_key).length > 0;
+  });
+}
+
+/** Extract v2 layer_reports from raw content_json (defensive). */
+export function getV2LayerReports(root: unknown): HrTalentMapLayerReportV2[] {
+  const parsed = parseContentRoot(root);
+  if (!parsed) return [];
+  if (!isTalentMapV2(parsed)) return [];
+  return normalizeLayerReports(parsed.layer_reports);
+}
+
+/** Extract v2 synthesis_blocks from raw content_json (defensive). */
+export function getV2SynthesisBlocks(root: unknown): HrTalentMapSynthesisBlocksV2 | null {
+  const parsed = parseContentRoot(root);
+  if (!parsed || !isTalentMapV2(parsed)) return null;
+  const blocks = parsed.synthesis_blocks;
+  if (!blocks || typeof blocks !== "object") return null;
+  return blocks;
+}
+
+/** Parsed v2 root if content_json matches v2 contract. */
+export function parseTalentMapV2(root: unknown): HrPersonTalentMapV2 | null {
+  const parsed = parseContentRoot(root);
+  if (!parsed || !isTalentMapV2(parsed)) return null;
+  return parsed;
+}

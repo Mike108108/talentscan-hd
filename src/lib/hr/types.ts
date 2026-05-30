@@ -273,6 +273,7 @@ export type HrLayerCatalogEntry = {
 
 export type MergedLayerCatalogItem = HrLayerCatalogEntry & {
   aiLayer?: HrTalentMapLayer;
+  v2LayerReport?: HrTalentMapLayerReportV2;
   resolvedStatus: HrLayerCatalogStatus;
   relatedEvidence: HrTalentMapEvidenceItem[];
 };
@@ -339,6 +340,168 @@ export type HrTalentMapEvidenceItem = {
   client_visible: boolean;
 };
 
+/** Generation metadata for layered v2 talent map pipeline. */
+export type HrTalentMapGenerationMetaV2 = {
+  generated_at?: string;
+  model?: string;
+  prompt_version?: string;
+  pipeline_stage?: string;
+  input_hash?: string;
+};
+
+/** Candidate-facing snapshot in v2 (maps to legacy hero). */
+export type HrTalentMapCandidateSnapshotV2 = {
+  name?: string;
+  subtitle?: string;
+  status_label?: string;
+  best_work_format?: string;
+  key_talent?: string;
+  main_risk?: string;
+  headline?: string;
+};
+
+/** Source chart / input snapshot references for v2. */
+export type HrTalentMapSourceSnapshotV2 = {
+  candidate_chart_id?: string;
+  normalized_chart_hash?: string;
+  birth_data_complete?: boolean;
+  analysis_packet_version?: string;
+};
+
+/** Technical chart readiness in v2. */
+export type HrTalentMapTechnicalChartStatusV2 = {
+  status?: CandidateChartStatus | string;
+  calculated_at?: string;
+  can_render_bodygraph?: boolean;
+  missing_fields?: string[];
+};
+
+/** Data quality block in v2 (extends legacy metrics). */
+export type HrTalentMapDataQualityV2 = {
+  completeness?: string;
+  confidence?: string;
+  notes?: string;
+  metrics?: TalentMapMetric[];
+  missing?: string[];
+  reduces_accuracy?: string;
+  add_data?: string[];
+  suggested_data?: string[];
+};
+
+/** HR-facing base layer text (no technical HD language). */
+export type HrTalentMapLayerBaseV2 = {
+  short_summary?: string;
+  detailed_explanation?: string;
+  how_it_appears_at_work?: string;
+  where_useful?: string;
+  risks?: string;
+  management_tips?: string;
+  what_to_check?: string;
+};
+
+/** Pro / technical layer details (side panel only). */
+export type HrTalentMapLayerProV2 = {
+  technical_sources?: string[];
+  source_values?: Record<string, unknown> | unknown[];
+  connection_logic?: string;
+  confidence?: HrTalentMapConfidence;
+  human_check?: string;
+};
+
+/** Evidence metadata for a single atomic layer report. */
+export type HrTalentMapLayerEvidenceV2 = {
+  source_fields?: string[];
+  source_layer_keys?: string[];
+  confidence?: HrTalentMapConfidence;
+  limitations?: string;
+  warnings?: string[];
+};
+
+/** Atomic layer report in v2 pipeline. */
+export type HrTalentMapLayerReportV2 = {
+  layer_key: string;
+  hr_title?: string;
+  group?: HrLayerCatalogGroup;
+  status?: HrLayerCatalogStatus;
+  ui_priority?: number;
+  base?: HrTalentMapLayerBaseV2;
+  pro?: HrTalentMapLayerProV2;
+  evidence?: HrTalentMapLayerEvidenceV2;
+};
+
+/** Generic synthesis block payload (section-specific fields vary). */
+export type HrTalentMapSynthesisBlockV2 = {
+  text?: string;
+  summary?: string;
+  one_sentence?: string;
+  best_use?: string;
+  main_value?: string;
+  main_risk?: string;
+  how_to_check_first?: string;
+  decision_note?: string;
+  items?: HrTalentMapSectionItem[];
+  cards?: HrTalentMapHypothesisCard[];
+  checks?: HrTalentMapRiskCheck[];
+  playbook?: HrTalentMapManagementPlaybook;
+};
+
+/** Six top-level synthesis sections assembled from atomic layer reports. */
+export type HrTalentMapSynthesisBlocksV2 = {
+  executive_summary?: HrTalentMapSynthesisBlockV2;
+  work_formula?: HrTalentMapSynthesisBlockV2;
+  talents?: HrTalentMapSynthesisBlockV2;
+  work_environment?: HrTalentMapSynthesisBlockV2;
+  risks?: HrTalentMapSynthesisBlockV2;
+  management?: HrTalentMapSynthesisBlockV2;
+};
+
+/** References to layers/hypotheses used for derived HR actions (future pipeline). */
+export type HrTalentMapDerivedActionSourcesV2 = {
+  layer_keys?: string[];
+  synthesis_keys?: string[];
+  notes?: string;
+};
+
+/** UI hints for v2 workspace shell. */
+export type HrTalentMapUiMetaV2 = {
+  default_section?: string;
+  show_layer_catalog?: boolean;
+  layer_catalog_version?: string;
+  [key: string]: unknown;
+};
+
+/** QA / disclaimer metadata for v2. */
+export type HrTalentMapQaMetaV2 = HrPersonTalentMapQaMeta;
+
+/** Layered content_json v2 for hr_person_talent_map. */
+export type HrPersonTalentMapV2 = {
+  schema_version: "hr_person_talent_map_v2";
+  report_type: "hr_person_talent_map";
+  generation_meta?: HrTalentMapGenerationMetaV2;
+  candidate_snapshot?: HrTalentMapCandidateSnapshotV2;
+  source_snapshot?: HrTalentMapSourceSnapshotV2;
+  technical_chart_status?: HrTalentMapTechnicalChartStatusV2;
+  data_quality?: HrTalentMapDataQualityV2;
+  layer_reports?: HrTalentMapLayerReportV2[];
+  synthesis_blocks?: HrTalentMapSynthesisBlocksV2;
+  derived_action_sources?: HrTalentMapDerivedActionSourcesV2;
+  ui?: HrTalentMapUiMetaV2;
+  qa_meta?: HrTalentMapQaMetaV2;
+};
+
+/** Parsed talent map content (v1 legacy or v2 layered). */
+export type HrPersonTalentMapContent = HrPersonTalentMapV1 | HrPersonTalentMapV2;
+
+/**
+ * Raw DB/API content_json — may be object, stringified JSON, partial v1/v2, or unknown shape.
+ * Prefer parseReportContentJson + normalizeAiReportContent at runtime.
+ */
+export type HrReportContentJson =
+  | HrPersonTalentMapContent
+  | Record<string, unknown>
+  | string
+  | null;
+
 /** Structured JSON for hr_person_talent_map AI reports (client-facing HR language). */
 export type HrPersonTalentMapV1 = {
   schema_version?: string;
@@ -379,7 +542,7 @@ export type HrReport = {
   title: string | null;
   summary: string | null;
   fit_score: number | null;
-  content_json: HrPersonTalentMapV1;
+  content_json: HrReportContentJson;
   input_snapshot: Record<string, unknown>;
   input_hash: string;
   model: string | null;

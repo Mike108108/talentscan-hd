@@ -399,8 +399,8 @@ function TalentMapWorkspace({
   );
 
   const mergedCatalog = useMemo(
-    () => buildMergedLayerCatalog(lists.layers ?? [], lists.evidenceMap ?? []),
-    [lists.layers, lists.evidenceMap],
+    () => buildMergedLayerCatalog(lists.layers ?? [], lists.evidenceMap ?? [], rawAiContent),
+    [lists.layers, lists.evidenceMap, rawAiContent],
   );
 
   const hero = aiContent.hero;

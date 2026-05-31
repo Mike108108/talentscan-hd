@@ -43,7 +43,7 @@ const PLANNED_LAYER_PLACEHOLDER =
   "Этот слой будет раскрыт в следующем этапе послойной генерации.";
 
 const LIMITED_SYNTHESIS_FALLBACK =
-  "Этот блок собран по ограниченному набору готовых слоёв: рабочий формат, вход в задачи и стиль принятия решений. Для полной версии потребуется раскрыть дополнительные слои.";
+  "Сводка по рабочему формату, входу в задачи и стилю принятия решений; проверьте гипотезы на интервью.";
 
 /** Known source paths per ready AI layer — used for server-side pro/evidence fallback. */
 const LIMITED_LAYER_SOURCE_MAP: Record<
@@ -258,6 +258,40 @@ function isPlannedLayerText(text: string): boolean {
     t.includes("Этот слой будет раскрыт") ||
     t.includes("Слой не генерировался AI на limited этапе")
   );
+}
+
+function normalizeHrCopy(value: unknown): string {
+  return asString(value).trim();
+}
+
+function isTechnicalLimitedText(value: unknown): boolean {
+  const text = normalizeHrCopy(value).toLowerCase();
+  if (!text) return false;
+  return (
+    text.includes("layered_limited") ||
+    text.includes("limited v2") ||
+    text.includes("ai-сло") ||
+    text.includes("3 ai") ||
+    text.includes("planned") ||
+    text.includes("статусе planned") ||
+    text.includes("ограниченного v2-отч") ||
+    text.includes("ограниченного набора сло") ||
+    text.includes("следующем этапе послойной генерации") ||
+    text.includes("режим layered") ||
+    text.includes("не все 34 слоя")
+  );
+}
+
+function isDisallowedSynthesisText(value: unknown): boolean {
+  const text = normalizeHrCopy(value);
+  if (!text) return true;
+  return isPlannedLayerText(text) || isTechnicalLimitedText(text);
+}
+
+function cleanSynthesisText(value: unknown): string {
+  const text = normalizeHrCopy(value);
+  if (isDisallowedSynthesisText(text)) return "";
+  return text;
 }
 
 function normalizeConfidence(raw: unknown): "high" | "medium" | "low" | "unknown" {
@@ -976,33 +1010,108 @@ function readyBaseField(
 
 function synthesisItem(title: string, body: string): { title: string; body: string } | null {
   const trimmedBody = body.trim();
-  if (!trimmedBody || isPlannedLayerText(trimmedBody)) return null;
+  if (!trimmedBody || isDisallowedSynthesisText(trimmedBody)) return null;
   return { title, body: trimmedBody };
+}
+
+const RISK_CHECK_SIGNAL_DEFAULTS: Record<
+  AiLayerKey,
+  { good: string; warning: string }
+> = {
+  work_format: {
+    good:
+      "Хороший сигнал: кандидат приводит примеры, где после ясного запроса быстро включался и давал ценный вклад.",
+    warning:
+      "Тревожный сигнал: кандидат теряет включённость, когда задача поставлена без ясной роли, запроса и признания зоны ответственности.",
+  },
+  task_entry: {
+    good:
+      "Хороший сигнал: кандидат может описать, какой контекст задачи ему нужен для уверенного старта.",
+    warning:
+      "Тревожный сигнал: кандидат долго буксует на старте, если контекст задачи неполный или ожидания размыты.",
+  },
+  decision_style: {
+    good:
+      "Хороший сигнал: кандидат умеет объяснить, как проверяет быстрые решения фактами, ограничениями и обратной связью.",
+    warning:
+      "Тревожный сигнал: кандидат принимает быстрые решения, но не может объяснить, как проверяет их последствия и ограничения.",
+  },
+};
+
+function extractGoodSignalFromWhatToCheck(whatToCheck: string): string {
+  const t = whatToCheck.trim();
+  if (!t) return "";
+
+  const match = t.match(/хорош(?:ий|его)\s+сигнал\s*[—:\-–]\s*([^.;]+)/i);
+  if (match?.[1]) return match[1].trim();
+
+  const parts = t.split(/[;.\n]/).map((p) => p.trim()).filter(Boolean);
+  for (const part of parts) {
+    if (/хорош/i.test(part) && !/тревож/i.test(part)) {
+      const stripped = part.replace(/^хорош(?:ий|его)\s+сигнал\s*[—:\-–]?\s*/i, "").trim();
+      return stripped || part;
+    }
+  }
+  return "";
+}
+
+function extractWarningSignalFromWhatToCheck(whatToCheck: string): string {
+  const t = whatToCheck.trim();
+  if (!t) return "";
+
+  const match = t.match(/тревожн(?:ый|ого)\s+сигнал\s*[—:\-–]\s*([^.;]+)/i);
+  if (match?.[1]) return match[1].trim();
+
+  const parts = t.split(/[;.\n]/).map((p) => p.trim()).filter(Boolean);
+  for (const part of parts) {
+    if (/тревож/i.test(part)) {
+      const stripped = part.replace(/^тревожн(?:ый|ого)\s+сигнал\s*[—:\-–]?\s*/i, "").trim();
+      return stripped || part;
+    }
+  }
+  return "";
+}
+
+function ensureGoodSignalPrefix(text: string): string {
+  const t = text.trim();
+  if (!t) return "";
+  if (/^хорош/i.test(t)) return truncateText(t, 120);
+  const body = t.charAt(0).toLowerCase() + t.slice(1);
+  return truncateText(`Хороший сигнал: ${body}`, 120);
+}
+
+function ensureWarningSignalPrefix(text: string): string {
+  const t = text.trim();
+  if (!t) return "";
+  if (/^тревож/i.test(t)) return truncateText(t, 120);
+  const body = t.charAt(0).toLowerCase() + t.slice(1);
+  return truncateText(`Тревожный сигнал: ${body}`, 120);
 }
 
 /** Derive risk-check signals from layer base fields; fall back to layer-specific defaults. */
 function buildRiskCheckSignals(
   layer: Record<string, unknown> | undefined,
-  defaults: { good: string; warning: string },
+  layerKey: AiLayerKey,
 ): { good_signal: string; warning_signal: string } {
+  const defaults = RISK_CHECK_SIGNAL_DEFAULTS[layerKey];
   const whatToCheck = readyBaseField(layer, "what_to_check");
   const howItAppears = readyBaseField(layer, "how_it_appears_at_work");
-  const managementTips = readyBaseField(layer, "management_tips");
-  const risks = readyBaseField(layer, "risks");
+  const whereUseful = readyBaseField(layer, "where_useful");
 
-  const good =
-    managementTips ||
+  const goodFromCheck = extractGoodSignalFromWhatToCheck(whatToCheck);
+  const warningFromCheck = extractWarningSignalFromWhatToCheck(whatToCheck);
+
+  const goodCandidate =
+    goodFromCheck ||
     howItAppears ||
-    whatToCheck ||
+    whereUseful ||
     defaults.good;
 
-  const warning = risks
-    ? truncateText(`Тревожный сигнал: ${risks}`, 120)
-    : defaults.warning;
+  const warningCandidate = warningFromCheck || defaults.warning;
 
   return {
-    good_signal: truncateText(good, 120),
-    warning_signal: truncateText(warning, 120),
+    good_signal: ensureGoodSignalPrefix(goodCandidate),
+    warning_signal: ensureWarningSignalPrefix(warningCandidate),
   };
 }
 
@@ -1057,7 +1166,7 @@ function buildSynthesisBlocks(
         readyBaseField(workFormat, "what_to_check") ||
         readyBaseField(decisionStyle, "what_to_check"),
       decision_note:
-        "Сводка собрана из ограниченного набора слоёв v2; перед решением о найме проверьте гипотезы на интервью.",
+        "Перед решением о найме проверьте гипотезы на интервью и в первые недели работы.",
       text:
         [
           readyBaseField(workFormat, "detailed_explanation"),
@@ -1088,7 +1197,6 @@ function buildSynthesisBlocks(
           readyBaseField(decisionStyle, "short_summary") ||
             readyBaseField(decisionStyle, "detailed_explanation"),
         ),
-        synthesisItem("Опора на данные", readyBaseField(dataQuality, "short_summary")),
       ].filter(Boolean),
     },
     work_environment: {
@@ -1102,11 +1210,6 @@ function buildSynthesisBlocks(
           "Вход в задачи",
           readyBaseField(taskEntry, "how_it_appears_at_work") ||
             readyBaseField(taskEntry, "where_useful"),
-        ),
-        synthesisItem(
-          "Качество данных",
-          readyBaseField(dataQuality, "detailed_explanation") ||
-            readyBaseField(dataQuality, "short_summary"),
         ),
       ].filter(Boolean),
     },
@@ -1155,10 +1258,7 @@ function buildSynthesisBlocks(
 
   const risksBlock = asRecord(rawBlocks.risks);
   if (readyBaseField(workFormat, "risks")) {
-    const signals = buildRiskCheckSignals(workFormat, {
-      good: "Называет условия, в которых стабильно включается в работу.",
-      warning: "Теряет темп при неясной роли или частых внеплановых переключениях.",
-    });
+    const signals = buildRiskCheckSignals(workFormat, "work_format");
     risksBlock.checks = [
       {
         id: "risk-limited-work-format",
@@ -1174,10 +1274,7 @@ function buildSynthesisBlocks(
       },
     ];
   } else if (readyBaseField(decisionStyle, "risks")) {
-    const signals = buildRiskCheckSignals(decisionStyle, {
-      good: "Объясняет, какие данные и рамка нужны перед решением.",
-      warning: "Принимает решение без критериев и не может пересказать логику выбора.",
-    });
+    const signals = buildRiskCheckSignals(decisionStyle, "decision_style");
     risksBlock.checks = [
       {
         id: "risk-limited-decision-style",
@@ -1210,10 +1307,10 @@ function cleanSynthesisBlocks(
     "main_value",
     "main_risk",
     "how_to_check_first",
+    "decision_note",
     "text",
   ]) {
-    const value = asString(exec[key]);
-    if (isPlannedLayerText(value)) exec[key] = "";
+    exec[key] = cleanSynthesisText(exec[key]);
   }
   if (!asString(exec.main_value)) {
     exec.main_value = LIMITED_SYNTHESIS_FALLBACK;
@@ -1224,8 +1321,7 @@ function cleanSynthesisBlocks(
   cleaned.executive_summary = exec;
 
   const wf = asRecord(cleaned.work_formula);
-  const wfText = asString(wf.text);
-  if (isPlannedLayerText(wfText)) wf.text = "";
+  wf.text = cleanSynthesisText(wf.text);
   cleaned.work_formula = wf;
 
   for (const blockKey of ["talents", "work_environment", "management", "risks"] as const) {
@@ -1234,27 +1330,37 @@ function cleanSynthesisBlocks(
     if (Array.isArray(block.items)) {
       block.items = block.items
         .map((item) => asRecord(item))
-        .filter((item) => {
-          const body = asString(item.body);
-          return body.length > 0 && !isPlannedLayerText(body);
-        });
+        .map((item) => ({
+          title: asString(item.title),
+          body: cleanSynthesisText(item.body),
+        }))
+        .filter((item) => item.body.length > 0);
     }
 
     if (blockKey === "risks" && Array.isArray(block.checks)) {
-      block.checks = block.checks.filter((check) => {
-        const c = asRecord(check);
-        const risk = asString(c.risk);
-        return risk.length > 0 && !isPlannedLayerText(risk);
-      });
+      block.checks = block.checks
+        .map((check) => {
+          const c = asRecord(check);
+          return {
+            ...c,
+            risk: cleanSynthesisText(c.risk),
+            how_it_may_show_up: cleanSynthesisText(c.how_it_may_show_up),
+            interview_check: cleanSynthesisText(c.interview_check),
+            test_task_check: cleanSynthesisText(c.test_task_check),
+            good_signal: cleanSynthesisText(c.good_signal),
+            warning_signal: cleanSynthesisText(c.warning_signal),
+            management_prevention: cleanSynthesisText(c.management_prevention),
+          };
+        })
+        .filter((check) => asString(asRecord(check).risk).length > 0);
     }
 
     if (blockKey === "management" && block.playbook) {
       const playbook = asRecord(block.playbook);
       const cleanedPlaybook: Record<string, string> = {};
       for (const [k, v] of Object.entries(playbook)) {
-        if (typeof v === "string" && v.trim() && !isPlannedLayerText(v)) {
-          cleanedPlaybook[k] = v.trim();
-        }
+        const cleanedValue = cleanSynthesisText(v);
+        if (cleanedValue) cleanedPlaybook[k] = cleanedValue;
       }
       block.playbook = cleanedPlaybook;
     }
@@ -1347,7 +1453,9 @@ function collectSynthesisItemsWithEmptyBody(blocks: Record<string, unknown>): st
 }
 
 function synthesisContainsPlannedText(blocks: Record<string, unknown>): boolean {
-  return collectSynthesisClientTexts(blocks).some((text) => isPlannedLayerText(text));
+  return collectSynthesisClientTexts(blocks).some(
+    (text) => isPlannedLayerText(text) || isTechnicalLimitedText(text),
+  );
 }
 
 function aiLayerHasSourceTrace(layer: Record<string, unknown>): boolean {

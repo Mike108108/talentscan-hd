@@ -23,6 +23,7 @@ import {
   saveReportError,
   serializeGenerationError,
   validateWorkFormatLayer,
+  type OffendingMatch,
 } from "./hr-talent-map-v2-work-format-spike-shared";
 
 export const handler: BackgroundHandler = async (event: HandlerEvent) => {
@@ -41,12 +42,17 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
   const fail = async (
     stage: string,
     message: string,
-    extra?: { status?: number; validation_result?: unknown },
+    extra?: {
+      status?: number;
+      validation_result?: unknown;
+      offending_matches?: OffendingMatch[];
+    },
   ) => {
     logSpikeStage("worker", "save_error", logCtx, {
       stage,
       message,
       duration_ms: Date.now() - startedAt,
+      offending_match_count: extra?.offending_matches?.length ?? 0,
       ...extra,
     });
     if (db && reportId) {
@@ -59,6 +65,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           status: extra?.status,
           duration_ms: Date.now() - startedAt,
           validation_result: extra?.validation_result,
+          offending_matches: extra?.offending_matches,
         }),
       );
     }
@@ -249,6 +256,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
     if (!validation.ok) {
       await fail(validation.stage, validation.message, {
         validation_result: validation.details ?? null,
+        offending_matches: validation.offending_matches,
       });
       return;
     }

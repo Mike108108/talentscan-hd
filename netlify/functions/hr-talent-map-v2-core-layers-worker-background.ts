@@ -351,8 +351,10 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
 
         markRemainingLayersSkipped(layerKey, layerGeneration.layers);
 
+        const resolvedHttpStatus = openAiErr?.httpStatus ?? (httpStatus || undefined);
+
         await fail(stage, message, layerKey, {
-          status: openAiErr?.httpStatus ?? httpStatus || undefined,
+          status: resolvedHttpStatus,
           attempts,
           last_error: message,
           response_status: openAiErr?.responseStatus ?? null,

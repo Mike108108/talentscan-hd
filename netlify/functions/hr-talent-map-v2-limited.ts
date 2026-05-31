@@ -12,7 +12,9 @@ export const V2_LIMITED_PROMPT_VERSION = "hr_person_talent_map_v2_limited_layers
 export const V2_SCHEMA_VERSION = "hr_person_talent_map_v2";
 const SOURCE_ANALYSIS_PACKET_VERSION = "analysis_packet_v1_1";
 const CONTENT_CONTRACT_VERSION = "2.0.0";
-const DEFAULT_OPENAI_TIMEOUT_MS = 22_000;
+const DEFAULT_OPENAI_TIMEOUT_MS = 40_000;
+const MIN_OPENAI_TIMEOUT_MS = 5_000;
+const MAX_OPENAI_TIMEOUT_MS = 40_000;
 const MAX_BASE_FIELD_CHARS = 280;
 const OPENAI_MAX_OUTPUT_TOKENS = 5000;
 const OPENAI_TEMPERATURE = 0.35;
@@ -89,7 +91,9 @@ function resolveOpenAiTimeoutMs(): number {
     process.env.HR_TALENT_MAP_V2_OPENAI_TIMEOUT_MS ?? "",
     10,
   );
-  if (Number.isFinite(raw) && raw >= 5_000 && raw <= 25_000) return raw;
+  if (Number.isFinite(raw) && raw >= MIN_OPENAI_TIMEOUT_MS && raw <= MAX_OPENAI_TIMEOUT_MS) {
+    return raw;
+  }
   return DEFAULT_OPENAI_TIMEOUT_MS;
 }
 

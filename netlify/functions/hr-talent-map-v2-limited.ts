@@ -14,7 +14,7 @@ const SOURCE_ANALYSIS_PACKET_VERSION = "analysis_packet_v1_1";
 const CONTENT_CONTRACT_VERSION = "2.0.0";
 const DEFAULT_OPENAI_TIMEOUT_MS = 22_000;
 const MAX_BASE_FIELD_CHARS = 280;
-const OPENAI_MAX_OUTPUT_TOKENS = 2200;
+const OPENAI_MAX_OUTPUT_TOKENS = 6000;
 
 /** Only these layers use OpenAI on the limited proof-of-concept stage. */
 const AI_LAYER_KEYS = ["work_format", "task_entry", "decision_style"] as const;
@@ -90,6 +90,25 @@ function resolveOpenAiTimeoutMs(): number {
   );
   if (Number.isFinite(raw) && raw >= 5_000 && raw <= 25_000) return raw;
   return DEFAULT_OPENAI_TIMEOUT_MS;
+}
+
+function usesMaxCompletionTokens(model: string): boolean {
+  const normalized = model.trim().toLowerCase();
+  return (
+    normalized.startsWith("gpt-5") ||
+    normalized.startsWith("o1") ||
+    normalized.startsWith("o3") ||
+    normalized.startsWith("o4") ||
+    normalized.includes("reasoning")
+  );
+}
+
+function buildOpenAiTokenLimitParam(
+  model: string,
+): { max_completion_tokens: number } | { max_tokens: number } {
+  return usesMaxCompletionTokens(model)
+    ? { max_completion_tokens: OPENAI_MAX_OUTPUT_TOKENS }
+    : { max_tokens: OPENAI_MAX_OUTPUT_TOKENS };
 }
 
 function logV2Stage(
@@ -1450,8 +1469,15 @@ export async function callOpenAiForLimitedLayers(
   const compactInput = buildCompactAiInput(analysisPacket);
   const timeoutMs = resolveOpenAiTimeoutMs();
   const startedAt = Date.now();
+  const tokenLimitParam = buildOpenAiTokenLimitParam(model);
+  const tokenLimitParamName = usesMaxCompletionTokens(model)
+    ? "max_completion_tokens"
+    : "max_tokens";
 
   logV2Stage("v2_limited_openai_start", logCtx, {
+    model,
+    token_limit_param: tokenLimitParamName,
+    max_output_tokens: OPENAI_MAX_OUTPUT_TOKENS,
     timeout_ms: timeoutMs,
     compact_input_bytes: JSON.stringify(compactInput).length,
     ai_layer_count: AI_LAYER_KEYS.length,
@@ -1472,8 +1498,8 @@ export async function callOpenAiForLimitedLayers(
       body: JSON.stringify({
         model,
         temperature: 0.35,
-        max_tokens: OPENAI_MAX_OUTPUT_TOKENS,
         response_format: { type: "json_object" },
+        ...tokenLimitParam,
         messages: [
           { role: "system", content: buildV2LimitedSystemPrompt() },
           { role: "user", content: buildV2LimitedUserPrompt(compactInput) },

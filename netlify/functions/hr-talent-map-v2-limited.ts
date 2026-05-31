@@ -14,7 +14,7 @@ const SOURCE_ANALYSIS_PACKET_VERSION = "analysis_packet_v1_1";
 const CONTENT_CONTRACT_VERSION = "2.0.0";
 const DEFAULT_OPENAI_TIMEOUT_MS = 22_000;
 const MAX_BASE_FIELD_CHARS = 280;
-const OPENAI_MAX_OUTPUT_TOKENS = 6000;
+const OPENAI_MAX_OUTPUT_TOKENS = 5000;
 const OPENAI_TEMPERATURE = 0.35;
 
 /** Only these layers use OpenAI on the limited proof-of-concept stage. */

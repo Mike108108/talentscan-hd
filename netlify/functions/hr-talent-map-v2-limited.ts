@@ -15,6 +15,7 @@ const CONTENT_CONTRACT_VERSION = "2.0.0";
 const DEFAULT_OPENAI_TIMEOUT_MS = 22_000;
 const MAX_BASE_FIELD_CHARS = 280;
 const OPENAI_MAX_OUTPUT_TOKENS = 6000;
+const OPENAI_TEMPERATURE = 0.35;
 
 /** Only these layers use OpenAI on the limited proof-of-concept stage. */
 const AI_LAYER_KEYS = ["work_format", "task_entry", "decision_style"] as const;
@@ -109,6 +110,18 @@ function buildOpenAiTokenLimitParam(
   return usesMaxCompletionTokens(model)
     ? { max_completion_tokens: OPENAI_MAX_OUTPUT_TOKENS }
     : { max_tokens: OPENAI_MAX_OUTPUT_TOKENS };
+}
+
+function supportsCustomTemperature(model: string): boolean {
+  return !usesMaxCompletionTokens(model);
+}
+
+function buildOpenAiTemperatureParam(
+  model: string,
+): { temperature: number } | Record<string, never> {
+  return supportsCustomTemperature(model)
+    ? { temperature: OPENAI_TEMPERATURE }
+    : {};
 }
 
 function logV2Stage(
@@ -1473,11 +1486,15 @@ export async function callOpenAiForLimitedLayers(
   const tokenLimitParamName = usesMaxCompletionTokens(model)
     ? "max_completion_tokens"
     : "max_tokens";
+  const temperatureParam = buildOpenAiTemperatureParam(model);
+  const usesCustomTemperature = supportsCustomTemperature(model);
 
   logV2Stage("v2_limited_openai_start", logCtx, {
     model,
     token_limit_param: tokenLimitParamName,
     max_output_tokens: OPENAI_MAX_OUTPUT_TOKENS,
+    temperature_param: usesCustomTemperature ? "custom" : "default",
+    temperature_value: usesCustomTemperature ? OPENAI_TEMPERATURE : undefined,
     timeout_ms: timeoutMs,
     compact_input_bytes: JSON.stringify(compactInput).length,
     ai_layer_count: AI_LAYER_KEYS.length,
@@ -1497,9 +1514,9 @@ export async function callOpenAiForLimitedLayers(
       signal: controller.signal,
       body: JSON.stringify({
         model,
-        temperature: 0.35,
         response_format: { type: "json_object" },
         ...tokenLimitParam,
+        ...temperatureParam,
         messages: [
           { role: "system", content: buildV2LimitedSystemPrompt() },
           { role: "user", content: buildV2LimitedUserPrompt(compactInput) },

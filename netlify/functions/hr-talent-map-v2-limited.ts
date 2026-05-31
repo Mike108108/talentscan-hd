@@ -8,13 +8,16 @@ import {
   findBannedClientTerms,
 } from "./hr-report-normalize";
 
-export const V2_LIMITED_PROMPT_VERSION = "hr_person_talent_map_v2_limited_layers_0_1";
+export const V2_LIMITED_PROMPT_VERSION = "hr_person_talent_map_v2_limited_layers_0_2";
 export const V2_SCHEMA_VERSION = "hr_person_talent_map_v2";
 const SOURCE_ANALYSIS_PACKET_VERSION = "analysis_packet_v1_1";
 const CONTENT_CONTRACT_VERSION = "2.0.0";
-const DEFAULT_OPENAI_TIMEOUT_MS = 22_000;
+const DEFAULT_OPENAI_TIMEOUT_MS = 28_000;
+const MIN_OPENAI_TIMEOUT_MS = 5_000;
+const MAX_OPENAI_TIMEOUT_MS = 28_000;
 const MAX_BASE_FIELD_CHARS = 280;
-const OPENAI_MAX_OUTPUT_TOKENS = 2200;
+const OPENAI_MAX_OUTPUT_TOKENS = 5000;
+const OPENAI_TEMPERATURE = 0.35;
 
 /** Only these layers use OpenAI on the limited proof-of-concept stage. */
 const AI_LAYER_KEYS = ["work_format", "task_entry", "decision_style"] as const;
@@ -40,7 +43,7 @@ const PLANNED_LAYER_PLACEHOLDER =
   "Этот слой будет раскрыт в следующем этапе послойной генерации.";
 
 const LIMITED_SYNTHESIS_FALLBACK =
-  "Этот блок собран по ограниченному набору готовых слоёв: рабочий формат, вход в задачи и стиль принятия решений. Для полной версии потребуется раскрыть дополнительные слои.";
+  "Сводка по рабочему формату, входу в задачи и стилю принятия решений; проверьте гипотезы на интервью.";
 
 /** Known source paths per ready AI layer — used for server-side pro/evidence fallback. */
 const LIMITED_LAYER_SOURCE_MAP: Record<
@@ -88,8 +91,41 @@ function resolveOpenAiTimeoutMs(): number {
     process.env.HR_TALENT_MAP_V2_OPENAI_TIMEOUT_MS ?? "",
     10,
   );
-  if (Number.isFinite(raw) && raw >= 5_000 && raw <= 25_000) return raw;
+  if (Number.isFinite(raw) && raw >= MIN_OPENAI_TIMEOUT_MS && raw <= MAX_OPENAI_TIMEOUT_MS) {
+    return raw;
+  }
   return DEFAULT_OPENAI_TIMEOUT_MS;
+}
+
+function usesMaxCompletionTokens(model: string): boolean {
+  const normalized = model.trim().toLowerCase();
+  return (
+    normalized.startsWith("gpt-5") ||
+    normalized.startsWith("o1") ||
+    normalized.startsWith("o3") ||
+    normalized.startsWith("o4") ||
+    normalized.includes("reasoning")
+  );
+}
+
+function buildOpenAiTokenLimitParam(
+  model: string,
+): { max_completion_tokens: number } | { max_tokens: number } {
+  return usesMaxCompletionTokens(model)
+    ? { max_completion_tokens: OPENAI_MAX_OUTPUT_TOKENS }
+    : { max_tokens: OPENAI_MAX_OUTPUT_TOKENS };
+}
+
+function supportsCustomTemperature(model: string): boolean {
+  return !usesMaxCompletionTokens(model);
+}
+
+function buildOpenAiTemperatureParam(
+  model: string,
+): { temperature: number } | Record<string, never> {
+  return supportsCustomTemperature(model)
+    ? { temperature: OPENAI_TEMPERATURE }
+    : {};
 }
 
 function logV2Stage(
@@ -222,6 +258,40 @@ function isPlannedLayerText(text: string): boolean {
     t.includes("Этот слой будет раскрыт") ||
     t.includes("Слой не генерировался AI на limited этапе")
   );
+}
+
+function normalizeHrCopy(value: unknown): string {
+  return asString(value).trim();
+}
+
+function isTechnicalLimitedText(value: unknown): boolean {
+  const text = normalizeHrCopy(value).toLowerCase();
+  if (!text) return false;
+  return (
+    text.includes("layered_limited") ||
+    text.includes("limited v2") ||
+    text.includes("ai-сло") ||
+    text.includes("3 ai") ||
+    text.includes("planned") ||
+    text.includes("статусе planned") ||
+    text.includes("ограниченного v2-отч") ||
+    text.includes("ограниченного набора сло") ||
+    text.includes("следующем этапе послойной генерации") ||
+    text.includes("режим layered") ||
+    text.includes("не все 34 слоя")
+  );
+}
+
+function isDisallowedSynthesisText(value: unknown): boolean {
+  const text = normalizeHrCopy(value);
+  if (!text) return true;
+  return isPlannedLayerText(text) || isTechnicalLimitedText(text);
+}
+
+function cleanSynthesisText(value: unknown): string {
+  const text = normalizeHrCopy(value);
+  if (isDisallowedSynthesisText(text)) return "";
+  return text;
 }
 
 function normalizeConfidence(raw: unknown): "high" | "medium" | "low" | "unknown" {
@@ -437,31 +507,117 @@ function buildCompactAiInput(analysisPacket: Record<string, unknown>): Record<st
 }
 
 function buildV2LimitedSystemPrompt(): string {
-  return `TalentScan HR Layer Engine (v2 limited, 3 layers only).
+  return `TalentScan HR Layer Engine (v2 limited, 3 AI-слоя).
 
-Верни JSON { "layer_reports": [...] } для layer_key: work_format, task_entry, decision_style.
-Короткие формулировки: каждое base-поле до 220 символов, pro.connection_logic до 120, evidence.limitations до 120.
-base — HR-язык без Human Design / соционики. pro/evidence — технические ссылки допустимы.
+Верни JSON { "layer_reports": [...] } ровно для layer_key: work_format, task_entry, decision_style.
+status=ready для всех трёх. Короткий JSON, без markdown.
 
-Обязательно для каждого ready-слоя:
-- pro.technical_sources — непустой массив ключей из compact_input (type, strategy, authority, profile, signature, notSelfTheme)
-- pro.source_values — объект с реальными значениями из compact_input (не выдумывать)
-- evidence.source_fields — пути вида source_chart.passport.* для использованных полей
-- evidence.source_chart_elements — при наличии релевантных центров/переменных
-Если точного поля нет — confidence medium/low, limitations с причиной, human_check что проверить на интервью.
+Лимиты: каждое base-поле до 220 символов; pro.connection_logic до 120; evidence.limitations до 120.
 
-Без fit_score, role-fit, «брать/не брать». Только compact_input. Без markdown.`;
+=== Продуктовый контекст ===
+Это общая карта кандидата (hr_person_talent_map), НЕ оценка под вакансию.
+Запрещено: fit_score, проценты соответствия, role-fit, «брать/не брать», «подходит на XX%».
+
+=== Base: HR-гипотезы, не пересказ карты ===
+Base описывает рабочее поведение и управленческие гипотезы. Не пересказывай технические поля карты.
+
+Base должен отвечать на практические вопросы HR:
+- как человек включается в работу;
+- где приносит пользу;
+- какой формат постановки задач помогает;
+- как проверить гипотезу на интервью/тестовом;
+- какие условия усиливают результат;
+- какие условия создают риск;
+- как руководителю с этим работать.
+
+Base НЕ должен использовать как основной язык:
+Human Design, бодиграф, ворота, каналы, центры, профиль, авторитет, стратегия,
+Генератор, Проектор, Projector, Splenic, Wait for Invitation, signature, not-self,
+соционика, социотип и похожие термины методологии.
+Технические термины допустимы ТОЛЬКО в pro/evidence.
+
+=== Pro/evidence: техническое основание ===
+Сохраняй source trace для каждого слоя:
+- pro.technical_sources — ключи из compact_input.source_chart.passport
+- pro.source_values — реальные значения (не выдумывать)
+- pro.connection_logic — почему эти поля дают такой HR-вывод
+- pro.confidence — high/medium/low/unknown
+- pro.human_check — что сверить с человеком
+- evidence.source_fields — пути вида source_chart.passport.*
+- evidence.source_chart_elements — центры/переменные при релевантности
+- evidence.confidence, evidence.limitations — что ограничивает уверенность
+Если поля нет — confidence medium/low, limitations с причиной.
+
+=== Источники данных ===
+Приоритет: compact_input.source_chart + LIMITED_LAYER_SOURCE_MAP по слоям.
+Дополнительно используй compact_input.analysis_layers[].input_summary и source_refs, если они есть —
+как контекст интерпретации, но не подменяй ими passport-поля.
+
+=== Три слоя — три разных HR-фокуса ===
+
+work_format — «Рабочий формат»
+Вопрос: в каком рабочем режиме человек приносит пользу и как с ним строить взаимодействие?
+Base раскрывает: оптимальный формат участия; где полезен; тип задач/контекста; что снижает эффективность;
+как руководителю включать без давления.
+НЕ сводить только к «нужно приглашение/признание».
+
+task_entry — «Вход в задачи»
+Вопрос: как человеку лучше получать задачи, стартовать и входить в рабочий процесс?
+Base раскрывает: как формулировать задачу; какой контекст дать перед стартом; что считать ясным входом;
+что будет плохим входом; как проверить на интервью умение входить в задачи.
+НЕ повторять work_format — фокус на старте задачи, а не на общем формате работы.
+
+decision_style — «Принятие решений»
+Вопрос: как человек выбирает, уточняет и принимает рабочие решения?
+Base раскрывает: как считывает решение; какие данные/сигналы нужны; где решения сильные;
+где риск поспешности или необъяснённости; как руководителю давать рамку; как проверить на интервью/кейсе.
+НЕ упрощать до «интуиция против рациональности» — пиши про управляемую проверку решений.
+
+=== Анти-повторы ===
+- short_summary трёх слоёв должны звучать по-разному;
+- не повторять формулу «приглашение и признание» во всех слоях;
+- не дублировать management_tips, what_to_check, risks между слоями;
+- каждый слой — свой HR-фокус и свои формулировки.
+
+Только compact_input. Без markdown.`;
 }
 
 function buildV2LimitedUserPrompt(compactInput: Record<string, unknown>): string {
   const keysList = AI_LAYER_KEYS.join(", ");
-  return `Сгенерируй ровно 3 layer_reports: ${keysList}.
-status=ready. base-поля — строки. Короткий JSON.
+  const hasAnalysisLayers =
+    Array.isArray(compactInput.analysis_layers) &&
+    (compactInput.analysis_layers as unknown[]).length > 0;
 
-Источники по слоям (только если есть в compact_input):
+  return `Сгенерируй ровно 3 layer_reports: ${keysList}.
+status=ready. Все base-поля — строки (не массивы). Короткий JSON.
+
+Источники по слоям (только если есть в compact_input.source_chart.passport):
 - work_format: type, strategy, signature, notSelfTheme, profile
 - task_entry: strategy, authority, type, profile
-- decision_style: authority, strategy, type и decision-related поля passport
+- decision_style: authority, strategy, type
+
+${
+  hasAnalysisLayers
+    ? `В compact_input.analysis_layers есть input_summary и source_refs — используй их как дополнительный контекст интерпретации, но passport-поля остаются главным источником.`
+    : ""
+}
+
+=== Качество каждого base-поля ===
+short_summary — одна короткая HR-гипотеза своего слоя; без технических терминов; не повторять другие слои.
+detailed_explanation — практическое объяснение: как паттерн проявляется в работе, с примерами ситуаций.
+how_it_appears_at_work — наблюдаемое поведение: что HR/руководитель увидит в первые недели.
+where_useful — конкретные зоны задач/команды, где паттерн усиливает результат.
+risks — конкретное рабочее искажение (не абстрактный «риск выгорания»); свой для каждого слоя.
+management_tips — одно конкретное действие руководителя (не общий совет «давать обратную связь»).
+what_to_check — проверяемая гипотеза: что спросить/проверить; хороший сигнал; тревожный сигнал (в одной строке).
+
+=== Качество pro/evidence ===
+pro.connection_logic — почему именно эти passport-поля дают такой HR-вывод (технический язык допустим).
+pro.human_check — что сверить с кандидатом на интервью.
+evidence.limitations — что ограничивает уверенность (неполные данные, слабая связь полей и вывода).
+
+ui_priority: work_format=2, task_entry=3, decision_style=4.
+group: energy_and_decision.
 
 Шаблон элемента:
 {"layer_key":"","hr_title":"","group":"energy_and_decision","status":"ready","ui_priority":2,"base":{"short_summary":"","detailed_explanation":"","how_it_appears_at_work":"","where_useful":"","risks":"","management_tips":"","what_to_check":""},"pro":{"technical_sources":[],"source_values":{},"connection_logic":"","confidence":"medium","human_check":""},"evidence":{"source_fields":[],"source_layer_keys":[],"source_chart_elements":[],"confidence":"medium","limitations":"","warnings":[]}}
@@ -854,8 +1010,109 @@ function readyBaseField(
 
 function synthesisItem(title: string, body: string): { title: string; body: string } | null {
   const trimmedBody = body.trim();
-  if (!trimmedBody || isPlannedLayerText(trimmedBody)) return null;
+  if (!trimmedBody || isDisallowedSynthesisText(trimmedBody)) return null;
   return { title, body: trimmedBody };
+}
+
+const RISK_CHECK_SIGNAL_DEFAULTS: Record<
+  AiLayerKey,
+  { good: string; warning: string }
+> = {
+  work_format: {
+    good:
+      "Хороший сигнал: кандидат приводит примеры, где после ясного запроса быстро включался и давал ценный вклад.",
+    warning:
+      "Тревожный сигнал: кандидат теряет включённость, когда задача поставлена без ясной роли, запроса и признания зоны ответственности.",
+  },
+  task_entry: {
+    good:
+      "Хороший сигнал: кандидат может описать, какой контекст задачи ему нужен для уверенного старта.",
+    warning:
+      "Тревожный сигнал: кандидат долго буксует на старте, если контекст задачи неполный или ожидания размыты.",
+  },
+  decision_style: {
+    good:
+      "Хороший сигнал: кандидат умеет объяснить, как проверяет быстрые решения фактами, ограничениями и обратной связью.",
+    warning:
+      "Тревожный сигнал: кандидат принимает быстрые решения, но не может объяснить, как проверяет их последствия и ограничения.",
+  },
+};
+
+function extractGoodSignalFromWhatToCheck(whatToCheck: string): string {
+  const t = whatToCheck.trim();
+  if (!t) return "";
+
+  const match = t.match(/хорош(?:ий|его)\s+сигнал\s*[—:\-–]\s*([^.;]+)/i);
+  if (match?.[1]) return match[1].trim();
+
+  const parts = t.split(/[;.\n]/).map((p) => p.trim()).filter(Boolean);
+  for (const part of parts) {
+    if (/хорош/i.test(part) && !/тревож/i.test(part)) {
+      const stripped = part.replace(/^хорош(?:ий|его)\s+сигнал\s*[—:\-–]?\s*/i, "").trim();
+      return stripped || part;
+    }
+  }
+  return "";
+}
+
+function extractWarningSignalFromWhatToCheck(whatToCheck: string): string {
+  const t = whatToCheck.trim();
+  if (!t) return "";
+
+  const match = t.match(/тревожн(?:ый|ого)\s+сигнал\s*[—:\-–]\s*([^.;]+)/i);
+  if (match?.[1]) return match[1].trim();
+
+  const parts = t.split(/[;.\n]/).map((p) => p.trim()).filter(Boolean);
+  for (const part of parts) {
+    if (/тревож/i.test(part)) {
+      const stripped = part.replace(/^тревожн(?:ый|ого)\s+сигнал\s*[—:\-–]?\s*/i, "").trim();
+      return stripped || part;
+    }
+  }
+  return "";
+}
+
+function ensureGoodSignalPrefix(text: string): string {
+  const t = text.trim();
+  if (!t) return "";
+  if (/^хорош/i.test(t)) return truncateText(t, 120);
+  const body = t.charAt(0).toLowerCase() + t.slice(1);
+  return truncateText(`Хороший сигнал: ${body}`, 120);
+}
+
+function ensureWarningSignalPrefix(text: string): string {
+  const t = text.trim();
+  if (!t) return "";
+  if (/^тревож/i.test(t)) return truncateText(t, 120);
+  const body = t.charAt(0).toLowerCase() + t.slice(1);
+  return truncateText(`Тревожный сигнал: ${body}`, 120);
+}
+
+/** Derive risk-check signals from layer base fields; fall back to layer-specific defaults. */
+function buildRiskCheckSignals(
+  layer: Record<string, unknown> | undefined,
+  layerKey: AiLayerKey,
+): { good_signal: string; warning_signal: string } {
+  const defaults = RISK_CHECK_SIGNAL_DEFAULTS[layerKey];
+  const whatToCheck = readyBaseField(layer, "what_to_check");
+  const howItAppears = readyBaseField(layer, "how_it_appears_at_work");
+  const whereUseful = readyBaseField(layer, "where_useful");
+
+  const goodFromCheck = extractGoodSignalFromWhatToCheck(whatToCheck);
+  const warningFromCheck = extractWarningSignalFromWhatToCheck(whatToCheck);
+
+  const goodCandidate =
+    goodFromCheck ||
+    howItAppears ||
+    whereUseful ||
+    defaults.good;
+
+  const warningCandidate = warningFromCheck || defaults.warning;
+
+  return {
+    good_signal: ensureGoodSignalPrefix(goodCandidate),
+    warning_signal: ensureWarningSignalPrefix(warningCandidate),
+  };
 }
 
 function buildSynthesisBlocks(
@@ -909,7 +1166,7 @@ function buildSynthesisBlocks(
         readyBaseField(workFormat, "what_to_check") ||
         readyBaseField(decisionStyle, "what_to_check"),
       decision_note:
-        "Сводка собрана из ограниченного набора слоёв v2; перед решением о найме проверьте гипотезы на интервью.",
+        "Перед решением о найме проверьте гипотезы на интервью и в первые недели работы.",
       text:
         [
           readyBaseField(workFormat, "detailed_explanation"),
@@ -940,7 +1197,6 @@ function buildSynthesisBlocks(
           readyBaseField(decisionStyle, "short_summary") ||
             readyBaseField(decisionStyle, "detailed_explanation"),
         ),
-        synthesisItem("Опора на данные", readyBaseField(dataQuality, "short_summary")),
       ].filter(Boolean),
     },
     work_environment: {
@@ -954,11 +1210,6 @@ function buildSynthesisBlocks(
           "Вход в задачи",
           readyBaseField(taskEntry, "how_it_appears_at_work") ||
             readyBaseField(taskEntry, "where_useful"),
-        ),
-        synthesisItem(
-          "Качество данных",
-          readyBaseField(dataQuality, "detailed_explanation") ||
-            readyBaseField(dataQuality, "short_summary"),
         ),
       ].filter(Boolean),
     },
@@ -1007,6 +1258,7 @@ function buildSynthesisBlocks(
 
   const risksBlock = asRecord(rawBlocks.risks);
   if (readyBaseField(workFormat, "risks")) {
+    const signals = buildRiskCheckSignals(workFormat, "work_format");
     risksBlock.checks = [
       {
         id: "risk-limited-work-format",
@@ -1014,14 +1266,15 @@ function buildSynthesisBlocks(
         how_it_may_show_up: readyBaseField(workFormat, "how_it_appears_at_work"),
         interview_check: readyBaseField(workFormat, "what_to_check"),
         test_task_check: readyBaseField(taskEntry, "what_to_check"),
-        good_signal: "Описывает рабочие условия, в которых держит темп.",
-        warning_signal: "Не может назвать критерии приоритизации.",
+        good_signal: signals.good_signal,
+        warning_signal: signals.warning_signal,
         management_prevention: readyBaseField(workFormat, "management_tips"),
         related_hypothesis_ids: [],
         confidence: "medium",
       },
     ];
   } else if (readyBaseField(decisionStyle, "risks")) {
+    const signals = buildRiskCheckSignals(decisionStyle, "decision_style");
     risksBlock.checks = [
       {
         id: "risk-limited-decision-style",
@@ -1029,8 +1282,8 @@ function buildSynthesisBlocks(
         how_it_may_show_up: readyBaseField(decisionStyle, "how_it_appears_at_work"),
         interview_check: readyBaseField(decisionStyle, "what_to_check"),
         test_task_check: readyBaseField(taskEntry, "what_to_check"),
-        good_signal: "Называет условия для взвешенных решений.",
-        warning_signal: "Игнорирует вопросы о сроках и приоритетах.",
+        good_signal: signals.good_signal,
+        warning_signal: signals.warning_signal,
         management_prevention: readyBaseField(decisionStyle, "management_tips"),
         related_hypothesis_ids: [],
         confidence: "medium",
@@ -1054,10 +1307,10 @@ function cleanSynthesisBlocks(
     "main_value",
     "main_risk",
     "how_to_check_first",
+    "decision_note",
     "text",
   ]) {
-    const value = asString(exec[key]);
-    if (isPlannedLayerText(value)) exec[key] = "";
+    exec[key] = cleanSynthesisText(exec[key]);
   }
   if (!asString(exec.main_value)) {
     exec.main_value = LIMITED_SYNTHESIS_FALLBACK;
@@ -1068,8 +1321,7 @@ function cleanSynthesisBlocks(
   cleaned.executive_summary = exec;
 
   const wf = asRecord(cleaned.work_formula);
-  const wfText = asString(wf.text);
-  if (isPlannedLayerText(wfText)) wf.text = "";
+  wf.text = cleanSynthesisText(wf.text);
   cleaned.work_formula = wf;
 
   for (const blockKey of ["talents", "work_environment", "management", "risks"] as const) {
@@ -1078,27 +1330,37 @@ function cleanSynthesisBlocks(
     if (Array.isArray(block.items)) {
       block.items = block.items
         .map((item) => asRecord(item))
-        .filter((item) => {
-          const body = asString(item.body);
-          return body.length > 0 && !isPlannedLayerText(body);
-        });
+        .map((item) => ({
+          title: asString(item.title),
+          body: cleanSynthesisText(item.body),
+        }))
+        .filter((item) => item.body.length > 0);
     }
 
     if (blockKey === "risks" && Array.isArray(block.checks)) {
-      block.checks = block.checks.filter((check) => {
-        const c = asRecord(check);
-        const risk = asString(c.risk);
-        return risk.length > 0 && !isPlannedLayerText(risk);
-      });
+      block.checks = block.checks
+        .map((check) => {
+          const c = asRecord(check);
+          return {
+            ...c,
+            risk: cleanSynthesisText(c.risk),
+            how_it_may_show_up: cleanSynthesisText(c.how_it_may_show_up),
+            interview_check: cleanSynthesisText(c.interview_check),
+            test_task_check: cleanSynthesisText(c.test_task_check),
+            good_signal: cleanSynthesisText(c.good_signal),
+            warning_signal: cleanSynthesisText(c.warning_signal),
+            management_prevention: cleanSynthesisText(c.management_prevention),
+          };
+        })
+        .filter((check) => asString(asRecord(check).risk).length > 0);
     }
 
     if (blockKey === "management" && block.playbook) {
       const playbook = asRecord(block.playbook);
       const cleanedPlaybook: Record<string, string> = {};
       for (const [k, v] of Object.entries(playbook)) {
-        if (typeof v === "string" && v.trim() && !isPlannedLayerText(v)) {
-          cleanedPlaybook[k] = v.trim();
-        }
+        const cleanedValue = cleanSynthesisText(v);
+        if (cleanedValue) cleanedPlaybook[k] = cleanedValue;
       }
       block.playbook = cleanedPlaybook;
     }
@@ -1191,7 +1453,9 @@ function collectSynthesisItemsWithEmptyBody(blocks: Record<string, unknown>): st
 }
 
 function synthesisContainsPlannedText(blocks: Record<string, unknown>): boolean {
-  return collectSynthesisClientTexts(blocks).some((text) => isPlannedLayerText(text));
+  return collectSynthesisClientTexts(blocks).some(
+    (text) => isPlannedLayerText(text) || isTechnicalLimitedText(text),
+  );
 }
 
 function aiLayerHasSourceTrace(layer: Record<string, unknown>): boolean {
@@ -1330,8 +1594,19 @@ export async function callOpenAiForLimitedLayers(
   const compactInput = buildCompactAiInput(analysisPacket);
   const timeoutMs = resolveOpenAiTimeoutMs();
   const startedAt = Date.now();
+  const tokenLimitParam = buildOpenAiTokenLimitParam(model);
+  const tokenLimitParamName = usesMaxCompletionTokens(model)
+    ? "max_completion_tokens"
+    : "max_tokens";
+  const temperatureParam = buildOpenAiTemperatureParam(model);
+  const usesCustomTemperature = supportsCustomTemperature(model);
 
   logV2Stage("v2_limited_openai_start", logCtx, {
+    model,
+    token_limit_param: tokenLimitParamName,
+    max_output_tokens: OPENAI_MAX_OUTPUT_TOKENS,
+    temperature_param: usesCustomTemperature ? "custom" : "default",
+    temperature_value: usesCustomTemperature ? OPENAI_TEMPERATURE : undefined,
     timeout_ms: timeoutMs,
     compact_input_bytes: JSON.stringify(compactInput).length,
     ai_layer_count: AI_LAYER_KEYS.length,
@@ -1351,9 +1626,9 @@ export async function callOpenAiForLimitedLayers(
       signal: controller.signal,
       body: JSON.stringify({
         model,
-        temperature: 0.35,
-        max_tokens: OPENAI_MAX_OUTPUT_TOKENS,
         response_format: { type: "json_object" },
+        ...tokenLimitParam,
+        ...temperatureParam,
         messages: [
           { role: "system", content: buildV2LimitedSystemPrompt() },
           { role: "user", content: buildV2LimitedUserPrompt(compactInput) },

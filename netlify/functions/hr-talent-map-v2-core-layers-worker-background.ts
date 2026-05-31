@@ -12,8 +12,10 @@ import {
   asString,
   buildCoreLayersCompactInput,
   buildCoreLayersContentJson,
-  callOpenAiResponsesForLayer,
+  callOpenAiResponsesForLayerWithRetry,
   createSupabaseClient,
+  OpenAiLayerResponseError,
+  OpenAiLayerRetryExhaustedError,
   extractBearerToken,
   initLayerGenerationState,
   loadActiveCandidateChart,
@@ -55,6 +57,13 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       status?: number;
       validation_result?: unknown;
       offending_matches?: OffendingMatch[];
+      attempts?: number;
+      last_error?: string;
+      response_status?: string | null;
+      incomplete_details?: unknown;
+      output_text_length?: number;
+      output_text_tail?: string | null;
+      parse_error?: string | null;
     },
   ) => {
     const finishedAt = new Date().toISOString();
@@ -124,6 +133,13 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           offending_matches: extra?.offending_matches,
           failed_layer_key: failedLayerKey,
           layer_statuses: layerGeneration.layers,
+          attempts: extra?.attempts,
+          last_error: extra?.last_error,
+          response_status: extra?.response_status,
+          incomplete_details: extra?.incomplete_details,
+          output_text_length: extra?.output_text_length,
+          output_text_tail: extra?.output_text_tail,
+          parse_error: extra?.parse_error,
         }),
         partialContentJson,
       );
@@ -298,7 +314,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       let httpStatus = 0;
 
       try {
-        const openAiResult = await callOpenAiResponsesForLayer({
+        const openAiResult = await callOpenAiResponsesForLayerWithRetry({
           apiKey,
           model,
           layerKey,
@@ -307,9 +323,23 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         layer = openAiResult.layer;
         httpStatus = openAiResult.httpStatus;
       } catch (err) {
-        const message = err instanceof Error ? err.message : "OpenAI Responses API error";
-        const stage =
-          message === "openai_empty_output" ? "openai_empty_output" : "openai_responses";
+        const openAiErr =
+          err instanceof OpenAiLayerRetryExhaustedError
+            ? err.lastOpenAiError
+            : err instanceof OpenAiLayerResponseError
+              ? err
+              : null;
+
+        const message =
+          openAiErr?.message ??
+          (err instanceof Error ? err.message : "OpenAI Responses API error");
+        const stage = "openai_responses";
+        const attempts =
+          err instanceof OpenAiLayerRetryExhaustedError
+            ? err.attempts
+            : openAiErr
+              ? 1
+              : undefined;
 
         layerGeneration.layers[layerKey] = {
           ...layerGeneration.layers[layerKey],
@@ -321,7 +351,16 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
 
         markRemainingLayersSkipped(layerKey, layerGeneration.layers);
 
-        await fail(stage, message, layerKey, { status: httpStatus || undefined });
+        await fail(stage, message, layerKey, {
+          status: openAiErr?.httpStatus ?? httpStatus || undefined,
+          attempts,
+          last_error: message,
+          response_status: openAiErr?.responseStatus ?? null,
+          incomplete_details: openAiErr?.incompleteDetails ?? null,
+          output_text_length: openAiErr?.outputTextLength,
+          output_text_tail: openAiErr?.outputTextTail ?? null,
+          parse_error: openAiErr?.parseError ?? null,
+        });
         return;
       }
 

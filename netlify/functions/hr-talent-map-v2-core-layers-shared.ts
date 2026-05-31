@@ -15,6 +15,23 @@ export const SPIKE_PROMPT_VERSION =
 export const GENERATION_MODE = "layered_background_core_layers_spike";
 export const SOURCE_ANALYSIS_PACKET_VERSION = "analysis_packet_v1_1";
 export const CONTENT_CONTRACT_VERSION = "2.0.0";
+export const CORE_LAYER_MAX_OUTPUT_TOKENS = 8000;
+
+const OUTPUT_TEXT_TAIL_MAX = 500;
+const RETRY_COMPACT_HINT =
+  "Return compact valid JSON only. Keep each string concise. Do not over-explain. Respect the schema exactly.";
+
+const LAYER_OUTPUT_LENGTH_GUIDE = `=== Ограничения объёма (соблюдай строго, не раздувай JSON) ===
+- short_summary: 1–2 предложения
+- detailed_explanation: 4–6 предложений
+- how_it_appears_at_work: 3–5 предложений
+- where_useful: 3–5 пунктов
+- risks: 2–3 карточки
+- management_tips: 3–5 пунктов
+- what_to_check: 2–3 проверки
+- good_signals: 3–5 пунктов
+- warning_signals: 3–5 пунктов
+- connection_logic: 3–5 предложений`;
 
 export const CORE_LAYERS_ORDER = [
   "work_format",
@@ -388,6 +405,13 @@ export function serializeGenerationError(args: {
   offending_matches?: OffendingMatch[];
   failed_layer_key?: string;
   layer_statuses?: Record<string, LayerRunStatus>;
+  attempts?: number;
+  last_error?: string;
+  response_status?: string | null;
+  incomplete_details?: unknown;
+  output_text_length?: number;
+  output_text_tail?: string | null;
+  parse_error?: string | null;
 }): string {
   return JSON.stringify({
     stage: args.stage,
@@ -398,7 +422,60 @@ export function serializeGenerationError(args: {
     offending_matches: args.offending_matches ?? null,
     failed_layer_key: args.failed_layer_key ?? null,
     layer_statuses: args.layer_statuses ?? null,
+    attempts: args.attempts ?? null,
+    last_error: args.last_error ?? null,
+    response_status: args.response_status ?? null,
+    incomplete_details: args.incomplete_details ?? null,
+    output_text_length: args.output_text_length ?? null,
+    output_text_tail: args.output_text_tail ?? null,
+    parse_error: args.parse_error ?? null,
   });
+}
+
+export class OpenAiLayerResponseError extends Error {
+  readonly name = "OpenAiLayerResponseError";
+  readonly stage = "openai_responses" as const;
+  readonly failedLayerKey: CoreLayerKey;
+  readonly responseStatus: string | null;
+  readonly incompleteDetails: unknown;
+  readonly outputTextLength: number;
+  readonly outputTextTail: string | null;
+  readonly parseError: string | null;
+  readonly httpStatus: number;
+  readonly retryable: boolean;
+
+  constructor(opts: {
+    message: string;
+    failedLayerKey: CoreLayerKey;
+    responseStatus?: string | null;
+    incompleteDetails?: unknown;
+    outputTextLength?: number;
+    outputTextTail?: string | null;
+    parseError?: string | null;
+    httpStatus?: number;
+    retryable?: boolean;
+  }) {
+    super(opts.message);
+    this.failedLayerKey = opts.failedLayerKey;
+    this.responseStatus = opts.responseStatus ?? null;
+    this.incompleteDetails = opts.incompleteDetails ?? null;
+    this.outputTextLength = opts.outputTextLength ?? 0;
+    this.outputTextTail = opts.outputTextTail ?? null;
+    this.parseError = opts.parseError ?? null;
+    this.httpStatus = opts.httpStatus ?? 0;
+    this.retryable = opts.retryable ?? true;
+  }
+}
+
+export class OpenAiLayerRetryExhaustedError extends Error {
+  readonly name = "OpenAiLayerRetryExhaustedError";
+  readonly attempts = 2;
+  readonly lastOpenAiError: OpenAiLayerResponseError;
+
+  constructor(lastOpenAiError: OpenAiLayerResponseError) {
+    super(lastOpenAiError.message);
+    this.lastOpenAiError = lastOpenAiError;
+  }
 }
 
 const confidenceEnum = {
@@ -656,20 +733,27 @@ pro.connection_logic — почему эти поля дают HR-вывод.
 evidence.source_fields — пути к полям chart.
 what_to_check — массив объектов с hypothesis, check_method, good_signal, warning_signal (отдельные поля, не в одной строке).
 
+${LAYER_OUTPUT_LENGTH_GUIDE}
+
 ui_priority=${def.ui_priority}. group=${def.group}. hr_title=«${def.hr_title}». layer_key=${def.layer_key}.`;
 }
 
 export function buildLayerUserPrompt(
   layerKey: CoreLayerKey,
   compactInput: Record<string, unknown>,
+  compactRetry = false,
 ): string {
   const def = CORE_LAYER_DEFS[layerKey];
+  const retryBlock = compactRetry
+    ? `\n\n${RETRY_COMPACT_HINT}\n`
+    : "";
   return `Сгенерируй один layer_report ${def.layer_key} по compact_input ниже.
 Используй только релевантные поля chart из compact_input.
 В Base НЕ используй: fit_score, score, match percentage, проценты соответствия вакансии,
 «подходит на XX%», «брать/не брать», «нанять/не нанять», решение о найме, оценку под вакансию.
 
-Без markdown. Без HTML.
+Соблюдай ограничения объёма из instructions (краткие строки, без лишних абзацев).
+Без markdown. Без HTML.${retryBlock}
 
 compact_input:
 ${JSON.stringify(compactInput)}`;
@@ -855,15 +939,96 @@ export function extractResponsesOutputText(data: Record<string, unknown>): strin
   return "";
 }
 
-export function parseLayerReportJson(raw: string): Record<string, unknown> {
-  const trimmed = raw.trim();
+function outputTextTail(text: string): string {
+  if (text.length <= OUTPUT_TEXT_TAIL_MAX) return text;
+  return text.slice(-OUTPUT_TEXT_TAIL_MAX);
+}
+
+function hasIncompleteResponse(data: Record<string, unknown>, rawText: string): boolean {
+  const responseStatus = asString(data.status);
+  if (responseStatus === "incomplete") return true;
+  if (data.incomplete_details != null) return true;
+  return !rawText.trim();
+}
+
+function parseLayerReportJsonOrThrow(args: {
+  raw: string;
+  layerKey: CoreLayerKey;
+  data: Record<string, unknown>;
+  httpStatus: number;
+}): Record<string, unknown> {
+  const trimmed = args.raw.trim();
   const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)```$/i);
   const jsonText = fenced ? fenced[1].trim() : trimmed;
-  const parsed: unknown = JSON.parse(jsonText);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("OpenAI returned unexpected JSON structure.");
+
+  try {
+    const parsed: unknown = JSON.parse(jsonText);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("OpenAI returned unexpected JSON structure.");
+    }
+    return parsed as Record<string, unknown>;
+  } catch (err) {
+    const parseError = err instanceof Error ? err.message : String(err);
+    throw new OpenAiLayerResponseError({
+      message: "openai_response_json_parse_failed",
+      failedLayerKey: args.layerKey,
+      responseStatus: asString(args.data.status) || null,
+      incompleteDetails: args.data.incomplete_details ?? null,
+      outputTextLength: args.raw.length,
+      outputTextTail: outputTextTail(args.raw),
+      parseError,
+      httpStatus: args.httpStatus,
+      retryable: true,
+    });
   }
-  return parsed as Record<string, unknown>;
+}
+
+function processOpenAiResponsesBody(args: {
+  data: Record<string, unknown>;
+  layerKey: CoreLayerKey;
+  httpStatus: number;
+}): { layer: Record<string, unknown>; rawOutputChars: number } {
+  const apiError = args.data.error ? asRecord(args.data.error) : null;
+  const apiErrorMessage = apiError ? asString(apiError.message) : "";
+
+  if (apiErrorMessage) {
+    throw new OpenAiLayerResponseError({
+      message: apiErrorMessage,
+      failedLayerKey: args.layerKey,
+      responseStatus: asString(args.data.status) || null,
+      incompleteDetails: args.data.incomplete_details ?? null,
+      outputTextLength: 0,
+      outputTextTail: null,
+      parseError: null,
+      httpStatus: args.httpStatus,
+      retryable: false,
+    });
+  }
+
+  const rawText = extractResponsesOutputText(args.data);
+
+  if (hasIncompleteResponse(args.data, rawText)) {
+    throw new OpenAiLayerResponseError({
+      message: "openai_response_incomplete",
+      failedLayerKey: args.layerKey,
+      responseStatus: asString(args.data.status) || null,
+      incompleteDetails: args.data.incomplete_details ?? null,
+      outputTextLength: rawText.length,
+      outputTextTail: rawText ? outputTextTail(rawText) : null,
+      parseError: null,
+      httpStatus: args.httpStatus,
+      retryable: true,
+    });
+  }
+
+  const layer = parseLayerReportJsonOrThrow({
+    raw: rawText,
+    layerKey: args.layerKey,
+    data: args.data,
+    httpStatus: args.httpStatus,
+  });
+
+  return { layer, rawOutputChars: rawText.length };
 }
 
 export type LayerValidationResult =
@@ -1039,9 +1204,14 @@ export async function callOpenAiResponsesForLayer(args: {
   model: string;
   layerKey: CoreLayerKey;
   compactInput: Record<string, unknown>;
+  compactRetry?: boolean;
 }): Promise<{ layer: Record<string, unknown>; rawOutputChars: number; httpStatus: number }> {
   const instructions = buildLayerInstructions(args.layerKey);
-  const input = buildLayerUserPrompt(args.layerKey, args.compactInput);
+  const input = buildLayerUserPrompt(
+    args.layerKey,
+    args.compactInput,
+    args.compactRetry === true,
+  );
   const schema = buildCoreLayerSchema(args.layerKey);
 
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -1054,7 +1224,7 @@ export async function callOpenAiResponsesForLayer(args: {
       model: args.model,
       instructions,
       input,
-      max_output_tokens: 3500,
+      max_output_tokens: CORE_LAYER_MAX_OUTPUT_TOKENS,
       text: {
         format: {
           type: "json_schema",
@@ -1074,16 +1244,65 @@ export async function callOpenAiResponsesForLayer(args: {
     const message =
       asString(data.error && asRecord(data.error).message) ||
       `OpenAI Responses API error (${httpStatus})`;
-    throw new Error(message);
+    throw new OpenAiLayerResponseError({
+      message,
+      failedLayerKey: args.layerKey,
+      responseStatus: asString(data.status) || null,
+      incompleteDetails: data.incomplete_details ?? null,
+      outputTextLength: extractResponsesOutputText(data).length,
+      outputTextTail: null,
+      parseError: null,
+      httpStatus,
+      retryable: false,
+    });
   }
 
-  const rawText = extractResponsesOutputText(data);
-  if (!rawText) {
-    throw new Error("openai_empty_output");
+  const { layer, rawOutputChars } = processOpenAiResponsesBody({
+    data,
+    layerKey: args.layerKey,
+    httpStatus,
+  });
+
+  return { layer, rawOutputChars, httpStatus };
+}
+
+export async function callOpenAiResponsesForLayerWithRetry(args: {
+  apiKey: string;
+  model: string;
+  layerKey: CoreLayerKey;
+  compactInput: Record<string, unknown>;
+}): Promise<{ layer: Record<string, unknown>; rawOutputChars: number; httpStatus: number }> {
+  let lastRetryableError: OpenAiLayerResponseError | null = null;
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      return await callOpenAiResponsesForLayer({
+        ...args,
+        compactRetry: attempt === 2,
+      });
+    } catch (err) {
+      if (err instanceof OpenAiLayerResponseError && err.retryable) {
+        lastRetryableError = err;
+        if (attempt < 2) {
+          console.info("[hr-talent-map-v2-core-layers-shared] openai_layer_retry", {
+            layer_key: args.layerKey,
+            attempt,
+            message: err.message,
+            output_text_length: err.outputTextLength,
+            response_status: err.responseStatus,
+          });
+          continue;
+        }
+        throw new OpenAiLayerRetryExhaustedError(err);
+      }
+      throw err;
+    }
   }
 
-  const layer = parseLayerReportJson(rawText);
-  return { layer, rawOutputChars: rawText.length, httpStatus };
+  if (lastRetryableError) {
+    throw new OpenAiLayerRetryExhaustedError(lastRetryableError);
+  }
+  throw new Error("openai_layer_retry_exhausted");
 }
 
 export function initLayerGenerationState(

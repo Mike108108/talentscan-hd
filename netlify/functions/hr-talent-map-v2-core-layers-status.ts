@@ -117,6 +117,7 @@ export const handler: Handler = async (
     return jsonResponse(200, {
       report_id: report.id,
       report_status: report.report_status,
+      fit_score: report.fit_score ?? null,
       report_type: report.report_type,
       prompt_version: report.prompt_version,
       model: report.model,

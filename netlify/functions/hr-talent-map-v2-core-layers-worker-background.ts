@@ -1,6 +1,6 @@
 /**
- * Background worker for HR Talent Map v2 core layers spike (3 layers, sequential).
- * Stage 4.4-lite: model policy, attempts tracking, layer_generation summary.
+ * Background worker for HR Talent Map v2 core layers spike (7 layers, sequential).
+ * Stage 4.5: expand from 3 to 7 layers; model policy, attempts tracking, layer_generation summary.
  */
 
 import type { BackgroundHandler, HandlerEvent } from "@netlify/functions";

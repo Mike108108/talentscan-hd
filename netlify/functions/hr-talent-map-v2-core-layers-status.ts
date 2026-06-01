@@ -1,6 +1,6 @@
 /**
  * QA status endpoint for HR Talent Map v2 core layers background spike.
- * Stage 4.4-lite: run_mode, model_policy, layer key diagnostics, QA flags.
+ * Stage 4.5: 7 sequential layers, run_mode, model_policy, layer key diagnostics, QA flags.
  */
 
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";

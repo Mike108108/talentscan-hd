@@ -1,5 +1,5 @@
 /**
- * Shared helpers for HR Talent Map v2 core layers background spike (Stage 4.3 / 4.4-lite).
+ * Shared helpers for HR Talent Map v2 core layers background spike (Stage 4.5).
  * Architecturally separate from Stage 4.2 work_format spike.
  */
 
@@ -11,7 +11,7 @@ import { V2_SCHEMA_VERSION } from "./hr-talent-map-v2-limited";
 
 export const SPIKE_REPORT_TYPE = "hr_person_talent_map_core_layers_spike";
 export const SPIKE_PROMPT_VERSION =
-  "hr_person_talent_map_v2_core_layers_background_0_1";
+  "hr_person_talent_map_v2_core_layers_background_0_2";
 export const GENERATION_MODE = "layered_background_core_layers_spike";
 export const SOURCE_ANALYSIS_PACKET_VERSION = "analysis_packet_v1_1";
 export const CONTENT_CONTRACT_VERSION = "2.0.0";
@@ -48,14 +48,23 @@ export const CORE_LAYERS_ORDER = [
   "work_format",
   "task_entry",
   "decision_style",
+  "work_signature",
+  "inner_coherence",
+  "stable_zones",
+  "sensitive_zones",
 ] as const;
 
 export type CoreLayerKey = (typeof CORE_LAYERS_ORDER)[number];
 
+export type CoreLayerGroup =
+  | "energy_and_decision"
+  | "core"
+  | "centers_channels_gates";
+
 export type CoreLayerDef = {
   layer_key: CoreLayerKey;
   hr_title: string;
-  group: "energy_and_decision";
+  group: CoreLayerGroup;
   ui_priority: number;
   sourceValueKeys: readonly string[];
 };
@@ -106,6 +115,59 @@ export const CORE_LAYER_DEFS: Record<CoreLayerKey, CoreLayerDef> = {
       "definition",
       "defined_centers",
       "open_centers",
+    ],
+  },
+  work_signature: {
+    layer_key: "work_signature",
+    hr_title: "Рабочий почерк",
+    group: "core",
+    ui_priority: 50,
+    sourceValueKeys: [
+      "profile",
+      "personality_sun",
+      "design_sun",
+      "type",
+      "strategy",
+    ],
+  },
+  inner_coherence: {
+    layer_key: "inner_coherence",
+    hr_title: "Внутренняя связность",
+    group: "core",
+    ui_priority: 60,
+    sourceValueKeys: [
+      "definition",
+      "channels_long",
+      "channels_short",
+      "defined_centers",
+      "open_centers",
+    ],
+  },
+  stable_zones: {
+    layer_key: "stable_zones",
+    hr_title: "Устойчивые зоны",
+    group: "centers_channels_gates",
+    ui_priority: 70,
+    sourceValueKeys: [
+      "defined_centers",
+      "channels_long",
+      "channels_short",
+      "authority",
+      "type",
+    ],
+  },
+  sensitive_zones: {
+    layer_key: "sensitive_zones",
+    hr_title: "Чувствительные зоны",
+    group: "centers_channels_gates",
+    ui_priority: 80,
+    sourceValueKeys: [
+      "open_centers",
+      "not_self_theme",
+      "defined_centers",
+      "environment",
+      "motivation",
+      "transference",
     ],
   },
 };
@@ -320,6 +382,50 @@ export function computeInputHash(parts: Record<string, unknown>): string {
   return createHash("sha256").update(stableStringify(parts)).digest("hex");
 }
 
+function getActivationPlanet(
+  normalizedChart: Record<string, unknown>,
+  side: "personality" | "design",
+  planet: string,
+): string | null {
+  const activations = asRecord(normalizedChart.activations);
+  const sideMap = asRecord(activations[side]);
+  const value = asString(sideMap[planet]);
+  return value || null;
+}
+
+function buildChartFieldsForCompactInput(
+  normalizedChart: Record<string, unknown>,
+  candidate: Record<string, unknown>,
+): Record<string, unknown> {
+  const dataQuality = buildMinimalDataQuality(candidate, normalizedChart);
+  return {
+    type: normalizedChart.type ?? null,
+    strategy: normalizedChart.strategy ?? null,
+    authority: normalizedChart.authority ?? null,
+    profile: normalizedChart.profile ?? null,
+    definition: normalizedChart.definition ?? null,
+    definedCenters: asStringArray(normalizedChart.definedCenters),
+    openCenters: asStringArray(normalizedChart.openCenters),
+    channelsLong: asStringArray(normalizedChart.channelsLong),
+    channelsShort: asStringArray(normalizedChart.channelsShort),
+    signature: normalizedChart.signature ?? null,
+    notSelfTheme: normalizedChart.notSelfTheme ?? null,
+    environment: normalizedChart.environment ?? null,
+    motivation: normalizedChart.motivation ?? null,
+    transference: normalizedChart.transference ?? null,
+    activations: {
+      personality: {
+        sun: getActivationPlanet(normalizedChart, "personality", "sun"),
+      },
+      design: {
+        sun: getActivationPlanet(normalizedChart, "design", "sun"),
+      },
+    },
+    canRenderBodygraph: normalizedChart.canRenderBodygraph === true,
+    data_quality: dataQuality,
+  };
+}
+
 export function buildInputHashPayload(args: {
   companyId: string;
   candidateId: string;
@@ -349,8 +455,13 @@ export function buildInputHashPayload(args: {
       definition: args.normalizedChart.definition ?? null,
       definedCenters: asStringArray(args.normalizedChart.definedCenters),
       openCenters: asStringArray(args.normalizedChart.openCenters),
+      channelsLong: asStringArray(args.normalizedChart.channelsLong),
+      channelsShort: asStringArray(args.normalizedChart.channelsShort),
       signature: args.normalizedChart.signature ?? null,
       notSelfTheme: args.normalizedChart.notSelfTheme ?? null,
+      environment: args.normalizedChart.environment ?? null,
+      motivation: args.normalizedChart.motivation ?? null,
+      transference: args.normalizedChart.transference ?? null,
       canRenderBodygraph: args.normalizedChart.canRenderBodygraph === true,
     },
     candidate_hr_comment: args.candidateHrComment,
@@ -388,7 +499,6 @@ export function buildCoreLayersCompactInput(args: {
   company: Record<string, unknown>;
   normalizedChart: Record<string, unknown>;
 }): Record<string, unknown> {
-  const dataQuality = buildMinimalDataQuality(args.candidate, args.normalizedChart);
   return {
     layer_key: args.layerKey,
     candidate: {
@@ -399,19 +509,7 @@ export function buildCoreLayersCompactInput(args: {
       name: asString(args.company.name) || null,
       industry: asString(args.company.industry) || null,
     },
-    chart: {
-      type: args.normalizedChart.type ?? null,
-      strategy: args.normalizedChart.strategy ?? null,
-      authority: args.normalizedChart.authority ?? null,
-      profile: args.normalizedChart.profile ?? null,
-      definition: args.normalizedChart.definition ?? null,
-      definedCenters: asStringArray(args.normalizedChart.definedCenters),
-      openCenters: asStringArray(args.normalizedChart.openCenters),
-      signature: args.normalizedChart.signature ?? null,
-      notSelfTheme: args.normalizedChart.notSelfTheme ?? null,
-      canRenderBodygraph: args.normalizedChart.canRenderBodygraph === true,
-      data_quality: dataQuality,
-    },
+    chart: buildChartFieldsForCompactInput(args.normalizedChart, args.candidate),
   };
 }
 
@@ -683,9 +781,15 @@ const baseSchema = {
 };
 
 function buildSourceValuesSchema(keys: readonly string[]) {
+  const arrayKeys = new Set([
+    "defined_centers",
+    "open_centers",
+    "channels_long",
+    "channels_short",
+  ]);
   const properties: Record<string, unknown> = {};
   for (const key of keys) {
-    if (key === "defined_centers" || key === "open_centers") {
+    if (arrayKeys.has(key)) {
       properties[key] = stringArray;
     } else {
       properties[key] = nullableString;
@@ -835,6 +939,86 @@ HR-фокус:
 Основные источники: authority, strategy, type, definedCenters, openCenters.
 НЕ упрощай до «интуиция против рациональности». Пиши про управляемую проверку решений.
 НЕ дублируй work_format или task_entry.`;
+    case "work_signature":
+      return `=== Слой work_signature (Рабочий почерк) ===
+HR-фокус:
+- Как человек учится?
+- Как входит в роль?
+- Как набирает доверие?
+- Какой темп адаптации ему подходит?
+- Как проявляется социально и профессионально?
+- Где риск ожидать от него мгновенной уверенности?
+- Что проверить на интервью / тестовом / в первые рабочие недели?
+
+Основной источник: profile.
+Поддерживающие: activations.personality.sun, activations.design.sun, type, strategy.
+
+Base НЕ должен использовать: профиль, линия, Солнце, Дизайн, Личность, Human Design, бодиграф.
+Хороший HR-язык: «человеку важно сначала разобраться в основе», «может учиться через практическую проверку»,
+«ему полезен понятный вход в роль», «доверие набирается через...».
+
+НЕ дублируй work_format, task_entry или decision_style.`;
+    case "inner_coherence":
+      return `=== Слой inner_coherence (Внутренняя связность) ===
+HR-фокус:
+- Как человек собирает внутреннюю ясность?
+- Легче ли ему решать самостоятельно или через диалог/среду?
+- Что помогает ему синхронизироваться?
+- Как давать обратную связь?
+- Риск изоляции или хаотичной коммуникации?
+- Что проверить в рабочем кейсе?
+
+Основной источник: definition.
+Поддерживающие: channelsLong, channelsShort, definedCenters, openCenters.
+
+Base НЕ должен использовать: Single Definition, Split Definition, определение, центр, канал.
+Хороший HR-язык: «быстрее собирает решение внутри себя», «может нуждаться в правильном диалоге»,
+«важна среда, где части задачи связываются в понятную картину».
+
+НЕ дублируй decision_style или work_signature.`;
+    case "stable_zones":
+      return `=== Слой stable_zones (Устойчивые зоны) ===
+HR-фокус:
+- Где у человека есть устойчивые рабочие паттерны?
+- В каких задачах это полезно?
+- Где можно ожидать повторяемости?
+- Как руководителю использовать эти устойчивые зоны?
+- Какие хорошие сигналы?
+- Какие тревожные сигналы?
+
+Основной источник: definedCenters.
+Поддерживающие: channelsLong, channelsShort, authority, type.
+
+Base НЕ должен использовать: определённые центры, Аджна, Сакрал, Горло, Эго, Селезёнка, G-центр, Root, Solar Plexus.
+Хороший HR-язык: «устойчивость в обработке информации», «повторяемый способ включаться в задачи»,
+«устойчивость в выражении», «стабильный рабочий отклик».
+
+НЕ дублируй work_format или sensitive_zones.`;
+    case "sensitive_zones":
+      return `=== Слой sensitive_zones (Чувствительные зоны) ===
+HR-фокус:
+- Где человек сильнее зависит от среды?
+- Где может брать лишнее давление?
+- Где может подстраиваться под ожидания?
+- Какие риски перегруза?
+- Как руководителю не усиливать слабое место?
+- Что проверить?
+- Какие условия помогают?
+
+Основной источник: openCenters.
+Поддерживающие: notSelfTheme, definedCenters, environment, motivation, transference.
+environment, motivation, transference — только как осторожный supporting context, не как главный аргумент.
+
+Base НЕ должен использовать: открытые центры, Эго-центр, Сакрал, Селезёнка, эмоциональный центр,
+трансференция, мотивация, среда в Human Design.
+Хороший HR-язык: «может брать на себя лишнее, чтобы доказать ценность», «может усиливаться под давлением срочности»,
+«важно проверять устойчивость по действиям, а не по обещаниям»,
+«может сильнее реагировать на эмоциональную атмосферу команды».
+
+Используй осторожные формулировки: «может проявляться», «стоит проверить», «в такой среде возможно»,
+«хорошим сигналом будет», «тревожным сигналом будет». Не делай категоричных выводов.
+
+НЕ дублируй stable_zones.`;
     default:
       return "";
   }
@@ -842,7 +1026,7 @@ HR-фокус:
 
 export function buildLayerInstructions(layerKey: CoreLayerKey): string {
   const def = CORE_LAYER_DEFS[layerKey];
-  return `TalentScan HR Layer Engine — background core layers spike (Stage 4.3).
+  return `TalentScan HR Layer Engine — background core layers spike (Stage 4.5).
 
 Верни один JSON-объект layer_report для слоя ${def.layer_key}.
 status=ready. Пиши только на русском языке в base-полях.
@@ -1623,7 +1807,7 @@ export function buildCoreLayersContentJson(args: {
       human_review_recommended: true,
       background_spike: true,
       disclaimers: [
-        "Background spike: три AI-слоя work_format, task_entry, decision_style через Responses API.",
+        "Background spike: семь AI-слоёв work_format, task_entry, decision_style, work_signature, inner_coherence, stable_zones, sensitive_zones через Responses API (sequential).",
         "Не является полной картой талантов кандидата.",
         "Synthesis blocks не генерировались на этом этапе.",
       ],

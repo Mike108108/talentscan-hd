@@ -1,5 +1,5 @@
 /**
- * Sync starter for HR Talent Map v2 core layers background spike (Stage 4.3 / 4.4-lite).
+ * Sync starter for HR Talent Map v2 core layers background spike (Stage 4.5).
  */
 
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";

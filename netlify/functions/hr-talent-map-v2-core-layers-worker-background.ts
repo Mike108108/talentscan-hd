@@ -1,5 +1,6 @@
 /**
  * Background worker for HR Talent Map v2 core layers spike (3 layers, sequential).
+ * Stage 4.4-lite: model policy, attempts tracking, layer_generation summary.
  */
 
 import type { BackgroundHandler, HandlerEvent } from "@netlify/functions";
@@ -21,13 +22,17 @@ import {
   loadActiveCandidateChart,
   logSpikeStage,
   requireUuid,
+  inferGenerationErrorKind,
+  resolveCoreLayersModelPolicy,
   resolveOpenAiApiKey,
-  resolveResponsesModel,
   resolveSupabaseConfig,
   saveReportError,
   serializeGenerationError,
+  summarizeLayerGeneration,
   validateCoreLayer,
   type CoreLayerKey,
+  type CoreLayersModelPolicy,
+  type LayerGenerationState,
   type LayerRunStatus,
   type OffendingMatch,
 } from "./hr-talent-map-v2-core-layers-shared";
@@ -47,7 +52,8 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
   let reportId: string | null = null;
 
   let layerReports: Record<string, unknown>[] = [];
-  const layerGeneration = initLayerGenerationState(pipelineStartedAt);
+  let modelPolicy: CoreLayersModelPolicy | null = null;
+  let layerGeneration: LayerGenerationState | null = null;
 
   const fail = async (
     stage: string,
@@ -64,18 +70,24 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       output_text_length?: number;
       output_text_tail?: string | null;
       parse_error?: string | null;
+      validation_stage?: string;
     },
   ) => {
     const finishedAt = new Date().toISOString();
-    layerGeneration.status = "error";
-    layerGeneration.finished_at = finishedAt;
-    layerGeneration.duration_ms = Date.now() - startedAt;
+    const durationMs = Date.now() - startedAt;
+
+    if (layerGeneration) {
+      layerGeneration.status = "error";
+      layerGeneration.finished_at = finishedAt;
+      layerGeneration.duration_ms = durationMs;
+      layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
+    }
 
     logSpikeStage("worker", "save_error", logCtx, {
       stage,
       message,
       failed_layer_key: failedLayerKey,
-      duration_ms: layerGeneration.duration_ms,
+      duration_ms: durationMs,
       offending_match_count: extra?.offending_matches?.length ?? 0,
       ...extra,
     });
@@ -105,7 +117,15 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           : null;
 
       let partialContentJson: Record<string, unknown> | undefined;
-      if (company && candidate && chart && normalizedChart && logCtx.model) {
+      if (
+        layerGeneration &&
+        company &&
+        candidate &&
+        chart &&
+        normalizedChart &&
+        logCtx.model &&
+        modelPolicy
+      ) {
         partialContentJson = buildCoreLayersContentJson({
           layerReports,
           candidate: candidate as Record<string, unknown>,
@@ -113,9 +133,10 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           chart: chart as Record<string, unknown>,
           normalizedChart,
           model: logCtx.model,
+          modelPolicy,
           generatedAt: finishedAt,
           pipelineStartedAt,
-          pipelineDurationMs: layerGeneration.duration_ms,
+          pipelineDurationMs: durationMs,
           layerGeneration: layerGeneration as unknown as Record<string, unknown>,
           overallStatus: "error",
         });
@@ -128,11 +149,11 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           stage,
           message,
           status: extra?.status,
-          duration_ms: layerGeneration.duration_ms,
+          duration_ms: durationMs,
           validation_result: extra?.validation_result,
           offending_matches: extra?.offending_matches,
           failed_layer_key: failedLayerKey,
-          layer_statuses: layerGeneration.layers,
+          layer_statuses: layerGeneration?.layers,
           attempts: extra?.attempts,
           last_error: extra?.last_error,
           response_status: extra?.response_status,
@@ -140,6 +161,10 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           output_text_length: extra?.output_text_length,
           output_text_tail: extra?.output_text_tail,
           parse_error: extra?.parse_error,
+          run_mode: modelPolicy?.runMode,
+          model: logCtx.model,
+          selected_model: logCtx.model,
+          validation_stage: extra?.validation_stage,
         }),
         partialContentJson,
       );
@@ -198,18 +223,20 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
 
     db = createSupabaseClient(supabaseUrl, supabaseAnonKey, token);
 
-    let model: string;
     try {
-      model = resolveResponsesModel();
-      logCtx.model = model;
+      modelPolicy = resolveCoreLayersModelPolicy();
+      logCtx.model = modelPolicy.selectedModel;
+      layerGeneration = initLayerGenerationState(pipelineStartedAt, modelPolicy);
     } catch (err) {
       await fail(
         "config",
-        err instanceof SpikeConfigError ? err.message : "missing_OPENAI_RESPONSES_MODEL",
+        err instanceof SpikeConfigError ? err.message : "Invalid model policy configuration",
         undefined,
       );
       return;
     }
+
+    const model = modelPolicy.selectedModel;
 
     logSpikeStage("worker", "load_report", logCtx);
     const { data: report, error: reportErr } = await db
@@ -290,6 +317,8 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
     }
 
     for (const layerKey of CORE_LAYERS_ORDER) {
+      if (!layerGeneration) break;
+
       logCtx.layerKey = layerKey;
       const layerStartedAt = Date.now();
       const layerStartedIso = new Date().toISOString();
@@ -312,6 +341,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
 
       let layer: Record<string, unknown>;
       let httpStatus = 0;
+      let openAiAttempts = 0;
 
       try {
         const openAiResult = await callOpenAiResponsesForLayerWithRetry({
@@ -322,6 +352,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         });
         layer = openAiResult.layer;
         httpStatus = openAiResult.httpStatus;
+        openAiAttempts = openAiResult.attempts;
       } catch (err) {
         const openAiErr =
           err instanceof OpenAiLayerRetryExhaustedError
@@ -341,13 +372,28 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
               ? 1
               : undefined;
 
+        const errorKind = inferGenerationErrorKind({
+          stage,
+          message,
+          parse_error: openAiErr?.parseError ?? null,
+          response_status: openAiErr?.responseStatus ?? null,
+          output_text_length: openAiErr?.outputTextLength,
+        });
+
         layerGeneration.layers[layerKey] = {
           ...layerGeneration.layers[layerKey],
           status: "error",
           finished_at: new Date().toISOString(),
           duration_ms: Date.now() - layerStartedAt,
-          error: message,
+          attempts,
+          error: {
+            kind: errorKind,
+            message,
+            attempts: attempts ?? null,
+          },
         };
+
+        layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
 
         markRemainingLayersSkipped(layerKey, layerGeneration.layers);
 
@@ -377,19 +423,34 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       logSpikeStage("worker", "validate_layer", logCtx, { layer_key: layerKey });
       const validation = validateCoreLayer(layer, layerKey);
       if (!validation.ok) {
+        const errorKind = inferGenerationErrorKind({
+          stage: validation.stage,
+          message: validation.message,
+          validation_stage: validation.stage,
+        });
+
         layerGeneration.layers[layerKey] = {
           ...layerGeneration.layers[layerKey],
           status: "error",
           finished_at: new Date().toISOString(),
           duration_ms: layerDurationMs,
-          error: validation.message,
+          attempts: openAiAttempts,
+          error: {
+            kind: errorKind,
+            message: validation.message,
+            attempts: openAiAttempts,
+          },
         };
+
+        layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
 
         markRemainingLayersSkipped(layerKey, layerGeneration.layers);
 
         await fail(validation.stage, validation.message, layerKey, {
           validation_result: validation.details ?? null,
           offending_matches: validation.offending_matches,
+          attempts: openAiAttempts,
+          validation_stage: validation.stage,
         });
         return;
       }
@@ -402,10 +463,15 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         duration_ms: layerDurationMs,
         model,
         prompt_version: SPIKE_PROMPT_VERSION,
+        attempts: openAiAttempts,
       };
+
+      layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
 
       layerReports.push(layer);
     }
+
+    if (!layerGeneration || !modelPolicy) return;
 
     const generatedAt = new Date().toISOString();
     const pipelineDurationMs = Date.now() - startedAt;
@@ -413,6 +479,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
     layerGeneration.status = "ready";
     layerGeneration.finished_at = generatedAt;
     layerGeneration.duration_ms = pipelineDurationMs;
+    layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
 
     const contentJson = buildCoreLayersContentJson({
       layerReports,
@@ -421,6 +488,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       chart: chart as Record<string, unknown>,
       normalizedChart,
       model,
+      modelPolicy,
       generatedAt,
       pipelineStartedAt,
       pipelineDurationMs,

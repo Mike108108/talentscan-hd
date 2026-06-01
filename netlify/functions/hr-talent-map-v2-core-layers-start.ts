@@ -1,5 +1,5 @@
 /**
- * Sync starter for HR Talent Map v2 core layers background spike (Stage 4.3).
+ * Sync starter for HR Talent Map v2 core layers background spike (Stage 4.3 / 4.4-lite).
  */
 
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
@@ -20,7 +20,8 @@ import {
   loadActiveCandidateChart,
   logSpikeStage,
   parseCompanyCandidateIds,
-  resolveResponsesModel,
+  buildModelPolicySnapshot,
+  resolveCoreLayersModelPolicy,
   resolveSupabaseConfig,
   saveReportError,
   serializeGenerationError,
@@ -44,15 +45,17 @@ export const handler: Handler = async (
       return jsonResponse(403, { error: "background_core_layers_spike_disabled" });
     }
 
-    let model: string;
+    let modelPolicy;
     try {
-      model = resolveResponsesModel();
+      modelPolicy = resolveCoreLayersModelPolicy();
     } catch (err) {
-      if (err instanceof SpikeConfigError && err.message === "missing_OPENAI_RESPONSES_MODEL") {
-        return jsonResponse(500, { error: "missing_OPENAI_RESPONSES_MODEL" });
+      if (err instanceof SpikeConfigError) {
+        return jsonResponse(500, { error: err.message, source: "config" });
       }
       throw err;
     }
+
+    const model = modelPolicy.selectedModel;
 
     const token = extractBearerToken(event);
     if (!token) {
@@ -161,6 +164,7 @@ export const handler: Handler = async (
         candidateHrComment: asString(candidate.hr_comment) || null,
         companyIndustry: asString(company.industry) || null,
         model,
+        run_mode: modelPolicy.runMode,
       }),
     );
 
@@ -281,6 +285,9 @@ export const handler: Handler = async (
           stage: "trigger_background_worker",
           message: `Background worker trigger failed (${workerResponse.status})`,
           status: workerResponse.status,
+          run_mode: modelPolicy.runMode,
+          model,
+          selected_model: model,
         });
         await saveReportError(db, reportId, triggerError);
         return jsonResponse(502, {
@@ -296,6 +303,9 @@ export const handler: Handler = async (
       const triggerError = serializeGenerationError({
         stage: "trigger_background_worker",
         message,
+        run_mode: modelPolicy.runMode,
+        model,
+        selected_model: model,
       });
       await saveReportError(db, reportId, triggerError);
       logSpikeStage("start", "trigger_background_worker", logCtx, { error: message });
@@ -314,6 +324,9 @@ export const handler: Handler = async (
       report_type: SPIKE_REPORT_TYPE,
       prompt_version: SPIKE_PROMPT_VERSION,
       input_hash: inputHash,
+      run_mode: modelPolicy.runMode,
+      selected_model: modelPolicy.selectedModel,
+      model_policy: buildModelPolicySnapshot(modelPolicy),
       data_quality: buildMinimalDataQuality(
         candidate as Record<string, unknown>,
         normalizedChart,

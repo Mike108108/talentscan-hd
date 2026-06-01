@@ -1,5 +1,5 @@
 /**
- * Shared helpers for HR Talent Map v2 core layers background spike (Stage 4.3).
+ * Shared helpers for HR Talent Map v2 core layers background spike (Stage 4.3 / 4.4-lite).
  * Architecturally separate from Stage 4.2 work_format spike.
  */
 
@@ -18,8 +18,19 @@ export const CONTENT_CONTRACT_VERSION = "2.0.0";
 export const CORE_LAYER_MAX_OUTPUT_TOKENS = 8000;
 
 const OUTPUT_TEXT_TAIL_MAX = 500;
-const RETRY_COMPACT_HINT =
-  "Return compact valid JSON only. Keep each string concise. Do not over-explain. Respect the schema exactly.";
+const RETRY_COMPACT_HINT = `Return valid JSON only.
+No markdown.
+No explanation outside JSON.
+Keep all arrays concise.
+Use shorter sentences.
+Do not use technical Human Design terms in base.
+Keep technical sources only in pro/evidence.
+Do not include fit_score, role-fit, hire/no-hire, or vacancy match language.
+Follow the JSON Schema exactly.`;
+
+const DEFAULT_SMOKE_MODEL = "gpt-5.4-nano";
+const DEFAULT_LAYER_MODEL = "gpt-5.4-mini";
+const DEFAULT_REASONING_MODEL = "gpt-5.4";
 
 const LAYER_OUTPUT_LENGTH_GUIDE = `=== Ограничения объёма (соблюдай строго, не раздувай JSON) ===
 - short_summary: 1–2 предложения
@@ -124,6 +135,16 @@ export type OffendingMatch = {
   snippet: string;
 };
 
+export type CoreLayersRunMode = "smoke" | "layer";
+
+export type CoreLayersModelPolicy = {
+  runMode: CoreLayersRunMode;
+  selectedModel: string;
+  smokeModel: string;
+  layerModel: string;
+  reasoningModel: string;
+};
+
 export type LayerRunStatus = {
   status: "pending" | "generating" | "ready" | "error" | "skipped";
   started_at?: string;
@@ -131,7 +152,34 @@ export type LayerRunStatus = {
   duration_ms?: number;
   model?: string;
   prompt_version?: string;
-  error?: string;
+  attempts?: number;
+  error?: string | Record<string, unknown> | null;
+};
+
+export type LayerGenerationSummary = {
+  total: number;
+  ready: number;
+  error: number;
+  skipped: number;
+  attempts_total: number;
+};
+
+export type LayerGenerationState = {
+  status: "generating" | "ready" | "error";
+  started_at: string;
+  finished_at: string | null;
+  duration_ms: number;
+  mode: "sequential";
+  run_mode: CoreLayersRunMode;
+  selected_model: string;
+  model_policy: {
+    smoke: string;
+    layer: string;
+    reasoning: string;
+  };
+  layers_order: CoreLayerKey[];
+  summary: LayerGenerationSummary;
+  layers: Record<CoreLayerKey, LayerRunStatus>;
 };
 
 export function jsonResponse(statusCode: number, body: unknown) {
@@ -180,10 +228,33 @@ export function resolveOpenAiApiKey(): string {
   return apiKey;
 }
 
-export function resolveResponsesModel(): string {
-  const model = process.env.OPENAI_RESPONSES_MODEL?.trim();
-  if (!model) throw new SpikeConfigError("missing_OPENAI_RESPONSES_MODEL");
-  return model;
+export function resolveCoreLayersModelPolicy(): CoreLayersModelPolicy {
+  const rawRunMode =
+    process.env.HR_TALENT_MAP_V2_CORE_LAYERS_RUN_MODE?.trim() || "smoke";
+
+  if (rawRunMode !== "smoke" && rawRunMode !== "layer") {
+    throw new SpikeConfigError(
+      `Invalid HR_TALENT_MAP_V2_CORE_LAYERS_RUN_MODE: "${rawRunMode}". Allowed: smoke, layer.`,
+    );
+  }
+
+  const runMode = rawRunMode as CoreLayersRunMode;
+  const smokeModel =
+    process.env.OPENAI_RESPONSES_MODEL_SMOKE?.trim() || DEFAULT_SMOKE_MODEL;
+  const layerModel =
+    process.env.OPENAI_RESPONSES_MODEL_LAYER?.trim() || DEFAULT_LAYER_MODEL;
+  const reasoningModel =
+    process.env.OPENAI_RESPONSES_MODEL_REASONING?.trim() ||
+    DEFAULT_REASONING_MODEL;
+  const selectedModel = runMode === "smoke" ? smokeModel : layerModel;
+
+  return {
+    runMode,
+    selectedModel,
+    smokeModel,
+    layerModel,
+    reasoningModel,
+  };
 }
 
 export function isSpikeEnabled(): boolean {
@@ -258,6 +329,7 @@ export function buildInputHashPayload(args: {
   candidateHrComment: string | null;
   companyIndustry: string | null;
   model: string;
+  run_mode: CoreLayersRunMode;
 }): Record<string, unknown> {
   return {
     company_id: args.companyId,
@@ -267,6 +339,7 @@ export function buildInputHashPayload(args: {
     report_type: SPIKE_REPORT_TYPE,
     prompt_version: SPIKE_PROMPT_VERSION,
     model: args.model,
+    run_mode: args.run_mode,
     layers_order: [...CORE_LAYERS_ORDER],
     normalized_chart: {
       type: args.normalizedChart.type ?? null,
@@ -396,6 +469,59 @@ export function logSpikeStage(
   });
 }
 
+export function inferGenerationErrorKind(args: {
+  stage: string;
+  message: string;
+  parse_error?: string | null;
+  response_status?: string | null;
+  output_text_length?: number;
+  validation_stage?: string;
+}): string {
+  const { stage, message, parse_error, response_status, output_text_length } =
+    args;
+  const validationStage = args.validation_stage ?? stage;
+
+  if (stage === "config") return "config_error";
+  if (stage === "missing_normalized_chart_data") return "missing_normalized_chart_data";
+  if (stage === "chart") return "missing_chart";
+  if (stage === "candidate" || stage === "company" || stage === "ownership") {
+    return "missing_input";
+  }
+  if (stage === "trigger_background_worker") return "worker_trigger_error";
+  if (stage === "save_ready" || stage === "save_error") return "supabase_write_error";
+
+  if (parse_error || message === "openai_response_json_parse_failed") {
+    return "json_parse_error";
+  }
+  if (
+    message === "openai_response_incomplete" ||
+    response_status === "incomplete"
+  ) {
+    return "openai_incomplete_response";
+  }
+  if (
+    stage === "openai_responses" &&
+    output_text_length === 0 &&
+    !parse_error
+  ) {
+    return "openai_empty_output";
+  }
+  if (stage === "openai_responses") return "openai_request_error";
+
+  if (validationStage === "forbidden_base_terms") return "forbidden_base_terms";
+  if (
+    validationStage === "validate_layer" &&
+    message.includes("forbidden fit/hire")
+  ) {
+    return "forbidden_role_fit_language";
+  }
+  if (stage === "validate_layer" || validationStage === "validate_layer") {
+    return "schema_validation_error";
+  }
+
+  return "unknown_error";
+}
+
 export function serializeGenerationError(args: {
   stage: string;
   message: string;
@@ -412,8 +538,22 @@ export function serializeGenerationError(args: {
   output_text_length?: number;
   output_text_tail?: string | null;
   parse_error?: string | null;
+  run_mode?: string;
+  model?: string;
+  selected_model?: string;
+  validation_stage?: string;
 }): string {
+  const kind = inferGenerationErrorKind({
+    stage: args.stage,
+    message: args.message,
+    parse_error: args.parse_error,
+    response_status: args.response_status,
+    output_text_length: args.output_text_length,
+    validation_stage: args.validation_stage,
+  });
+
   return JSON.stringify({
+    kind,
     stage: args.stage,
     message: args.message,
     status: args.status ?? null,
@@ -429,6 +569,9 @@ export function serializeGenerationError(args: {
     output_text_length: args.output_text_length ?? null,
     output_text_tail: args.output_text_tail ?? null,
     parse_error: args.parse_error ?? null,
+    run_mode: args.run_mode ?? null,
+    model: args.model ?? null,
+    selected_model: args.selected_model ?? args.model ?? null,
   });
 }
 
@@ -1271,15 +1414,21 @@ export async function callOpenAiResponsesForLayerWithRetry(args: {
   model: string;
   layerKey: CoreLayerKey;
   compactInput: Record<string, unknown>;
-}): Promise<{ layer: Record<string, unknown>; rawOutputChars: number; httpStatus: number }> {
+}): Promise<{
+  layer: Record<string, unknown>;
+  rawOutputChars: number;
+  httpStatus: number;
+  attempts: number;
+}> {
   let lastRetryableError: OpenAiLayerResponseError | null = null;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      return await callOpenAiResponsesForLayer({
+      const result = await callOpenAiResponsesForLayer({
         ...args,
         compactRetry: attempt === 2,
       });
+      return { ...result, attempts: attempt };
     } catch (err) {
       if (err instanceof OpenAiLayerResponseError && err.retryable) {
         lastRetryableError = err;
@@ -1305,17 +1454,35 @@ export async function callOpenAiResponsesForLayerWithRetry(args: {
   throw new Error("openai_layer_retry_exhausted");
 }
 
+export function summarizeLayerGeneration(
+  layers: Record<CoreLayerKey, LayerRunStatus>,
+): LayerGenerationSummary {
+  let ready = 0;
+  let error = 0;
+  let skipped = 0;
+  let attempts_total = 0;
+
+  for (const key of CORE_LAYERS_ORDER) {
+    const layer = layers[key];
+    if (layer.status === "ready") ready++;
+    else if (layer.status === "error") error++;
+    else if (layer.status === "skipped") skipped++;
+    attempts_total += layer.attempts ?? 0;
+  }
+
+  return {
+    total: CORE_LAYERS_ORDER.length,
+    ready,
+    error,
+    skipped,
+    attempts_total,
+  };
+}
+
 export function initLayerGenerationState(
   pipelineStartedAt: string,
-): {
-  status: "generating";
-  started_at: string;
-  finished_at: string | null;
-  duration_ms: number;
-  mode: "sequential";
-  layers_order: CoreLayerKey[];
-  layers: Record<CoreLayerKey, LayerRunStatus>;
-} {
+  modelPolicy: CoreLayersModelPolicy,
+): LayerGenerationState {
   const layers = {} as Record<CoreLayerKey, LayerRunStatus>;
   for (const key of CORE_LAYERS_ORDER) {
     layers[key] = { status: "pending" };
@@ -1326,8 +1493,41 @@ export function initLayerGenerationState(
     finished_at: null,
     duration_ms: 0,
     mode: "sequential",
+    run_mode: modelPolicy.runMode,
+    selected_model: modelPolicy.selectedModel,
+    model_policy: {
+      smoke: modelPolicy.smokeModel,
+      layer: modelPolicy.layerModel,
+      reasoning: modelPolicy.reasoningModel,
+    },
     layers_order: [...CORE_LAYERS_ORDER],
+    summary: summarizeLayerGeneration(layers),
     layers,
+  };
+}
+
+export function extractLayerKeysByStatus(
+  layerGeneration: Record<string, unknown>,
+  status: LayerRunStatus["status"],
+): string[] {
+  const layers = asRecord(layerGeneration.layers);
+  const keys: string[] = [];
+  for (const key of CORE_LAYERS_ORDER) {
+    const layerStatus = asRecord(layers[key]);
+    if (asString(layerStatus.status) === status) {
+      keys.push(key);
+    }
+  }
+  return keys;
+}
+
+export function buildModelPolicySnapshot(
+  modelPolicy: CoreLayersModelPolicy,
+): { smoke: string; layer: string; reasoning: string } {
+  return {
+    smoke: modelPolicy.smokeModel,
+    layer: modelPolicy.layerModel,
+    reasoning: modelPolicy.reasoningModel,
   };
 }
 
@@ -1338,6 +1538,7 @@ export function buildCoreLayersContentJson(args: {
   chart: Record<string, unknown>;
   normalizedChart: Record<string, unknown>;
   model: string;
+  modelPolicy: CoreLayersModelPolicy;
   generatedAt: string;
   pipelineStartedAt: string;
   pipelineDurationMs: number;
@@ -1357,6 +1558,9 @@ export function buildCoreLayersContentJson(args: {
       generation_mode: GENERATION_MODE,
       generated_at: args.generatedAt,
       model: args.model,
+      run_mode: args.modelPolicy.runMode,
+      selected_model: args.modelPolicy.selectedModel,
+      model_policy: buildModelPolicySnapshot(args.modelPolicy),
       source_analysis_packet_version: SOURCE_ANALYSIS_PACKET_VERSION,
       content_contract_version: CONTENT_CONTRACT_VERSION,
       background_spike: true,

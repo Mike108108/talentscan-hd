@@ -1,5 +1,5 @@
 /**
- * Shared helpers for HR Talent Map v2 core layers background spike (Stage 4.5).
+ * Shared helpers for HR Talent Map v2 core layers background spike (Stage 4.6).
  * Architecturally separate from Stage 4.2 work_format spike.
  */
 
@@ -11,11 +11,13 @@ import { V2_SCHEMA_VERSION } from "./hr-talent-map-v2-limited";
 
 export const SPIKE_REPORT_TYPE = "hr_person_talent_map_core_layers_spike";
 export const SPIKE_PROMPT_VERSION =
-  "hr_person_talent_map_v2_core_layers_background_0_2";
+  "hr_person_talent_map_v2_core_layers_background_0_3";
 export const GENERATION_MODE = "layered_background_core_layers_spike";
 export const SOURCE_ANALYSIS_PACKET_VERSION = "analysis_packet_v1_1";
 export const CONTENT_CONTRACT_VERSION = "2.0.0";
-export const CORE_LAYER_MAX_OUTPUT_TOKENS = 8000;
+
+const DEFAULT_SMOKE_MAX_OUTPUT_TOKENS = 2500;
+const DEFAULT_LAYER_MAX_OUTPUT_TOKENS = 3000;
 
 const OUTPUT_TEXT_TAIL_MAX = 500;
 const RETRY_COMPACT_HINT = `Return valid JSON only.
@@ -52,6 +54,11 @@ export const CORE_LAYERS_ORDER = [
   "inner_coherence",
   "stable_zones",
   "sensitive_zones",
+  "talent_links",
+  "point_talents",
+  "amplified_themes",
+  "conscious_axis",
+  "background_axis",
 ] as const;
 
 export type CoreLayerKey = (typeof CORE_LAYERS_ORDER)[number];
@@ -59,7 +66,8 @@ export type CoreLayerKey = (typeof CORE_LAYERS_ORDER)[number];
 export type CoreLayerGroup =
   | "energy_and_decision"
   | "core"
-  | "centers_channels_gates";
+  | "centers_channels_gates"
+  | "main_activations";
 
 export type CoreLayerDef = {
   layer_key: CoreLayerKey;
@@ -170,6 +178,90 @@ export const CORE_LAYER_DEFS: Record<CoreLayerKey, CoreLayerDef> = {
       "transference",
     ],
   },
+  talent_links: {
+    layer_key: "talent_links",
+    hr_title: "Связки талантов",
+    group: "centers_channels_gates",
+    ui_priority: 90,
+    sourceValueKeys: [
+      "channels_long",
+      "channels_short",
+      "defined_centers",
+      "gates_both",
+      "gate_sources_summary",
+      "circuitries",
+      "personality_sun",
+      "personality_earth",
+      "design_sun",
+      "design_earth",
+    ],
+  },
+  point_talents: {
+    layer_key: "point_talents",
+    hr_title: "Точечные таланты",
+    group: "centers_channels_gates",
+    ui_priority: 100,
+    sourceValueKeys: [
+      "gates_all",
+      "gates_personality",
+      "gates_design",
+      "gates_both",
+      "gate_sources_summary",
+      "personality_sun",
+      "personality_earth",
+      "design_sun",
+      "design_earth",
+      "channels_long",
+      "channels_short",
+    ],
+  },
+  amplified_themes: {
+    layer_key: "amplified_themes",
+    hr_title: "Усиленные темы",
+    group: "centers_channels_gates",
+    ui_priority: 110,
+    sourceValueKeys: [
+      "gates_both",
+      "gate_sources_summary",
+      "channels_long",
+      "channels_short",
+      "personality_sun",
+      "personality_earth",
+      "design_sun",
+      "design_earth",
+    ],
+  },
+  conscious_axis: {
+    layer_key: "conscious_axis",
+    hr_title: "Сознательная рабочая ось",
+    group: "main_activations",
+    ui_priority: 120,
+    sourceValueKeys: [
+      "personality_sun",
+      "personality_earth",
+      "profile",
+      "incarnation_cross",
+      "gates_personality",
+      "gate_sources_summary",
+      "channels_long",
+      "channels_short",
+    ],
+  },
+  background_axis: {
+    layer_key: "background_axis",
+    hr_title: "Фоновая рабочая ось",
+    group: "main_activations",
+    ui_priority: 130,
+    sourceValueKeys: [
+      "design_sun",
+      "design_earth",
+      "gates_design",
+      "gate_sources_summary",
+      "defined_centers",
+      "channels_long",
+      "channels_short",
+    ],
+  },
 };
 
 const UUID_RE =
@@ -205,6 +297,11 @@ export type CoreLayersModelPolicy = {
   smokeModel: string;
   layerModel: string;
   reasoningModel: string;
+  maxOutputTokens: number;
+  outputTokenPolicy: {
+    smoke: number;
+    layer: number;
+  };
 };
 
 export type LayerRunStatus = {
@@ -214,6 +311,7 @@ export type LayerRunStatus = {
   duration_ms?: number;
   model?: string;
   prompt_version?: string;
+  max_output_tokens?: number;
   attempts?: number;
   error?: string | Record<string, unknown> | null;
 };
@@ -234,6 +332,11 @@ export type LayerGenerationState = {
   mode: "sequential";
   run_mode: CoreLayersRunMode;
   selected_model: string;
+  max_output_tokens: number;
+  output_token_policy: {
+    smoke: number;
+    layer: number;
+  };
   model_policy: {
     smoke: string;
     layer: string;
@@ -290,6 +393,42 @@ export function resolveOpenAiApiKey(): string {
   return apiKey;
 }
 
+function resolvePositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
+export function resolveCoreLayerMaxOutputTokens(runMode: CoreLayersRunMode): number {
+  const smoke = resolvePositiveIntEnv(
+    "HR_TALENT_MAP_V2_CORE_LAYER_MAX_OUTPUT_TOKENS_SMOKE",
+    DEFAULT_SMOKE_MAX_OUTPUT_TOKENS,
+  );
+  const layer = resolvePositiveIntEnv(
+    "HR_TALENT_MAP_V2_CORE_LAYER_MAX_OUTPUT_TOKENS_LAYER",
+    DEFAULT_LAYER_MAX_OUTPUT_TOKENS,
+  );
+  return runMode === "layer" ? layer : smoke;
+}
+
+export function resolveCoreLayerOutputTokenPolicy(): {
+  smoke: number;
+  layer: number;
+} {
+  return {
+    smoke: resolvePositiveIntEnv(
+      "HR_TALENT_MAP_V2_CORE_LAYER_MAX_OUTPUT_TOKENS_SMOKE",
+      DEFAULT_SMOKE_MAX_OUTPUT_TOKENS,
+    ),
+    layer: resolvePositiveIntEnv(
+      "HR_TALENT_MAP_V2_CORE_LAYER_MAX_OUTPUT_TOKENS_LAYER",
+      DEFAULT_LAYER_MAX_OUTPUT_TOKENS,
+    ),
+  };
+}
+
 export function resolveCoreLayersModelPolicy(): CoreLayersModelPolicy {
   const rawRunMode =
     process.env.HR_TALENT_MAP_V2_CORE_LAYERS_RUN_MODE?.trim() || "smoke";
@@ -309,6 +448,9 @@ export function resolveCoreLayersModelPolicy(): CoreLayersModelPolicy {
     process.env.OPENAI_RESPONSES_MODEL_REASONING?.trim() ||
     DEFAULT_REASONING_MODEL;
   const selectedModel = runMode === "smoke" ? smokeModel : layerModel;
+  const outputTokenPolicy = resolveCoreLayerOutputTokenPolicy();
+  const maxOutputTokens =
+    runMode === "layer" ? outputTokenPolicy.layer : outputTokenPolicy.smoke;
 
   return {
     runMode,
@@ -316,6 +458,8 @@ export function resolveCoreLayersModelPolicy(): CoreLayersModelPolicy {
     smokeModel,
     layerModel,
     reasoningModel,
+    maxOutputTokens,
+    outputTokenPolicy,
   };
 }
 
@@ -393,21 +537,66 @@ function getActivationPlanet(
   return value || null;
 }
 
+function normalizeCircuitries(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (Array.isArray(value)) {
+    const arr = asStringArray(value);
+    return arr.length > 0 ? arr.join(", ") : null;
+  }
+  return null;
+}
+
+function buildGateSourcesSummary(normalizedChart: Record<string, unknown>): string[] {
+  const gateSources = asRecord(normalizedChart.gateSources);
+  return Object.entries(gateSources)
+    .map(([gate, sources]) => {
+      const list = asStringArray(sources);
+      return list.length > 0 ? `${gate}: ${list.join(", ")}` : `${gate}: unknown`;
+    })
+    .filter(Boolean)
+    .slice(0, 24);
+}
+
 function buildChartFieldsForCompactInput(
   normalizedChart: Record<string, unknown>,
   candidate: Record<string, unknown>,
 ): Record<string, unknown> {
   const dataQuality = buildMinimalDataQuality(candidate, normalizedChart);
+  const definedCenters = asStringArray(normalizedChart.definedCenters);
+  const openCenters = asStringArray(normalizedChart.openCenters);
+  const channelsLong = asStringArray(normalizedChart.channelsLong);
+  const channelsShort = asStringArray(normalizedChart.channelsShort);
+  const gatesAll = asStringArray(normalizedChart.gatesAll);
+  const gatesPersonality = asStringArray(normalizedChart.gatesPersonality);
+  const gatesDesign = asStringArray(normalizedChart.gatesDesign);
+  const gatesBoth = asStringArray(normalizedChart.gatesBoth);
+  const gateSourcesSummary = buildGateSourcesSummary(normalizedChart);
+
   return {
     type: normalizedChart.type ?? null,
     strategy: normalizedChart.strategy ?? null,
     authority: normalizedChart.authority ?? null,
     profile: normalizedChart.profile ?? null,
     definition: normalizedChart.definition ?? null,
-    definedCenters: asStringArray(normalizedChart.definedCenters),
-    openCenters: asStringArray(normalizedChart.openCenters),
-    channelsLong: asStringArray(normalizedChart.channelsLong),
-    channelsShort: asStringArray(normalizedChart.channelsShort),
+    definedCenters,
+    openCenters,
+    channelsLong,
+    channelsShort,
+    defined_centers: definedCenters,
+    open_centers: openCenters,
+    channels_long: channelsLong,
+    channels_short: channelsShort,
+    gates_all: gatesAll,
+    gates_personality: gatesPersonality,
+    gates_design: gatesDesign,
+    gates_both: gatesBoth,
+    gate_sources_summary: gateSourcesSummary,
+    personality_sun: getActivationPlanet(normalizedChart, "personality", "sun"),
+    personality_earth: getActivationPlanet(normalizedChart, "personality", "earth"),
+    design_sun: getActivationPlanet(normalizedChart, "design", "sun"),
+    design_earth: getActivationPlanet(normalizedChart, "design", "earth"),
+    incarnation_cross: asString(normalizedChart.incarnationCross) || null,
+    circuitries: normalizeCircuitries(normalizedChart.circuitries),
     signature: normalizedChart.signature ?? null,
     notSelfTheme: normalizedChart.notSelfTheme ?? null,
     environment: normalizedChart.environment ?? null,
@@ -416,9 +605,11 @@ function buildChartFieldsForCompactInput(
     activations: {
       personality: {
         sun: getActivationPlanet(normalizedChart, "personality", "sun"),
+        earth: getActivationPlanet(normalizedChart, "personality", "earth"),
       },
       design: {
         sun: getActivationPlanet(normalizedChart, "design", "sun"),
+        earth: getActivationPlanet(normalizedChart, "design", "earth"),
       },
     },
     canRenderBodygraph: normalizedChart.canRenderBodygraph === true,
@@ -437,6 +628,10 @@ export function buildInputHashPayload(args: {
   model: string;
   run_mode: CoreLayersRunMode;
 }): Record<string, unknown> {
+  const outputTokenPolicy = resolveCoreLayerOutputTokenPolicy();
+  const maxOutputTokens =
+    args.run_mode === "layer" ? outputTokenPolicy.layer : outputTokenPolicy.smoke;
+
   return {
     company_id: args.companyId,
     candidate_id: args.candidateId,
@@ -446,6 +641,8 @@ export function buildInputHashPayload(args: {
     prompt_version: SPIKE_PROMPT_VERSION,
     model: args.model,
     run_mode: args.run_mode,
+    max_output_tokens: maxOutputTokens,
+    output_token_policy: outputTokenPolicy,
     layers_order: [...CORE_LAYERS_ORDER],
     normalized_chart: {
       type: args.normalizedChart.type ?? null,
@@ -457,6 +654,23 @@ export function buildInputHashPayload(args: {
       openCenters: asStringArray(args.normalizedChart.openCenters),
       channelsLong: asStringArray(args.normalizedChart.channelsLong),
       channelsShort: asStringArray(args.normalizedChart.channelsShort),
+      gatesAll: asStringArray(args.normalizedChart.gatesAll),
+      gatesPersonality: asStringArray(args.normalizedChart.gatesPersonality),
+      gatesDesign: asStringArray(args.normalizedChart.gatesDesign),
+      gatesBoth: asStringArray(args.normalizedChart.gatesBoth),
+      gateSourcesSummary: buildGateSourcesSummary(args.normalizedChart),
+      incarnationCross: asString(args.normalizedChart.incarnationCross) || null,
+      circuitries: normalizeCircuitries(args.normalizedChart.circuitries),
+      activations: {
+        personality: {
+          sun: getActivationPlanet(args.normalizedChart, "personality", "sun"),
+          earth: getActivationPlanet(args.normalizedChart, "personality", "earth"),
+        },
+        design: {
+          sun: getActivationPlanet(args.normalizedChart, "design", "sun"),
+          earth: getActivationPlanet(args.normalizedChart, "design", "earth"),
+        },
+      },
       signature: args.normalizedChart.signature ?? null,
       notSelfTheme: args.normalizedChart.notSelfTheme ?? null,
       environment: args.normalizedChart.environment ?? null,
@@ -786,6 +1000,11 @@ function buildSourceValuesSchema(keys: readonly string[]) {
     "open_centers",
     "channels_long",
     "channels_short",
+    "gates_all",
+    "gates_personality",
+    "gates_design",
+    "gates_both",
+    "gate_sources_summary",
   ]);
   const properties: Record<string, unknown> = {};
   for (const key of keys) {
@@ -1019,6 +1238,89 @@ Base НЕ должен использовать: открытые центры, 
 «хорошим сигналом будет», «тревожным сигналом будет». Не делай категоричных выводов.
 
 НЕ дублируй stable_zones.`;
+    case "talent_links":
+      return `=== Слой talent_links (Связки талантов) ===
+HR-фокус:
+- Какие устойчивые связки талантов видны в карте?
+- Как эти связки могут проявляться в рабочих задачах?
+- Где кандидат может приносить повторяемую ценность?
+- Какие задачи/роли могут раскрывать эти связки?
+- Какие риски возникают, если связка используется в неподходящем контексте?
+- Как проверить связку через интервью, кейс или первые рабочие недели?
+
+Основные источники: channelsLong, channelsShort.
+Поддерживающие: definedCenters, gatesBoth, gateSourcesSummary, circuitries, personality/design sun/earth.
+
+Base НЕ должен использовать слова: каналы, ворота, центры, контуры, Human Design.
+Не пересказывай названия каналов. Переводи их в HR-смысл:
+«связка объяснения идей», «связка улучшения качества», «связка самостоятельного действия» и т.п.
+
+Не делай вывод о найме. Формулируй как гипотезу и проверку.`;
+    case "point_talents":
+      return `=== Слой point_talents (Точечные таланты) ===
+HR-фокус:
+- Какие точечные рабочие способности проявляются через отдельные темы карты?
+- Что кандидат может замечать, усиливать, объяснять, улучшать, защищать, запускать или доводить?
+- Какие микроталанты могут быть полезны в работе?
+- Какие темы стоит проверить, потому что они не равны подтверждённому опыту?
+- Какие хорошие и тревожные сигналы искать?
+
+Основные источники: gatesAll, gatesPersonality, gatesDesign, gatesBoth, gateSourcesSummary.
+Поддерживающие: personality/design sun/earth, channelsLong, channelsShort.
+
+Важно:
+- Не перечисляй технические номера ворот в Base.
+- Не превращай слой в список всех gatesAll.
+- Учитывай приоритет: personality sun/earth, design sun/earth, gatesBoth, канальные темы, потом остальные повторяющиеся источники.
+- В Base пиши прикладной HR-язык.`;
+    case "amplified_themes":
+      return `=== Слой amplified_themes (Усиленные темы) ===
+HR-фокус:
+- Какие темы повторяются или выглядят усиленными?
+- Где это может быть талантом?
+- Где это может быть риском или навязчивым паттерном?
+- Как руководителю использовать усиленную тему экологично?
+- Как проверить, что тема проявляется зрело?
+
+Основные источники: gatesBoth, gateSourcesSummary.
+Поддерживающие: channelsLong, channelsShort, personality/design sun/earth.
+
+Base НЕ должен использовать технические термины.
+Не делай категоричных выводов.
+Усиленная тема — это рабочая гипотеза, которую нужно проверить через поведение, кейс и наблюдение.`;
+    case "conscious_axis":
+      return `=== Слой conscious_axis (Сознательная рабочая ось) ===
+HR-фокус:
+- Какая осознаваемая рабочая тема кандидата видна?
+- Через что кандидат может объяснять свою пользу?
+- Что для него может быть важной профессиональной идентичностью?
+- Как это влияет на стиль задач, коммуникацию и развитие?
+- Что может быть сильной стороной, а что риском чрезмерной фиксации?
+- Как проверить эту ось в интервью или кейсе?
+
+Основные источники: activations.personality.sun, activations.personality.earth.
+Поддерживающие: profile, incarnationCross, gatesPersonality, gateSourcesSummary, channels.
+
+Base НЕ должен использовать: Солнце, Земля, Личность, ворота, линии, крест.
+Переводи в HR-язык:
+«осознаваемая рабочая тема», «то, через что кандидат объясняет свою ценность»,
+«то, что он может считать важным в своей профессиональной роли».`;
+    case "background_axis":
+      return `=== Слой background_axis (Фоновая рабочая ось) ===
+HR-фокус:
+- Какой естественный фоновый паттерн может быть заметен со стороны?
+- Что человек может делать естественно, даже если сам не формулирует это как талант?
+- Где это помогает в работе?
+- Где это может создавать риск, если среда неподходящая?
+- Как руководителю наблюдать и проверять этот паттерн?
+
+Основные источники: activations.design.sun, activations.design.earth.
+Поддерживающие: gatesDesign, gateSourcesSummary, definedCenters, channels.
+
+Base НЕ должен использовать: Дизайн, Солнце Дизайна, Земля Дизайна, ворота, линии.
+Формулируй как наблюдаемую рабочую гипотезу:
+«со стороны может быть заметно», «в рабочих ситуациях может проявляться»,
+«это стоит проверить через наблюдение и кейс».`;
     default:
       return "";
   }
@@ -1026,7 +1328,7 @@ Base НЕ должен использовать: открытые центры, 
 
 export function buildLayerInstructions(layerKey: CoreLayerKey): string {
   const def = CORE_LAYER_DEFS[layerKey];
-  return `TalentScan HR Layer Engine — background core layers spike (Stage 4.5).
+  return `TalentScan HR Layer Engine — background core layers spike (Stage 4.6).
 
 Верни один JSON-объект layer_report для слоя ${def.layer_key}.
 status=ready. Пиши только на русском языке в base-полях.
@@ -1079,7 +1381,8 @@ export function buildLayerUserPrompt(
 В Base НЕ используй: fit_score, score, match percentage, проценты соответствия вакансии,
 «подходит на XX%», «брать/не брать», «нанять/не нанять», решение о найме, оценку под вакансию.
 
-Соблюдай ограничения объёма из instructions (краткие строки, без лишних абзацев).
+Соблюдай ограничения объёма из instructions: пиши содержательно, подробно по смыслу,
+без воды, повторов и лишнего раздувания JSON. Не превращай слой в короткую выжимку.
 Без markdown. Без HTML.${retryBlock}
 
 compact_input:
@@ -1531,6 +1834,7 @@ export async function callOpenAiResponsesForLayer(args: {
   model: string;
   layerKey: CoreLayerKey;
   compactInput: Record<string, unknown>;
+  maxOutputTokens: number;
   compactRetry?: boolean;
 }): Promise<{ layer: Record<string, unknown>; rawOutputChars: number; httpStatus: number }> {
   const instructions = buildLayerInstructions(args.layerKey);
@@ -1551,7 +1855,7 @@ export async function callOpenAiResponsesForLayer(args: {
       model: args.model,
       instructions,
       input,
-      max_output_tokens: CORE_LAYER_MAX_OUTPUT_TOKENS,
+      max_output_tokens: args.maxOutputTokens,
       text: {
         format: {
           type: "json_schema",
@@ -1598,6 +1902,7 @@ export async function callOpenAiResponsesForLayerWithRetry(args: {
   model: string;
   layerKey: CoreLayerKey;
   compactInput: Record<string, unknown>;
+  maxOutputTokens: number;
 }): Promise<{
   layer: Record<string, unknown>;
   rawOutputChars: number;
@@ -1679,6 +1984,11 @@ export function initLayerGenerationState(
     mode: "sequential",
     run_mode: modelPolicy.runMode,
     selected_model: modelPolicy.selectedModel,
+    max_output_tokens: modelPolicy.maxOutputTokens,
+    output_token_policy: {
+      smoke: modelPolicy.outputTokenPolicy.smoke,
+      layer: modelPolicy.outputTokenPolicy.layer,
+    },
     model_policy: {
       smoke: modelPolicy.smokeModel,
       layer: modelPolicy.layerModel,
@@ -1707,11 +2017,25 @@ export function extractLayerKeysByStatus(
 
 export function buildModelPolicySnapshot(
   modelPolicy: CoreLayersModelPolicy,
-): { smoke: string; layer: string; reasoning: string } {
+): {
+  smoke: string;
+  layer: string;
+  reasoning: string;
+  max_output_tokens?: {
+    smoke: number;
+    layer: number;
+    selected: number;
+  };
+} {
   return {
     smoke: modelPolicy.smokeModel,
     layer: modelPolicy.layerModel,
     reasoning: modelPolicy.reasoningModel,
+    max_output_tokens: {
+      smoke: modelPolicy.outputTokenPolicy.smoke,
+      layer: modelPolicy.outputTokenPolicy.layer,
+      selected: modelPolicy.maxOutputTokens,
+    },
   };
 }
 
@@ -1744,6 +2068,11 @@ export function buildCoreLayersContentJson(args: {
       model: args.model,
       run_mode: args.modelPolicy.runMode,
       selected_model: args.modelPolicy.selectedModel,
+      max_output_tokens: args.modelPolicy.maxOutputTokens,
+      output_token_policy: {
+        smoke: args.modelPolicy.outputTokenPolicy.smoke,
+        layer: args.modelPolicy.outputTokenPolicy.layer,
+      },
       model_policy: buildModelPolicySnapshot(args.modelPolicy),
       source_analysis_packet_version: SOURCE_ANALYSIS_PACKET_VERSION,
       content_contract_version: CONTENT_CONTRACT_VERSION,
@@ -1807,7 +2136,7 @@ export function buildCoreLayersContentJson(args: {
       human_review_recommended: true,
       background_spike: true,
       disclaimers: [
-        "Background spike: семь AI-слоёв work_format, task_entry, decision_style, work_signature, inner_coherence, stable_zones, sensitive_zones через Responses API (sequential).",
+        "Background spike: двенадцать AI-слоёв work_format, task_entry, decision_style, work_signature, inner_coherence, stable_zones, sensitive_zones, talent_links, point_talents, amplified_themes, conscious_axis, background_axis через Responses API (sequential).",
         "Не является полной картой талантов кандидата.",
         "Synthesis blocks не генерировались на этом этапе.",
       ],

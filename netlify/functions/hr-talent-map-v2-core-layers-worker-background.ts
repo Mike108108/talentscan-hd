@@ -24,6 +24,7 @@ import {
   loadActiveCandidateChart,
   logSpikeStage,
   mergeOpenAiUsageSnapshots,
+  normalizeLayerReportForValidation,
   requireUuid,
   inferGenerationErrorKind,
   resolveCoreLayersModelPolicy,
@@ -437,6 +438,20 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       });
 
       logSpikeStage("worker", "validate_layer", logCtx, { layer_key: layerKey });
+
+      const normalizedBeforeValidation = normalizeLayerReportForValidation({
+        layer,
+        layerKey,
+        chart: asRecord(compactInput.chart),
+      });
+      layer = normalizedBeforeValidation.layer;
+      if (normalizedBeforeValidation.autofill_applied) {
+        logSpikeStage("worker", "layer_report_autofill", logCtx, {
+          layer_key: layerKey,
+          autofilled_fields: normalizedBeforeValidation.autofilled_fields,
+        });
+      }
+
       let validation = validateCoreLayer(layer, layerKey);
 
       let mergedUsage: OpenAiUsageSnapshot | undefined = openAiCallResult?.usage;
@@ -480,7 +495,14 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
             mergedUsage = repairResult.usage;
           }
 
-          validation = validateCoreLayer(layer, layerKey);
+          validation = validateCoreLayer(
+            normalizeLayerReportForValidation({
+              layer,
+              layerKey,
+              chart: asRecord(compactInput.chart),
+            }).layer,
+            layerKey,
+          );
           forbiddenTermsRepairSuccess = validation.ok;
 
           logSpikeStage("worker", "forbidden_terms_repair_done", logCtx, {

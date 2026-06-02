@@ -1715,6 +1715,9 @@ signature, not-self, Splenic, Wait for Invitation, соционика, соци�
 Технические термины допустимы ТОЛЬКО в pro/evidence.
 
 === Pro/evidence ===
+pro.technical_sources must be non-empty.
+If you are unsure, include the main technical sources for this layer from the provided source fields.
+Do not leave pro.technical_sources empty.
 pro.technical_sources — массив объектов с source_key, source_label, raw_path, value_summary, confidence.
 pro.source_values — заполни только разрешённые поля из compact_input.chart (не выдумывать отсутствующие значения; null если нет данных).
 pro.connection_logic — почему эти поля дают HR-вывод (кратко, без повторения source_values).
@@ -2192,6 +2195,345 @@ function nonEmptyArray(value: unknown, field: string): LayerValidationResult | n
     return { ok: false, stage: "validate_layer", message: `${field} must be non-empty` };
   }
   return null;
+}
+
+const SOURCE_KEY_CHART_FIELD: Record<string, string> = {
+  not_self_theme: "notSelfTheme",
+};
+
+const SOURCE_KEY_LABELS: Record<string, string> = {
+  type: "Тип",
+  strategy: "Стратегия",
+  authority: "Авторитет",
+  profile: "Профиль",
+  definition: "Определение",
+  defined_centers: "Определённые центры",
+  open_centers: "Открытые центры",
+  channels_long: "Каналы (long)",
+  channels_short: "Каналы (short)",
+  gates_all: "Ворота (all)",
+  gates_personality: "Ворота личности",
+  gates_design: "Ворота дизайна",
+  gates_both: "Ворота (both)",
+  gate_sources_summary: "Источники ворот",
+  personality_sun: "Солнце личности",
+  personality_earth: "Земля личности",
+  design_sun: "Солнце дизайна",
+  design_earth: "Земля дизайна",
+  incarnation_cross: "Инкарнационный крест",
+  circuitries: "Контуры",
+  signature: "Сигнатура",
+  not_self_theme: "Not-self theme",
+  environment: "Среда",
+  motivation: "Мотивация",
+  transference: "Трансференция",
+};
+
+const SOURCE_VALUE_ARRAY_KEYS = new Set([
+  "defined_centers",
+  "open_centers",
+  "channels_long",
+  "channels_short",
+  "gates_all",
+  "gates_personality",
+  "gates_design",
+  "gates_both",
+  "gate_sources_summary",
+]);
+
+function chartFieldNameForSourceKey(sourceKey: string): string {
+  return SOURCE_KEY_CHART_FIELD[sourceKey] ?? sourceKey;
+}
+
+function getChartValueForSourceKey(
+  chart: Record<string, unknown>,
+  sourceKey: string,
+): unknown {
+  const fieldName = chartFieldNameForSourceKey(sourceKey);
+  if (fieldName in chart) return chart[fieldName];
+
+  if (sourceKey === "gates_personality") return chart.gates_personality ?? chart.gatesPersonality;
+  if (sourceKey === "gates_design") return chart.gates_design ?? chart.gatesDesign;
+
+  return null;
+}
+
+function chartHasMeaningfulValue(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "number" && Number.isFinite(value)) return true;
+  return false;
+}
+
+function formatSourceValueSummary(value: unknown): string {
+  if (value == null) return "нет данных";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || "нет данных";
+  }
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item) => {
+        if (typeof item === "string") return item.trim();
+        if (typeof item === "number" && Number.isFinite(item)) return String(item);
+        return "";
+      })
+      .filter(Boolean)
+      .slice(0, 4);
+    return items.length > 0 ? items.join(", ") : "нет данных";
+  }
+  return "нет данных";
+}
+
+function formatNullableSourceValue(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+function isValidTechnicalSourceEntry(item: unknown): boolean {
+  const rec = asRecord(item);
+  return Boolean(
+    asString(rec.source_key) &&
+      asString(rec.source_label) &&
+      asString(rec.raw_path) &&
+      asString(rec.value_summary) &&
+      asString(rec.confidence),
+  );
+}
+
+function hasValidTechnicalSources(pro: Record<string, unknown>): boolean {
+  const sources = Array.isArray(pro.technical_sources) ? pro.technical_sources : [];
+  return sources.some(isValidTechnicalSourceEntry);
+}
+
+function buildTechnicalSourceEntry(args: {
+  sourceKey: string;
+  chart: Record<string, unknown>;
+  confidence?: string;
+}): Record<string, unknown> {
+  const chartField = chartFieldNameForSourceKey(args.sourceKey);
+  const rawPath = `chart.${chartField}`;
+  const chartValue = getChartValueForSourceKey(args.chart, args.sourceKey);
+  return {
+    source_key: args.sourceKey,
+    source_label: SOURCE_KEY_LABELS[args.sourceKey] ?? args.sourceKey,
+    raw_path: rawPath,
+    value_summary: formatSourceValueSummary(chartValue),
+    confidence: args.confidence ?? (chartHasMeaningfulValue(chartValue) ? "high" : "medium"),
+  };
+}
+
+function buildSourceChartElement(args: {
+  sourceKey: string;
+  chart: Record<string, unknown>;
+}): Record<string, unknown> {
+  const chartField = chartFieldNameForSourceKey(args.sourceKey);
+  const chartValue = getChartValueForSourceKey(args.chart, args.sourceKey);
+  const valueSummary = formatSourceValueSummary(chartValue);
+
+  if (args.sourceKey === "personality_sun" || args.sourceKey === "personality_earth") {
+    const planet = args.sourceKey.endsWith("_sun") ? "sun" : "earth";
+    return {
+      kind: "activation",
+      key: planet,
+      value: valueSummary,
+      side: "personality",
+      planet,
+      line: null,
+    };
+  }
+  if (args.sourceKey === "design_sun" || args.sourceKey === "design_earth") {
+    const planet = args.sourceKey.endsWith("_sun") ? "sun" : "earth";
+    return {
+      kind: "activation",
+      key: planet,
+      value: valueSummary,
+      side: "design",
+      planet,
+      line: null,
+    };
+  }
+
+  return {
+    kind: "chart_field",
+    key: chartField,
+    value: valueSummary,
+    side: null,
+    planet: null,
+    line: null,
+  };
+}
+
+function mergeAutofilledSourceValues(args: {
+  layerKey: CoreLayerKey;
+  chart: Record<string, unknown>;
+  existing: Record<string, unknown>;
+}): Record<string, unknown> {
+  const def = CORE_LAYER_DEFS[args.layerKey];
+  const merged: Record<string, unknown> = { ...args.existing };
+
+  for (const sourceKey of def.sourceValueKeys) {
+    const current = merged[sourceKey];
+    if (SOURCE_VALUE_ARRAY_KEYS.has(sourceKey)) {
+      if (Array.isArray(current) && current.length > 0) continue;
+      const chartValue = getChartValueForSourceKey(args.chart, sourceKey);
+      merged[sourceKey] = Array.isArray(chartValue)
+        ? chartValue
+            .map((item) => asString(item))
+            .filter(Boolean)
+            .slice(0, 24)
+        : asStringArray(chartValue);
+      continue;
+    }
+
+    if (current !== undefined && current !== null && asString(current)) continue;
+    const chartValue = getChartValueForSourceKey(args.chart, sourceKey);
+    merged[sourceKey] = formatNullableSourceValue(chartValue);
+  }
+
+  return merged;
+}
+
+function buildFallbackTechnicalSources(args: {
+  layerKey: CoreLayerKey;
+  chart: Record<string, unknown>;
+  maxSources?: number;
+}): Record<string, unknown>[] {
+  const def = CORE_LAYER_DEFS[args.layerKey];
+  const maxSources = args.maxSources ?? 4;
+  const withData: string[] = [];
+  const withoutData: string[] = [];
+
+  for (const sourceKey of def.sourceValueKeys) {
+    const chartValue = getChartValueForSourceKey(args.chart, sourceKey);
+    if (chartHasMeaningfulValue(chartValue)) withData.push(sourceKey);
+    else withoutData.push(sourceKey);
+  }
+
+  const selectedKeys = [...withData, ...withoutData].slice(0, maxSources);
+  return selectedKeys.map((sourceKey) =>
+    buildTechnicalSourceEntry({ sourceKey, chart: args.chart }),
+  );
+}
+
+export type LayerReportNormalizationResult = {
+  layer: Record<string, unknown>;
+  autofill_applied: boolean;
+  autofilled_fields: string[];
+};
+
+/** Backend autofill for Pro/evidence technical fields from normalized chart (does not touch Base/matching_summary). */
+export function normalizeLayerReportForValidation(args: {
+  layer: Record<string, unknown>;
+  layerKey: CoreLayerKey;
+  chart: Record<string, unknown>;
+}): LayerReportNormalizationResult {
+  const def = CORE_LAYER_DEFS[args.layerKey];
+  const layer = { ...args.layer };
+  const autofilledFields: string[] = [];
+
+  layer.layer_key = def.layer_key;
+  layer.hr_title = def.hr_title;
+  layer.group = def.group;
+  layer.status = "ready";
+  layer.ui_priority = def.ui_priority;
+
+  const pro = asRecord(layer.pro);
+  const evidence = asRecord(layer.evidence);
+
+  if (!hasValidTechnicalSources(pro)) {
+    pro.technical_sources = buildFallbackTechnicalSources({
+      layerKey: args.layerKey,
+      chart: args.chart,
+    });
+    autofilledFields.push("pro.technical_sources");
+  }
+
+  const mergedSourceValues = mergeAutofilledSourceValues({
+    layerKey: args.layerKey,
+    chart: args.chart,
+    existing: asRecord(pro.source_values),
+  });
+  if (JSON.stringify(mergedSourceValues) !== JSON.stringify(asRecord(pro.source_values))) {
+    pro.source_values = mergedSourceValues;
+    autofilledFields.push("pro.source_values");
+  }
+
+  if (!asString(pro.connection_logic)) {
+    pro.connection_logic =
+      "Технические поля карты задают контекст HR-вывода в Base; ключевые source_values и technical_sources синхронизированы с normalized chart.";
+    autofilledFields.push("pro.connection_logic");
+  }
+  if (!asString(pro.confidence)) {
+    pro.confidence = "medium";
+    autofilledFields.push("pro.confidence");
+  }
+  if (!Array.isArray(pro.limitations) || pro.limitations.length === 0) {
+    pro.limitations = [
+      "Часть pro/evidence может быть дополнена backend autofill из normalized chart.",
+    ];
+    autofilledFields.push("pro.limitations");
+  }
+  if (!asString(pro.human_check)) {
+    pro.human_check =
+      "Сверить HR-вывод Base с поведением кандидата на интервью или рабочем кейсе.";
+    autofilledFields.push("pro.human_check");
+  }
+
+  const technicalSources = Array.isArray(pro.technical_sources) ? pro.technical_sources : [];
+  const sourceFieldPaths = technicalSources
+    .map((item) => asString(asRecord(item).raw_path))
+    .filter(Boolean);
+  if (asStringArray(evidence.source_fields).length === 0 && sourceFieldPaths.length > 0) {
+    evidence.source_fields = sourceFieldPaths;
+    autofilledFields.push("evidence.source_fields");
+  }
+
+  if (asStringArray(evidence.source_layer_keys).length === 0) {
+    evidence.source_layer_keys = [def.layer_key];
+    autofilledFields.push("evidence.source_layer_keys");
+  }
+
+  const existingChartElements = Array.isArray(evidence.source_chart_elements)
+    ? evidence.source_chart_elements
+    : [];
+  if (existingChartElements.length === 0 && technicalSources.length > 0) {
+    evidence.source_chart_elements = technicalSources
+      .slice(0, 4)
+      .map((item) => {
+        const sourceKey = asString(asRecord(item).source_key);
+        return buildSourceChartElement({ sourceKey, chart: args.chart });
+      })
+      .filter((item) => asString(asRecord(item).key));
+    if ((evidence.source_chart_elements as unknown[]).length > 0) {
+      autofilledFields.push("evidence.source_chart_elements");
+    }
+  }
+
+  if (!asString(evidence.confidence)) {
+    evidence.confidence = "medium";
+    autofilledFields.push("evidence.confidence");
+  }
+  if (!Array.isArray(evidence.warnings)) {
+    evidence.warnings = [];
+    autofilledFields.push("evidence.warnings");
+  }
+
+  layer.pro = pro;
+  layer.evidence = evidence;
+
+  return {
+    layer,
+    autofill_applied: autofilledFields.length > 0,
+    autofilled_fields: autofilledFields,
+  };
 }
 
 export function validateCoreLayer(

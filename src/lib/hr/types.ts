@@ -402,18 +402,39 @@ export type HrTalentMapLayerBaseV2 = {
 };
 
 /** Pro / technical layer details (side panel only). */
+export type HrTalentMapLayerTechnicalSourceV2 = {
+  source_key: string;
+  source_label: string;
+  raw_path: string;
+  value_summary: string;
+  confidence: HrTalentMapConfidence;
+};
+
+/** Pro / technical layer details (side panel only). */
 export type HrTalentMapLayerProV2 = {
-  technical_sources?: string[];
+  technical_sources?: HrTalentMapLayerTechnicalSourceV2[] | string[];
   source_values?: Record<string, unknown> | unknown[];
   connection_logic?: string;
   confidence?: HrTalentMapConfidence;
+  limitations?: string[];
   human_check?: string;
+};
+
+/** Evidence chart element reference in v2 layer report. */
+export type HrTalentMapLayerSourceChartElementV2 = {
+  kind: string;
+  key: string;
+  value: string;
+  side: string | null;
+  planet: string | null;
+  line: string | null;
 };
 
 /** Evidence metadata for a single atomic layer report. */
 export type HrTalentMapLayerEvidenceV2 = {
   source_fields?: string[];
   source_layer_keys?: string[];
+  source_chart_elements?: HrTalentMapLayerSourceChartElementV2[];
   confidence?: HrTalentMapConfidence;
   limitations?: string;
   warnings?: string[];

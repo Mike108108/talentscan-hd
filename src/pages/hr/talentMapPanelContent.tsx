@@ -393,15 +393,17 @@ function resolveV2LayerStatus(
   ) {
     return report.status;
   }
-  const base = report.base ?? {};
-  const hasSummary = Boolean(base.short_summary?.trim());
+  const base = asRec(report.base);
+  const hasSummary = fieldHasText(base.short_summary);
   const hasDetail = Boolean(
-    base.detailed_explanation?.trim() ||
-      base.how_it_appears_at_work?.trim() ||
-      base.where_useful?.trim() ||
-      base.risks?.trim() ||
-      base.management_tips?.trim() ||
-      base.what_to_check?.trim(),
+    fieldHasText(base.detailed_explanation) ||
+      fieldHasText(base.how_it_appears_at_work) ||
+      fieldHasText(base.where_useful) ||
+      fieldHasText(base.risks) ||
+      fieldHasText(base.management_tips) ||
+      fieldHasText(base.what_to_check) ||
+      fieldHasText(base.good_signals) ||
+      fieldHasText(base.warning_signals),
   );
   if (hasSummary && hasDetail) return "ready";
   if (hasSummary || hasDetail) return "partial";
@@ -471,6 +473,119 @@ function asRec(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>;
   }
   return {};
+}
+
+const toSafeArray = (value: unknown): unknown[] =>
+  Array.isArray(value) ? value : value == null ? [] : [value];
+
+export function renderTextValue(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value).trim();
+  }
+  if (Array.isArray(value)) {
+    return value.map(renderTextValue).filter(Boolean).join(" · ");
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+
+    const title = renderTextValue(
+      record.title ??
+        record.Title ??
+        record.hypothesis ??
+        record.source_label ??
+        record.source_key,
+    );
+    const description = renderTextValue(
+      record.description ??
+        record.Description ??
+        record.how_it_may_show_up ??
+        record.mitigation ??
+        record.check_method ??
+        record.good_signal ??
+        record.warning_signal ??
+        record.value_summary,
+    );
+
+    const parts = [title, description].filter(Boolean);
+    if (parts.length > 0) return parts.join(" — ");
+
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "[object]";
+    }
+  }
+  return String(value);
+}
+
+function fieldHasText(value: unknown): boolean {
+  return Boolean(renderTextValue(value).trim());
+}
+
+function renderRiskItem(risk: unknown, index: number) {
+  const rec = asRec(risk);
+  const title = renderTextValue(rec.title) || `Риск ${index + 1}`;
+  const lines = [
+    { label: "Описание", value: rec.description },
+    { label: "Как может проявиться", value: rec.how_it_may_show_up },
+    { label: "Смягчение", value: rec.mitigation },
+  ].filter((row) => fieldHasText(row.value));
+
+  return (
+    <div key={`risk-${index}-${title.slice(0, 24)}`} className="hr-tm-structured-item">
+      <p className="hr-tm-structured-item-title">{title}</p>
+      {lines.map((row) => (
+        <MetaRow key={row.label} label={row.label} value={row.value} />
+      ))}
+    </div>
+  );
+}
+
+function renderWhatToCheckItem(check: unknown, index: number) {
+  const rec = asRec(check);
+  const title = renderTextValue(rec.hypothesis) || `Проверка ${index + 1}`;
+  const lines = [
+    { label: "Метод проверки", value: rec.check_method },
+    { label: "Хороший сигнал", value: rec.good_signal },
+    { label: "Тревожный сигнал", value: rec.warning_signal },
+  ].filter((row) => fieldHasText(row.value));
+
+  return (
+    <div key={`check-${index}-${title.slice(0, 24)}`} className="hr-tm-structured-item">
+      <p className="hr-tm-structured-item-title">{title}</p>
+      {lines.map((row) => (
+        <MetaRow key={row.label} label={row.label} value={row.value} />
+      ))}
+    </div>
+  );
+}
+
+function renderTechnicalSourceItem(src: unknown, index: number): string {
+  if (typeof src === "string" || typeof src === "number" || typeof src === "boolean") {
+    return String(src);
+  }
+  const rec = asRec(src);
+  const parts = [
+    renderTextValue(rec.source_label ?? rec.source_key),
+    renderTextValue(rec.value_summary),
+    rec.raw_path ? renderTextValue(rec.raw_path) : "",
+    rec.confidence ? `уверенность: ${renderTextValue(rec.confidence)}` : "",
+  ].filter(Boolean);
+  return parts.join(" — ") || renderTextValue(src) || `Источник ${index + 1}`;
+}
+
+function renderChartElementItem(el: unknown, index: number): string {
+  const rec = asRec(el);
+  const parts = [
+    renderTextValue(rec.kind),
+    renderTextValue(rec.key),
+    renderTextValue(rec.value),
+    rec.side != null ? `сторона: ${renderTextValue(rec.side)}` : "",
+    rec.planet != null ? `планета: ${renderTextValue(rec.planet)}` : "",
+    rec.line != null ? `линия: ${renderTextValue(rec.line)}` : "",
+  ].filter(Boolean);
+  return parts.join(" · ") || renderTextValue(el) || `Элемент ${index + 1}`;
 }
 
 function ConfidenceBadge({ confidence }: { confidence?: string }) {
@@ -565,7 +680,7 @@ const BASE_PLACEHOLDER =
   "Подробная расшифровка этого слоя появится после обновления AI-структуры карты.";
 
 function V2LayerBasePanel({ report }: { report: HrTalentMapLayerReportV2 }) {
-  const base = report.base ?? {};
+  const base = asRec(report.base);
   const hasContent = [
     base.short_summary,
     base.detailed_explanation,
@@ -574,60 +689,125 @@ function V2LayerBasePanel({ report }: { report: HrTalentMapLayerReportV2 }) {
     base.risks,
     base.management_tips,
     base.what_to_check,
-  ].some((v) => Boolean(v?.trim()));
+    base.good_signals,
+    base.warning_signals,
+  ].some((v) => fieldHasText(v));
 
   if (!hasContent) {
     return <p className="hr-tm-panel-lead hr-muted">{BASE_PLACEHOLDER}</p>;
   }
 
+  const whereUseful = toSafeArray(base.where_useful);
+  const risks = toSafeArray(base.risks);
+  const managementTips = toSafeArray(base.management_tips);
+  const whatToCheck = toSafeArray(base.what_to_check);
+  const goodSignals = toSafeArray(base.good_signals);
+  const warningSignals = toSafeArray(base.warning_signals);
+  const risksAreObjects = risks.some((r) => r != null && typeof r === "object");
+  const checksAreObjects = whatToCheck.some((c) => c != null && typeof c === "object");
+
   return (
     <>
-      {base.short_summary ? (
+      {fieldHasText(base.short_summary) ? (
         <SectionBlock title="Краткий вывод">
-          <p className="hr-tm-panel-lead">{base.short_summary}</p>
+          <p className="hr-tm-panel-lead">{renderTextValue(base.short_summary)}</p>
         </SectionBlock>
       ) : null}
-      <MetaRow label="Подробное объяснение" value={base.detailed_explanation ?? ""} />
-      <MetaRow label="Как проявляется в работе" value={base.how_it_appears_at_work ?? ""} />
-      <MetaRow label="Где особенно полезен" value={base.where_useful ?? ""} />
-      <MetaRow label="Риски" value={base.risks ?? ""} />
-      <MetaRow label="Советы по управлению" value={base.management_tips ?? ""} />
-      <MetaRow label="Что проверить" value={base.what_to_check ?? ""} />
+      <MetaRow label="Подробное объяснение" value={base.detailed_explanation} />
+      <MetaRow label="Как проявляется в работе" value={base.how_it_appears_at_work} />
+      {whereUseful.length > 0 ? (
+        <SectionBlock title="Где особенно полезен">
+          <BulletList items={whereUseful} />
+        </SectionBlock>
+      ) : (
+        <MetaRow label="Где особенно полезен" value={base.where_useful} />
+      )}
+      {risks.length > 0 ? (
+        <SectionBlock title="Риски">
+          {risksAreObjects
+            ? risks.map((risk, i) => renderRiskItem(risk, i))
+            : <BulletList items={risks} />}
+        </SectionBlock>
+      ) : null}
+      {managementTips.length > 0 ? (
+        <SectionBlock title="Советы по управлению">
+          <BulletList items={managementTips} />
+        </SectionBlock>
+      ) : (
+        <MetaRow label="Советы по управлению" value={base.management_tips} />
+      )}
+      {whatToCheck.length > 0 ? (
+        <SectionBlock title="Что проверить">
+          {checksAreObjects
+            ? whatToCheck.map((check, i) => renderWhatToCheckItem(check, i))
+            : <BulletList items={whatToCheck} />}
+        </SectionBlock>
+      ) : (
+        <MetaRow label="Что проверить" value={base.what_to_check} />
+      )}
+      {goodSignals.length > 0 ? (
+        <SectionBlock title="Хорошие сигналы">
+          <BulletList items={goodSignals} />
+        </SectionBlock>
+      ) : null}
+      {warningSignals.length > 0 ? (
+        <SectionBlock title="Тревожные сигналы">
+          <BulletList items={warningSignals} />
+        </SectionBlock>
+      ) : null}
     </>
   );
 }
 
-function formatSourceValues(values: Record<string, unknown> | unknown[] | undefined): string[] {
-  if (!values) return [];
+function formatSourceValues(values: unknown): string[] {
+  if (values == null) return [];
   if (Array.isArray(values)) {
-    return values.map((v) => String(v)).filter(Boolean);
+    return values.map((v) => renderTextValue(v)).filter(Boolean);
   }
-  return Object.entries(values).map(([key, val]) => `${key}: ${String(val)}`);
+  if (typeof values === "object") {
+    return Object.entries(values as Record<string, unknown>)
+      .map(([key, val]) => {
+        const text = renderTextValue(val);
+        return text ? `${key}: ${text}` : "";
+      })
+      .filter(Boolean);
+  }
+  const text = renderTextValue(values);
+  return text ? [text] : [];
 }
 
 function V2LayerProPanel({ report }: { report: HrTalentMapLayerReportV2 }) {
-  const pro = report.pro ?? {};
-  const evidence = report.evidence ?? {};
-  const technicalSources = Array.isArray(pro.technical_sources)
-    ? pro.technical_sources.filter(Boolean)
-    : [];
+  const pro = asRec(report.pro);
+  const evidence = asRec(report.evidence);
+  const technicalSources = toSafeArray(pro.technical_sources).filter(
+    (src) => fieldHasText(src) || (src != null && typeof src === "object"),
+  );
   const sourceValueLines = formatSourceValues(pro.source_values);
-  const sourceFields = Array.isArray(evidence.source_fields)
-    ? evidence.source_fields.filter(Boolean)
-    : [];
-  const sourceLayerKeys = Array.isArray(evidence.source_layer_keys)
-    ? evidence.source_layer_keys.filter(Boolean)
-    : [];
-  const warnings = Array.isArray(evidence.warnings) ? evidence.warnings.filter(Boolean) : [];
+  const sourceFields = toSafeArray(evidence.source_fields)
+    .map((f) => renderTextValue(f))
+    .filter(Boolean);
+  const sourceLayerKeys = toSafeArray(evidence.source_layer_keys)
+    .map((k) => renderTextValue(k))
+    .filter(Boolean);
+  const warnings = toSafeArray(evidence.warnings)
+    .map((w) => renderTextValue(w))
+    .filter(Boolean);
+  const chartElements = toSafeArray(evidence.source_chart_elements);
+  const limitations = toSafeArray(pro.limitations)
+    .map((l) => renderTextValue(l))
+    .filter(Boolean);
+  const evidenceLimitations = renderTextValue(evidence.limitations);
 
   const hasPro =
     technicalSources.length > 0 ||
     sourceValueLines.length > 0 ||
-    Boolean(pro.connection_logic?.trim()) ||
-    Boolean(pro.human_check?.trim()) ||
-    Boolean(evidence.limitations?.trim()) ||
+    fieldHasText(pro.connection_logic) ||
+    fieldHasText(pro.human_check) ||
+    fieldHasText(evidence.limitations) ||
+    limitations.length > 0 ||
     sourceFields.length > 0 ||
     sourceLayerKeys.length > 0 ||
+    chartElements.length > 0 ||
     warnings.length > 0;
 
   if (!hasPro) {
@@ -639,8 +819,10 @@ function V2LayerProPanel({ report }: { report: HrTalentMapLayerReportV2 }) {
       {technicalSources.length > 0 ? (
         <SectionBlock title="Технические источники">
           <ul className="hr-tm-bullets">
-            {technicalSources.map((src) => (
-              <li key={src}>{src}</li>
+            {technicalSources.map((src, i) => (
+              <li key={`tech-src-${i}-${renderTechnicalSourceItem(src, i).slice(0, 24)}`}>
+                {renderTechnicalSourceItem(src, i)}
+              </li>
             ))}
           </ul>
         </SectionBlock>
@@ -654,9 +836,11 @@ function V2LayerProPanel({ report }: { report: HrTalentMapLayerReportV2 }) {
           </ul>
         </SectionBlock>
       ) : null}
-      <MetaRow label="Логика связи" value={pro.connection_logic ?? ""} />
-      {pro.confidence ? <ConfidenceBadge confidence={pro.confidence} /> : null}
-      <MetaRow label="Что проверить человеку" value={pro.human_check ?? ""} />
+      <MetaRow label="Логика связи" value={pro.connection_logic} />
+      {pro.confidence ? (
+        <ConfidenceBadge confidence={renderTextValue(pro.confidence)} />
+      ) : null}
+      <MetaRow label="Что проверить человеку" value={pro.human_check} />
       {sourceFields.length > 0 ? (
         <SectionBlock title="Поля источника">
           <BulletList items={sourceFields} />
@@ -667,8 +851,26 @@ function V2LayerProPanel({ report }: { report: HrTalentMapLayerReportV2 }) {
           <BulletList items={sourceLayerKeys} />
         </SectionBlock>
       ) : null}
-      {evidence.confidence ? <ConfidenceBadge confidence={evidence.confidence} /> : null}
-      <MetaRow label="Ограничения" value={evidence.limitations ?? ""} />
+      {chartElements.length > 0 ? (
+        <SectionBlock title="Элементы карты">
+          <ul className="hr-tm-bullets">
+            {chartElements.map((el, i) => (
+              <li key={`chart-el-${i}-${renderChartElementItem(el, i).slice(0, 24)}`}>
+                {renderChartElementItem(el, i)}
+              </li>
+            ))}
+          </ul>
+        </SectionBlock>
+      ) : null}
+      {evidence.confidence ? (
+        <ConfidenceBadge confidence={renderTextValue(evidence.confidence)} />
+      ) : null}
+      {limitations.length > 0 ? (
+        <SectionBlock title="Ограничения (pro)">
+          <BulletList items={limitations} />
+        </SectionBlock>
+      ) : null}
+      <MetaRow label="Ограничения" value={evidenceLimitations} />
       {warnings.length > 0 ? (
         <SectionBlock title="Предупреждения">
           <BulletList items={warnings} />
@@ -728,8 +930,10 @@ export function CatalogLayerDetailPanel({ item }: { item: MergedLayerCatalogItem
           {item.technical_sources.length > 0 ? (
             <SectionBlock title="Технические источники">
               <ul className="hr-tm-bullets">
-                {item.technical_sources.map((src) => (
-                  <li key={src}>{src}</li>
+                {item.technical_sources.map((src, i) => (
+                  <li key={`catalog-tech-${i}-${renderTextValue(src).slice(0, 24)}`}>
+                    {renderTextValue(src)}
+                  </li>
                 ))}
               </ul>
             </SectionBlock>
@@ -839,23 +1043,25 @@ function SectionBlock({ title, children }: { title: string; children: ReactNode 
   );
 }
 
-function BulletList({ items }: { items: string[] }) {
-  if (!items.length) return null;
+function BulletList({ items }: { items: unknown[] }) {
+  const lines = toSafeArray(items).map((item) => renderTextValue(item)).filter(Boolean);
+  if (!lines.length) return null;
   return (
     <ul className="hr-tm-bullets">
-      {items.map((item, i) => (
+      {lines.map((item, i) => (
         <li key={`${item.slice(0, 24)}-${i}`}>{item}</li>
       ))}
     </ul>
   );
 }
 
-function MetaRow({ label, value }: { label: string; value: string }) {
-  if (!value) return null;
+function MetaRow({ label, value }: { label: string; value: unknown }) {
+  const text = renderTextValue(value);
+  if (!text) return null;
   return (
     <div className="hr-tm-meta-row">
       <span className="hr-tm-meta-label">{label}</span>
-      <p className="hr-tm-meta-value">{value}</p>
+      <p className="hr-tm-meta-value">{text}</p>
     </div>
   );
 }

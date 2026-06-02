@@ -2609,3 +2609,20 @@
 .hr-tm-layer-status-row--skipped .hr-tm-layer-status-badge {
   opacity: 0.65;
 }
+
+.hr-tm-structured-item {
+  padding: 10px 0;
+  border-top: 1px solid var(--hr-line);
+}
+
+.hr-tm-structured-item:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.hr-tm-structured-item-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--hr-text);
+}

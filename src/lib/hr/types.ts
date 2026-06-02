@@ -402,21 +402,80 @@ export type HrTalentMapLayerBaseV2 = {
 };
 
 /** Pro / technical layer details (side panel only). */
+export type HrTalentMapLayerTechnicalSourceV2 = {
+  source_key: string;
+  source_label: string;
+  raw_path: string;
+  value_summary: string;
+  confidence: HrTalentMapConfidence;
+};
+
+/** Pro / technical layer details (side panel only). */
 export type HrTalentMapLayerProV2 = {
-  technical_sources?: string[];
+  technical_sources?: HrTalentMapLayerTechnicalSourceV2[] | string[];
   source_values?: Record<string, unknown> | unknown[];
   connection_logic?: string;
   confidence?: HrTalentMapConfidence;
+  limitations?: string[];
   human_check?: string;
+};
+
+/** Evidence chart element reference in v2 layer report. */
+export type HrTalentMapLayerSourceChartElementV2 = {
+  kind: string;
+  key: string;
+  value: string;
+  side: string | null;
+  planet: string | null;
+  line: string | null;
 };
 
 /** Evidence metadata for a single atomic layer report. */
 export type HrTalentMapLayerEvidenceV2 = {
   source_fields?: string[];
   source_layer_keys?: string[];
+  source_chart_elements?: HrTalentMapLayerSourceChartElementV2[];
   confidence?: HrTalentMapConfidence;
   limitations?: string;
   warnings?: string[];
+};
+
+/** Compact role-fit matching payload (stored, not rendered in UI yet). */
+export type HrTalentMapMatchingSummaryV2 = {
+  summary?: string;
+  strong_match_when_role_requires?: string[];
+  risk_when_role_requires?: string[];
+  needs_from_role?: string[];
+  what_to_check_in_role_fit?: string[];
+  candidate_layer_key?: string;
+  recommended_vacancy_layer_keys?: string[];
+  confidence?: HrTalentMapConfidence;
+};
+
+/** Result of backend matching_summary autofill (diagnostics only). */
+export type HrTalentMapMatchingSummaryAutofillV2 = {
+  autofilled_fields?: string[];
+};
+
+/** Estimated OpenAI cost snapshot for core layer generation. */
+export type HrTalentMapCostSummaryV2 = {
+  model?: string;
+  pricing_source?: string;
+  input_tokens?: number;
+  cached_input_tokens?: number;
+  uncached_input_tokens?: number;
+  output_tokens?: number;
+  reasoning_tokens?: number;
+  total_tokens?: number;
+  estimated_input_cost_usd?: number | null;
+  estimated_cached_input_cost_usd?: number | null;
+  estimated_output_cost_usd?: number | null;
+  estimated_total_cost_usd?: number | null;
+  cost_per_ready_layer_usd?: number | null;
+  projected_34_layers_cost_usd?: number | null;
+  budget_target_usd?: number;
+  budget_warning?: string | null;
+  budget_warnings?: string[];
 };
 
 /** Atomic layer report in v2 pipeline. */
@@ -429,6 +488,7 @@ export type HrTalentMapLayerReportV2 = {
   base?: HrTalentMapLayerBaseV2;
   pro?: HrTalentMapLayerProV2;
   evidence?: HrTalentMapLayerEvidenceV2;
+  matching_summary?: HrTalentMapMatchingSummaryV2;
 };
 
 /** Generic synthesis block payload (section-specific fields vary). */

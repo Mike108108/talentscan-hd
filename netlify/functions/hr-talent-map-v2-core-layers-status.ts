@@ -8,6 +8,7 @@ import {
   SPIKE_REPORT_TYPE,
   asRecord,
   asString,
+  asStringArray,
   createSupabaseClient,
   extractBearerToken,
   extractLayerKeysByStatus,
@@ -172,6 +173,16 @@ export const handler: Handler = async (
       layerSummary.usage_summary ??
       generationMeta.usage_summary ??
       null;
+    const costSummary =
+      usageSummary &&
+      typeof usageSummary === "object" &&
+      (usageSummary as Record<string, unknown>).cost_summary != null
+        ? ((usageSummary as Record<string, unknown>).cost_summary as Record<
+            string,
+            unknown
+          >)
+        : null;
+    const budgetWarnings = costSummary ? asStringArray(costSummary.budget_warnings) : [];
     const tuningFallbacksTotal =
       typeof usageSummary === "object" &&
       usageSummary != null &&
@@ -211,6 +222,8 @@ export const handler: Handler = async (
       request_tuning: requestTuning,
       tuning_policy: tuningPolicy,
       usage_summary: usageSummary,
+      cost_summary: costSummary,
+      budget_warnings: budgetWarnings,
       tuning_fallbacks_total: tuningFallbacksTotal,
       max_output_tokens: maxOutputTokens,
       output_token_policy: outputTokenPolicy,
@@ -236,6 +249,12 @@ export const handler: Handler = async (
         all_ready_layers_have_base: layerReportsHaveSection(layerReports, "base"),
         all_ready_layers_have_pro: layerReportsHaveSection(layerReports, "pro"),
         all_ready_layers_have_evidence: layerReportsHaveSection(layerReports, "evidence"),
+        all_ready_layers_have_matching_summary:
+          layerReports.length > 0 &&
+          layerReports.every((layer) => {
+            const matching = asRecord(layer.matching_summary);
+            return asString(matching.summary).length > 0;
+          }),
       },
     });
   } catch (err) {

@@ -13,14 +13,18 @@ import {
   asString,
   buildCoreLayersCompactInput,
   buildCoreLayersContentJson,
+  callOpenAiResponsesForLayerForbiddenTermsRepair,
   callOpenAiResponsesForLayerWithRetry,
   createSupabaseClient,
   OpenAiLayerResponseError,
   OpenAiLayerRetryExhaustedError,
   extractBearerToken,
   initLayerGenerationState,
+  isForbiddenBaseTermsValidation,
   loadActiveCandidateChart,
   logSpikeStage,
+  mergeOpenAiUsageSnapshots,
+  normalizeLayerReportForValidation,
   requireUuid,
   inferGenerationErrorKind,
   resolveCoreLayersModelPolicy,
@@ -35,6 +39,7 @@ import {
   type LayerGenerationState,
   type LayerRunStatus,
   type OffendingMatch,
+  type OpenAiUsageSnapshot,
 } from "./hr-talent-map-v2-core-layers-shared";
 
 export const handler: BackgroundHandler = async (event: HandlerEvent) => {
@@ -80,7 +85,10 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       layerGeneration.status = "error";
       layerGeneration.finished_at = finishedAt;
       layerGeneration.duration_ms = durationMs;
-      layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
+      layerGeneration.summary = summarizeLayerGeneration(
+        layerGeneration.layers,
+        modelPolicy?.selectedModel,
+      );
     }
 
     logSpikeStage("worker", "save_error", logCtx, {
@@ -399,7 +407,10 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           },
         };
 
-        layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
+        layerGeneration.summary = summarizeLayerGeneration(
+          layerGeneration.layers,
+          modelPolicy?.selectedModel,
+        );
 
         markRemainingLayersSkipped(layerKey, layerGeneration.layers);
 
@@ -427,7 +438,96 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       });
 
       logSpikeStage("worker", "validate_layer", logCtx, { layer_key: layerKey });
-      const validation = validateCoreLayer(layer, layerKey);
+
+      const normalizedBeforeValidation = normalizeLayerReportForValidation({
+        layer,
+        layerKey,
+        chart: asRecord(compactInput.chart),
+      });
+      layer = normalizedBeforeValidation.layer;
+      if (normalizedBeforeValidation.autofill_applied) {
+        logSpikeStage("worker", "layer_report_autofill", logCtx, {
+          layer_key: layerKey,
+          autofilled_fields: normalizedBeforeValidation.autofilled_fields,
+        });
+      }
+
+      let validation = validateCoreLayer(layer, layerKey);
+
+      let mergedUsage: OpenAiUsageSnapshot | undefined = openAiCallResult?.usage;
+      let repairAttempts = 0;
+      let forbiddenTermsRepairAttempted = false;
+      let forbiddenTermsRepairSuccess = false;
+      let forbiddenTermsRepairReason: string | null = null;
+      let forbiddenTermsRepairTerms: string[] = [];
+
+      if (!validation.ok && isForbiddenBaseTermsValidation(validation)) {
+        forbiddenTermsRepairAttempted = true;
+        forbiddenTermsRepairTerms = Array.from(
+          new Set((validation.offending_matches ?? []).map((match) => match.term)),
+        );
+        forbiddenTermsRepairReason = validation.message;
+
+        logSpikeStage("worker", "forbidden_terms_repair_start", logCtx, {
+          layer_key: layerKey,
+          offending_terms: forbiddenTermsRepairTerms,
+        });
+
+        try {
+          const repairResult = await callOpenAiResponsesForLayerForbiddenTermsRepair({
+            apiKey,
+            model,
+            layerKey,
+            compactInput,
+            maxOutputTokens: modelPolicy.maxOutputTokens,
+            modelPolicy,
+            offendingMatches: validation.offending_matches ?? [],
+          });
+
+          repairAttempts = 1;
+          openAiAttempts += 1;
+          layer = repairResult.layer;
+          httpStatus = repairResult.httpStatus;
+
+          if (mergedUsage) {
+            mergedUsage = mergeOpenAiUsageSnapshots(mergedUsage, repairResult.usage);
+          } else {
+            mergedUsage = repairResult.usage;
+          }
+
+          validation = validateCoreLayer(
+            normalizeLayerReportForValidation({
+              layer,
+              layerKey,
+              chart: asRecord(compactInput.chart),
+            }).layer,
+            layerKey,
+          );
+          forbiddenTermsRepairSuccess = validation.ok;
+
+          logSpikeStage("worker", "forbidden_terms_repair_done", logCtx, {
+            layer_key: layerKey,
+            success: forbiddenTermsRepairSuccess,
+            repair_attempts: repairAttempts,
+          });
+        } catch (err) {
+          const repairMessage =
+            err instanceof OpenAiLayerResponseError
+              ? err.message
+              : err instanceof Error
+                ? err.message
+                : "forbidden_terms_repair_openai_error";
+
+          forbiddenTermsRepairReason = repairMessage;
+          forbiddenTermsRepairSuccess = false;
+
+          logSpikeStage("worker", "forbidden_terms_repair_error", logCtx, {
+            layer_key: layerKey,
+            message: repairMessage,
+          });
+        }
+      }
+
       if (!validation.ok) {
         const errorKind = inferGenerationErrorKind({
           stage: validation.stage,
@@ -441,6 +541,11 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           finished_at: new Date().toISOString(),
           duration_ms: layerDurationMs,
           attempts: openAiAttempts,
+          repair_attempts: repairAttempts,
+          forbidden_terms_repair_attempted: forbiddenTermsRepairAttempted,
+          forbidden_terms_repair_success: forbiddenTermsRepairSuccess,
+          forbidden_terms_repair_reason: forbiddenTermsRepairReason,
+          forbidden_terms_repair_terms: forbiddenTermsRepairTerms,
           error: {
             kind: errorKind,
             message: validation.message,
@@ -448,7 +553,10 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           },
         };
 
-        layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
+        layerGeneration.summary = summarizeLayerGeneration(
+          layerGeneration.layers,
+          modelPolicy?.selectedModel,
+        );
 
         markRemainingLayersSkipped(layerKey, layerGeneration.layers);
 
@@ -471,14 +579,22 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         prompt_version: SPIKE_PROMPT_VERSION,
         max_output_tokens: modelPolicy.maxOutputTokens,
         attempts: openAiAttempts,
-        usage: openAiCallResult?.usage,
+        repair_attempts: repairAttempts,
+        forbidden_terms_repair_attempted: forbiddenTermsRepairAttempted,
+        forbidden_terms_repair_success: forbiddenTermsRepairSuccess,
+        forbidden_terms_repair_reason: forbiddenTermsRepairReason,
+        forbidden_terms_repair_terms: forbiddenTermsRepairTerms,
+        usage: mergedUsage,
         request_tuning: openAiCallResult?.request_tuning,
         request_tuning_fallback: openAiCallResult?.request_tuning_fallback,
         request_tuning_fallback_reason:
           openAiCallResult?.request_tuning_fallback_reason ?? null,
       };
 
-      layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
+      layerGeneration.summary = summarizeLayerGeneration(
+        layerGeneration.layers,
+        modelPolicy?.selectedModel,
+      );
 
       layerReports.push(layer);
     }
@@ -491,7 +607,10 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
     layerGeneration.status = "ready";
     layerGeneration.finished_at = generatedAt;
     layerGeneration.duration_ms = pipelineDurationMs;
-    layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
+    layerGeneration.summary = summarizeLayerGeneration(
+      layerGeneration.layers,
+      modelPolicy.selectedModel,
+    );
 
     const contentJson = buildCoreLayersContentJson({
       layerReports,

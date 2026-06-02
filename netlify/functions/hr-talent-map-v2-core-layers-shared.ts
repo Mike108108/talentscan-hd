@@ -70,7 +70,16 @@ Translate technical inputs into HR meaning:
 
 matching_summary is also HR-language only.
 Do not put technical terms into matching_summary.
-matching_summary is for future role-fit comparison, not for technical explanation.`;
+matching_summary is for future role-fit comparison, not for technical explanation.
+
+matching_summary must be complete.
+Do not leave arrays empty.
+For every layer, provide at least one item in:
+strong_match_when_role_requires,
+risk_when_role_requires,
+needs_from_role,
+what_to_check_in_role_fit.
+Use only HR language. No technical Human Design terms. No percentages. No hire/no-hire verdicts. No specific vacancy assumptions.`;
 
 const LAYER_OUTPUT_LENGTH_GUIDE = `=== Ограничения объёма (соблюдай строго, не раздувай JSON) ===
 - short_summary: 1–2 предложения
@@ -1687,6 +1696,9 @@ candidate_layer_key="${def.layer_key}".
 recommended_vacancy_layer_keys: ${JSON.stringify([...vacancyLayerKeys])} (можно дополнить, но сохрани смысл).
 confidence: high | medium | low | unknown.
 
+matching_summary must be complete — все четыре массива non-empty (минимум 1 пункт каждый).
+Do not leave strong_match_when_role_requires, risk_when_role_requires, needs_from_role, or what_to_check_in_role_fit empty.
+
 === ЗАПРЕЩЕНО в Base и matching_summary ===
 fit_score, score, match percentage, процент соответствия, подходит на XX%, соответствует на XX%,
 брать / не брать, нанять / не нанять, решение о найме, финальное решение по кандидату,
@@ -2423,6 +2435,350 @@ function buildFallbackTechnicalSources(args: {
   );
 }
 
+type MatchingSummaryDefaults = {
+  summary: string;
+  strong_match_when_role_requires: string[];
+  risk_when_role_requires: string[];
+  needs_from_role: string[];
+  what_to_check_in_role_fit: string[];
+};
+
+const MATCHING_SUMMARY_LAYER_DEFAULTS: Record<CoreLayerKey, MatchingSummaryDefaults> = {
+  work_format: {
+    summary: "Слой описывает, в каком рабочем формате кандидат устойчиво приносит пользу.",
+    strong_match_when_role_requires: [
+      "роли с понятным рабочим ритмом и предсказуемой нагрузкой",
+      "формат участия, где ценится устойчивый вклад без постоянного хаотичного переключения",
+    ],
+    risk_when_role_requires: [
+      "хаотичный темп без ясных приоритетов",
+      "роль с постоянными авралами и неопределённым форматом участия",
+    ],
+    needs_from_role: ["понятный рабочий ритм", "ясные ожидания по формату участия"],
+    what_to_check_in_role_fit: [
+      "как устроен рабочий темп и нагрузка",
+      "насколько предсказуем формат задач и включения",
+    ],
+  },
+  task_entry: {
+    summary: "Слой описывает, как кандидату лучше входить в задачи и стартовать работу.",
+    strong_match_when_role_requires: [
+      "роли с понятной постановкой задач и ясным первым шагом",
+      "контекст и критерии готовности до начала работы",
+    ],
+    risk_when_role_requires: [
+      "задачи без контекста, критериев и понятного старта",
+      "постоянные импровизированные входы в работу без рамок",
+    ],
+    needs_from_role: ["ясный запрос", "контекст задачи", "критерии готовности первого шага"],
+    what_to_check_in_role_fit: [
+      "как руководитель ставит задачи и передаёт контекст",
+      "есть ли время на уточнение вводных перед стартом",
+    ],
+  },
+  decision_style: {
+    summary: "Слой описывает, как кандидат принимает рабочие решения и какие условия ему нужны.",
+    strong_match_when_role_requires: [
+      "взвешенные решения после уточнения контекста",
+      "работа с критериями, вариантами и контрольными точками",
+    ],
+    risk_when_role_requires: [
+      "мгновенные решения на неполных данных",
+      "постоянную импровизацию без рамок и сроков фиксации решения",
+    ],
+    needs_from_role: [
+      "понятные критерии выбора",
+      "право уточнять вводные",
+      "срок фиксации решения",
+    ],
+    what_to_check_in_role_fit: [
+      "как устроены дедлайны решений",
+      "есть ли время на уточнение контекста",
+      "требуется ли мгновенная реакция в конфликтных ситуациях",
+    ],
+  },
+  work_signature: {
+    summary: "Слой описывает рабочий почерк кандидата: адаптацию, обучение и набор доверия.",
+    strong_match_when_role_requires: [
+      "роли с понятным входом и поэтапным набором ответственности",
+      "формат, где можно сначала разобраться в основе, а потом ускоряться",
+    ],
+    risk_when_role_requires: [
+      "ожидание мгновенной уверенности без периода входа",
+      "роль без структуры адаптации и обратной связи",
+    ],
+    needs_from_role: ["понятный вход в роль", "этапы адаптации", "обратная связь по прогрессу"],
+    what_to_check_in_role_fit: [
+      "как устроен онбординг и первые рабочие недели",
+      "какие сроки ожидают на выход в полную самостоятельность",
+    ],
+  },
+  inner_coherence: {
+    summary: "Слой описывает, как кандидат собирает внутреннюю ясность и синхронизируется в работе.",
+    strong_match_when_role_requires: [
+      "роли с понятной структурой задач и связями между частями работы",
+      "формат, где можно собрать картину перед действием",
+    ],
+    risk_when_role_requires: [
+      "хаотичная коммуникация без связки частей задачи",
+      "изоляция без возможности сверить понимание с командой",
+    ],
+    needs_from_role: ["ясная структура задач", "каналы синхронизации", "время на сборку картины"],
+    what_to_check_in_role_fit: [
+      "как устроены коммуникации и связность процессов",
+      "нужен ли кандидату диалог для сборки решения",
+    ],
+  },
+  stable_zones: {
+    summary: "Слой описывает устойчивые рабочие паттерны кандидата, где можно ожидать повторяемости.",
+    strong_match_when_role_requires: [
+      "роли с повторяемыми зонами ответственности",
+      "задачи, где устойчивый паттерн даёт предсказуемый результат",
+    ],
+    risk_when_role_requires: [
+      "постоянная смена зон ответственности без закрепления",
+      "роль, где устойчивость не может проявиться из-за хаоса",
+    ],
+    needs_from_role: ["закреплённые зоны ответственности", "повторяемый контекст задач"],
+    what_to_check_in_role_fit: [
+      "какие зоны работы будут стабильными",
+      "есть ли повторяемые процессы, где кандидат может нарастить силу",
+    ],
+  },
+  sensitive_zones: {
+    summary: "Слой описывает чувствительные зоны кандидата и зависимость от среды и давления.",
+    strong_match_when_role_requires: [
+      "роль с понятными границами ответственности и управляемым уровнем давления",
+      "среда, где ожидания, приоритеты и правила обратной связи проговариваются заранее",
+    ],
+    risk_when_role_requires: [
+      "постоянную работу в хаосе, эмоционально перегруженной среде или режиме срочных реакций без ясных рамок",
+      "необходимость регулярно доказывать ценность через переработки или брать на себя чужое давление",
+    ],
+    needs_from_role: [
+      "ясные ожидания",
+      "понятные границы ответственности",
+      "правила приоритизации при перегрузе",
+    ],
+    what_to_check_in_role_fit: [
+      "какой уровень срочности и эмоционального давления есть в роли",
+      "как руководитель ставит границы задач и приоритетов",
+      "как кандидат реагирует на неопределённость и внешнее давление",
+    ],
+  },
+  talent_links: {
+    summary: "Слой описывает устойчивые связки талантов кандидата в рабочих задачах.",
+    strong_match_when_role_requires: [
+      "роли, где нужны связные комбинации навыков и повторяемая ценность",
+      "задачи, раскрывающие сочетание сильных сторон кандидата",
+    ],
+    risk_when_role_requires: [
+      "роли, где связка талантов используется в неподходящем контексте",
+      "узкий набор задач, не дающий проявить связку способностей",
+    ],
+    needs_from_role: ["задачи под связку талантов", "контекст, где связка приносит пользу"],
+    what_to_check_in_role_fit: [
+      "какие комбинации навыков реально нужны в роли",
+      "есть ли задачи, где связка кандидата даст результат",
+    ],
+  },
+  point_talents: {
+    summary: "Слой описывает точечные рабочие способности и микроталанты кандидата.",
+    strong_match_when_role_requires: [
+      "роли с конкретными микрозадачами, где важны точечные способности",
+      "задачи, где кандидат может усилить качество через узкие сильные стороны",
+    ],
+    risk_when_role_requires: [
+      "роль без задач, где точечные способности востребованы",
+      "ожидание подтверждённого опыта там, где нужна проверка гипотезы",
+    ],
+    needs_from_role: ["конкретные задачи под микроталанты", "время на проверку гипотез"],
+    what_to_check_in_role_fit: [
+      "какие узкие способности реально нужны в роли",
+      "как проверить точечный талант на кейсе или в первых неделях",
+    ],
+  },
+  amplified_themes: {
+    summary: "Слой описывает усиленные рабочие темы кандидата и их зрелое использование.",
+    strong_match_when_role_requires: [
+      "роли, где усиленная тема может стать устойчивым вкладом",
+      "контекст, где повторяющаяся тема приносит ценность команде",
+    ],
+    risk_when_role_requires: [
+      "среда, где усиленная тема превращается в навязчивый паттерн",
+      "роль, где тема не может проявиться экологично",
+    ],
+    needs_from_role: ["рамки использования усиленной темы", "обратная связь по проявлению темы"],
+    what_to_check_in_role_fit: [
+      "повторяется ли тема в рабочих задачах роли",
+      "как руководитель использует усиленную тему без перегруза",
+    ],
+  },
+  conscious_axis: {
+    summary: "Слой описывает осознаваемую рабочую тему и профессиональную идентичность кандидата.",
+    strong_match_when_role_requires: [
+      "роли, где важна осознаваемая профессиональная ценность кандидата",
+      "задачи, через которые кандидат может объяснить свой вклад",
+    ],
+    risk_when_role_requires: [
+      "роль, не дающая проявить осознаваемую профессиональную тему",
+      "конфликт между идентичностью кандидата и ожидаемой ролью",
+    ],
+    needs_from_role: ["понятная ценность роли", "пространство для профессиональной идентичности"],
+    what_to_check_in_role_fit: [
+      "совпадает ли главная ценность роли с осознаваемой темой кандидата",
+      "как кандидат формулирует свой вклад на интервью",
+    ],
+  },
+  background_axis: {
+    summary: "Слой описывает фоновый рабочий паттерн кандидата, заметный со стороны.",
+    strong_match_when_role_requires: [
+      "роли, где естественный фоновый паттерн кандидата полезен команде",
+      "среда, где паттерн можно наблюдать и использовать экологично",
+    ],
+    risk_when_role_requires: [
+      "роль, где фоновый паттерн конфликтует с требованиями среды",
+      "отсутствие возможности проверить паттерн через наблюдение и кейс",
+    ],
+    needs_from_role: ["условия для наблюдения паттерна", "обратная связь от руководителя"],
+    what_to_check_in_role_fit: [
+      "заметен ли паттерн в рабочих ситуациях роли",
+      "как команда реагирует на естественный стиль кандидата",
+    ],
+  },
+};
+
+function ensureNonEmptyStringArray(value: unknown, fallback: string[]): string[] {
+  const items = asStringArray(value).filter(Boolean);
+  if (items.length > 0) return items.slice(0, 4);
+  return fallback.slice(0, 3);
+}
+
+function extractBaseRiskItems(base: Record<string, unknown>): string[] {
+  const risks = Array.isArray(base.risks) ? base.risks : [];
+  const items: string[] = [];
+  for (const risk of risks) {
+    const rec = asRecord(risk);
+    const title = asString(rec.title);
+    const description = asString(rec.description);
+    if (title) items.push(title);
+    else if (description) items.push(description);
+    if (items.length >= 3) break;
+  }
+  return items;
+}
+
+function extractBaseWhatToCheckItems(base: Record<string, unknown>): string[] {
+  const checks = Array.isArray(base.what_to_check) ? base.what_to_check : [];
+  return checks
+    .map((check) => asString(asRecord(check).hypothesis))
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
+function resolveMatchingSummaryConfidence(layer: Record<string, unknown>): string {
+  const matching = asRecord(layer.matching_summary);
+  const pro = asRecord(layer.pro);
+  const evidence = asRecord(layer.evidence);
+  const candidates = [
+    asString(matching.confidence),
+    asString(pro.confidence),
+    asString(evidence.confidence),
+  ];
+  for (const value of candidates) {
+    if (["high", "medium", "low", "unknown"].includes(value)) return value;
+  }
+  return "medium";
+}
+
+/** Backend autofill for matching_summary from base/layer defaults (HR-language only). */
+export function normalizeMatchingSummaryForValidation(args: {
+  layer: Record<string, unknown>;
+  layerKey: CoreLayerKey;
+}): { matching_summary: Record<string, unknown>; autofilled_fields: string[] } {
+  const def = CORE_LAYER_DEFS[args.layerKey];
+  const defaults = MATCHING_SUMMARY_LAYER_DEFAULTS[args.layerKey];
+  const base = asRecord(args.layer.base);
+  const existing = asRecord(args.layer.matching_summary);
+  const autofilledFields: string[] = [];
+
+  const summary =
+    asString(existing.summary) ||
+    asString(base.short_summary) ||
+    asString(base.detailed_explanation) ||
+    defaults.summary;
+  if (!asString(existing.summary)) autofilledFields.push("matching_summary.summary");
+
+  const strongMatch = ensureNonEmptyStringArray(
+    existing.strong_match_when_role_requires,
+    ensureNonEmptyStringArray(base.where_useful, defaults.strong_match_when_role_requires),
+  );
+  if (!asStringArray(existing.strong_match_when_role_requires).length) {
+    autofilledFields.push("matching_summary.strong_match_when_role_requires");
+  }
+
+  const riskItems = extractBaseRiskItems(base);
+  const riskMatch = ensureNonEmptyStringArray(
+    existing.risk_when_role_requires,
+    riskItems.length > 0 ? riskItems : defaults.risk_when_role_requires,
+  );
+  if (!asStringArray(existing.risk_when_role_requires).length) {
+    autofilledFields.push("matching_summary.risk_when_role_requires");
+  }
+
+  const needsFromRole = ensureNonEmptyStringArray(
+    existing.needs_from_role,
+    ensureNonEmptyStringArray(base.management_tips, defaults.needs_from_role),
+  );
+  if (!asStringArray(existing.needs_from_role).length) {
+    autofilledFields.push("matching_summary.needs_from_role");
+  }
+
+  const whatToCheckItems = extractBaseWhatToCheckItems(base);
+  const whatToCheck = ensureNonEmptyStringArray(
+    existing.what_to_check_in_role_fit,
+    whatToCheckItems.length > 0 ? whatToCheckItems : defaults.what_to_check_in_role_fit,
+  );
+  if (!asStringArray(existing.what_to_check_in_role_fit).length) {
+    autofilledFields.push("matching_summary.what_to_check_in_role_fit");
+  }
+
+  const candidateLayerKey = asString(existing.candidate_layer_key) || def.layer_key;
+  if (!asString(existing.candidate_layer_key)) {
+    autofilledFields.push("matching_summary.candidate_layer_key");
+  }
+
+  const recommendedKeys = ensureNonEmptyStringArray(
+    existing.recommended_vacancy_layer_keys,
+    [...CANDIDATE_LAYER_TO_VACANCY_LAYER_MAP[args.layerKey]],
+  );
+  if (!asStringArray(existing.recommended_vacancy_layer_keys).length) {
+    autofilledFields.push("matching_summary.recommended_vacancy_layer_keys");
+  }
+
+  const confidence = resolveMatchingSummaryConfidence({
+    ...args.layer,
+    matching_summary: existing,
+  });
+  if (!asString(existing.confidence)) {
+    autofilledFields.push("matching_summary.confidence");
+  }
+
+  return {
+    matching_summary: {
+      summary,
+      strong_match_when_role_requires: strongMatch,
+      risk_when_role_requires: riskMatch,
+      needs_from_role: needsFromRole,
+      what_to_check_in_role_fit: whatToCheck,
+      candidate_layer_key: candidateLayerKey,
+      recommended_vacancy_layer_keys: recommendedKeys,
+      confidence,
+    },
+    autofilled_fields: autofilledFields,
+  };
+}
+
 export type LayerReportNormalizationResult = {
   layer: Record<string, unknown>;
   autofill_applied: boolean;
@@ -2528,6 +2884,15 @@ export function normalizeLayerReportForValidation(args: {
 
   layer.pro = pro;
   layer.evidence = evidence;
+
+  const matchingSummaryNormalized = normalizeMatchingSummaryForValidation({
+    layer,
+    layerKey: args.layerKey,
+  });
+  layer.matching_summary = matchingSummaryNormalized.matching_summary;
+  if (matchingSummaryNormalized.autofilled_fields.length > 0) {
+    autofilledFields.push(...matchingSummaryNormalized.autofilled_fields);
+  }
 
   return {
     layer,

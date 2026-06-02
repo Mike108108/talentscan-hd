@@ -452,6 +452,11 @@ export type HrTalentMapMatchingSummaryV2 = {
   confidence?: HrTalentMapConfidence;
 };
 
+/** Result of backend matching_summary autofill (diagnostics only). */
+export type HrTalentMapMatchingSummaryAutofillV2 = {
+  autofilled_fields?: string[];
+};
+
 /** Estimated OpenAI cost snapshot for core layer generation. */
 export type HrTalentMapCostSummaryV2 = {
   model?: string;

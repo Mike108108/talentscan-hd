@@ -1,6 +1,6 @@
 /**
  * QA status endpoint for HR Talent Map v2 core layers background spike.
- * Stage 4.5: 7 sequential layers, run_mode, model_policy, layer key diagnostics, QA flags.
+ * Stage 4.6: 12 sequential layers, run_mode, model_policy, output token ceiling, layer key diagnostics.
  */
 
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
@@ -137,6 +137,19 @@ export const handler: Handler = async (
           ? layerModelPolicyRaw
           : null;
 
+    const maxOutputTokens =
+      typeof generationMeta.max_output_tokens === "number"
+        ? generationMeta.max_output_tokens
+        : typeof layerGeneration.max_output_tokens === "number"
+          ? layerGeneration.max_output_tokens
+          : null;
+    const outputTokenPolicyRaw =
+      Object.keys(asRecord(generationMeta.output_token_policy)).length > 0
+        ? asRecord(generationMeta.output_token_policy)
+        : asRecord(layerGeneration.output_token_policy);
+    const outputTokenPolicy =
+      Object.keys(outputTokenPolicyRaw).length > 0 ? outputTokenPolicyRaw : null;
+
     const readyLayerKeys = extractReadyLayerKeys(layerReports);
     const errorLayerKeys = hasLayerGeneration
       ? extractLayerKeysByStatus(layerGeneration, "error")
@@ -165,6 +178,8 @@ export const handler: Handler = async (
       run_mode: runMode,
       selected_model: selectedModel,
       model_policy: modelPolicy,
+      max_output_tokens: maxOutputTokens,
+      output_token_policy: outputTokenPolicy,
       layer_generation_status: hasLayerGeneration
         ? asString(layerGeneration.status) || null
         : null,

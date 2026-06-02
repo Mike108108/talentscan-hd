@@ -1,6 +1,6 @@
 /**
- * Background worker for HR Talent Map v2 core layers spike (7 layers, sequential).
- * Stage 4.5: expand from 3 to 7 layers; model policy, attempts tracking, layer_generation summary.
+ * Background worker for HR Talent Map v2 core layers spike (12 layers, sequential).
+ * Stage 4.6: expand to 12 layers; talent/axis layers; output token ceiling policy.
  */
 
 import type { BackgroundHandler, HandlerEvent } from "@netlify/functions";
@@ -328,6 +328,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         started_at: layerStartedIso,
         model,
         prompt_version: SPIKE_PROMPT_VERSION,
+        max_output_tokens: modelPolicy.maxOutputTokens,
       };
 
       logSpikeStage("worker", "openai_responses_start", logCtx, { model, layer_key: layerKey });
@@ -349,6 +350,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           model,
           layerKey,
           compactInput,
+          maxOutputTokens: modelPolicy.maxOutputTokens,
         });
         layer = openAiResult.layer;
         httpStatus = openAiResult.httpStatus;
@@ -463,6 +465,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         duration_ms: layerDurationMs,
         model,
         prompt_version: SPIKE_PROMPT_VERSION,
+        max_output_tokens: modelPolicy.maxOutputTokens,
         attempts: openAiAttempts,
       };
 

@@ -185,7 +185,9 @@ export type VacancyFormData = {
   risks_to_check: string;
 };
 
-export type HrReportType = "hr_person_talent_map";
+export type HrReportType =
+  | "hr_person_talent_map"
+  | "hr_person_talent_map_core_layers_spike";
 
 export type HrReportStatus = "ready" | "generating" | "error" | "draft";
 

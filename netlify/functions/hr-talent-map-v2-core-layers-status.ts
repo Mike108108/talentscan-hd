@@ -150,6 +150,36 @@ export const handler: Handler = async (
     const outputTokenPolicy =
       Object.keys(outputTokenPolicyRaw).length > 0 ? outputTokenPolicyRaw : null;
 
+    const tuningPolicyRaw = asRecord(generationMeta.tuning_policy);
+    const requestTuningRaw = asRecord(generationMeta.request_tuning);
+    const layerTuningPolicyRaw = asRecord(layerGeneration.tuning_policy);
+    const layerRequestTuningRaw = asRecord(layerGeneration.request_tuning);
+    const tuningPolicy =
+      Object.keys(tuningPolicyRaw).length > 0
+        ? tuningPolicyRaw
+        : Object.keys(layerTuningPolicyRaw).length > 0
+          ? layerTuningPolicyRaw
+          : null;
+    const requestTuning =
+      Object.keys(requestTuningRaw).length > 0
+        ? requestTuningRaw
+        : Object.keys(layerRequestTuningRaw).length > 0
+          ? layerRequestTuningRaw
+          : null;
+
+    const layerSummary = asRecord(layerGeneration.summary);
+    const usageSummary =
+      layerSummary.usage_summary ??
+      generationMeta.usage_summary ??
+      null;
+    const tuningFallbacksTotal =
+      typeof usageSummary === "object" &&
+      usageSummary != null &&
+      typeof (usageSummary as Record<string, unknown>).tuning_fallbacks_total ===
+        "number"
+        ? ((usageSummary as Record<string, unknown>).tuning_fallbacks_total as number)
+        : 0;
+
     const readyLayerKeys = extractReadyLayerKeys(layerReports);
     const errorLayerKeys = hasLayerGeneration
       ? extractLayerKeysByStatus(layerGeneration, "error")
@@ -178,6 +208,10 @@ export const handler: Handler = async (
       run_mode: runMode,
       selected_model: selectedModel,
       model_policy: modelPolicy,
+      request_tuning: requestTuning,
+      tuning_policy: tuningPolicy,
+      usage_summary: usageSummary,
+      tuning_fallbacks_total: tuningFallbacksTotal,
       max_output_tokens: maxOutputTokens,
       output_token_policy: outputTokenPolicy,
       layer_generation_status: hasLayerGeneration

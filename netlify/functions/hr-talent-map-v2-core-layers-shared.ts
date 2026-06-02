@@ -33,6 +33,24 @@ const DEFAULT_SMOKE_MODEL = "gpt-5.4-nano";
 const DEFAULT_LAYER_MODEL = "gpt-5.4-mini";
 const DEFAULT_REASONING_MODEL = "gpt-5.4";
 
+const REASONING_EFFORT_VALUES = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+] as const;
+const VERBOSITY_VALUES = ["low", "medium", "high"] as const;
+const PROMPT_CACHE_RETENTION_VALUES = ["in-memory", "24h"] as const;
+
+const DEFAULT_REASONING_EFFORT_SMOKE = "low";
+const DEFAULT_REASONING_EFFORT_LAYER = "low";
+const DEFAULT_VERBOSITY_SMOKE = "medium";
+const DEFAULT_VERBOSITY_LAYER = "medium";
+const DEFAULT_PROMPT_CACHE_KEY = "hr_talent_map_v2_core_layers_background_0_3";
+const DEFAULT_PROMPT_CACHE_RETENTION: PromptCacheRetention = "24h";
+
 const LAYER_OUTPUT_LENGTH_GUIDE = `=== Ограничения объёма (соблюдай строго, не раздувай JSON) ===
 - short_summary: 1–2 предложения
 - detailed_explanation: 4–6 предложений
@@ -290,6 +308,35 @@ export type OffendingMatch = {
 
 export type CoreLayersRunMode = "smoke" | "layer";
 
+export type PromptCacheRetention = "in-memory" | "24h";
+
+export type OpenAiUsageSnapshot = {
+  input_tokens: number | null;
+  cached_input_tokens: number | null;
+  output_tokens: number | null;
+  reasoning_tokens: number | null;
+  total_tokens: number | null;
+};
+
+export type RequestTuningSnapshot = {
+  reasoning_effort: string | null;
+  verbosity: string | null;
+  prompt_cache_key: string | null;
+  prompt_cache_retention: string | null;
+  fallback_used?: boolean;
+  fallbacks?: string[];
+};
+
+export type LayerGenerationUsageSummary = {
+  input_tokens_total: number;
+  cached_input_tokens_total: number;
+  output_tokens_total: number;
+  reasoning_tokens_total: number;
+  total_tokens_total: number;
+  cached_input_tokens_ratio: number | null;
+  tuning_fallbacks_total: number;
+};
+
 export type CoreLayersModelPolicy = {
   runMode: CoreLayersRunMode;
   selectedModel: string;
@@ -301,6 +348,11 @@ export type CoreLayersModelPolicy = {
     smoke: number;
     layer: number;
   };
+  reasoningEffort: string | null;
+  verbosity: string | null;
+  promptCacheKey: string | null;
+  promptCacheRetention: PromptCacheRetention | null;
+  tuningWarnings: string[];
 };
 
 export type LayerRunStatus = {
@@ -313,6 +365,10 @@ export type LayerRunStatus = {
   max_output_tokens?: number;
   attempts?: number;
   error?: string | Record<string, unknown> | null;
+  usage?: OpenAiUsageSnapshot;
+  request_tuning?: RequestTuningSnapshot;
+  request_tuning_fallback?: boolean;
+  request_tuning_fallback_reason?: string | null;
 };
 
 export type LayerGenerationSummary = {
@@ -321,6 +377,7 @@ export type LayerGenerationSummary = {
   error: number;
   skipped: number;
   attempts_total: number;
+  usage_summary?: LayerGenerationUsageSummary;
 };
 
 export type LayerGenerationState = {
@@ -340,7 +397,10 @@ export type LayerGenerationState = {
     smoke: string;
     layer: string;
     reasoning: string;
+    tuning_policy?: RequestTuningSnapshot & { warnings?: string[] };
   };
+  request_tuning?: RequestTuningSnapshot;
+  tuning_policy?: RequestTuningSnapshot & { warnings?: string[] };
   layers_order: CoreLayerKey[];
   summary: LayerGenerationSummary;
   layers: Record<CoreLayerKey, LayerRunStatus>;
@@ -428,6 +488,125 @@ export function resolveCoreLayerOutputTokenPolicy(): {
   };
 }
 
+function resolveEnumEnv<T extends string>(args: {
+  envName: string;
+  allowed: readonly T[];
+  fallback: T;
+  warnings: string[];
+  label: string;
+}): T {
+  const raw = process.env[args.envName]?.trim();
+  if (!raw) return args.fallback;
+  if ((args.allowed as readonly string[]).includes(raw)) {
+    return raw as T;
+  }
+  args.warnings.push(
+    `${args.label}: invalid env ${args.envName}="${raw}", using default "${args.fallback}"`,
+  );
+  return args.fallback;
+}
+
+function buildRequestTuningSnapshot(
+  modelPolicy: CoreLayersModelPolicy,
+  overrides?: Partial<RequestTuningSnapshot>,
+): RequestTuningSnapshot {
+  return {
+    reasoning_effort: modelPolicy.reasoningEffort,
+    verbosity: modelPolicy.verbosity,
+    prompt_cache_key: modelPolicy.promptCacheKey,
+    prompt_cache_retention: modelPolicy.promptCacheRetention,
+    fallbacks: [],
+    ...overrides,
+  };
+}
+
+export function buildTuningPolicySnapshot(
+  modelPolicy: CoreLayersModelPolicy,
+): RequestTuningSnapshot & { warnings: string[] } {
+  return {
+    ...buildRequestTuningSnapshot(modelPolicy),
+    warnings: [...modelPolicy.tuningWarnings],
+  };
+}
+
+function sumNullableNumbers(values: Array<number | null | undefined>): number {
+  let total = 0;
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      total += value;
+    }
+  }
+  return total;
+}
+
+export function extractOpenAiUsage(data: Record<string, unknown>): OpenAiUsageSnapshot {
+  const usage = asRecord(data.usage);
+
+  const inputTokens =
+    typeof usage.input_tokens === "number"
+      ? usage.input_tokens
+      : typeof usage.prompt_tokens === "number"
+        ? usage.prompt_tokens
+        : null;
+
+  const inputDetails = asRecord(usage.input_tokens_details);
+  const promptDetails = asRecord(usage.prompt_tokens_details);
+  const cachedFromInput =
+    typeof inputDetails.cached_tokens === "number" ? inputDetails.cached_tokens : null;
+  const cachedFromPrompt =
+    typeof promptDetails.cached_tokens === "number" ? promptDetails.cached_tokens : null;
+  const cachedInputTokens = cachedFromInput ?? cachedFromPrompt ?? null;
+
+  const outputTokens =
+    typeof usage.output_tokens === "number"
+      ? usage.output_tokens
+      : typeof usage.completion_tokens === "number"
+        ? usage.completion_tokens
+        : null;
+
+  const outputDetails = asRecord(usage.output_tokens_details);
+  const completionDetails = asRecord(usage.completion_tokens_details);
+  const reasoningFromOutput =
+    typeof outputDetails.reasoning_tokens === "number"
+      ? outputDetails.reasoning_tokens
+      : null;
+  const reasoningFromCompletion =
+    typeof completionDetails.reasoning_tokens === "number"
+      ? completionDetails.reasoning_tokens
+      : null;
+  const reasoningTokens = reasoningFromOutput ?? reasoningFromCompletion ?? null;
+
+  const totalTokens =
+    typeof usage.total_tokens === "number" ? usage.total_tokens : null;
+
+  return {
+    input_tokens: inputTokens,
+    cached_input_tokens: cachedInputTokens,
+    output_tokens: outputTokens,
+    reasoning_tokens: reasoningTokens,
+    total_tokens: totalTokens,
+  };
+}
+
+const TUNING_ERROR_PATTERNS = [
+  /unsupported parameter/i,
+  /invalid value/i,
+  /unsupported reasoning/i,
+  /unsupported verbosity/i,
+  /unsupported prompt_cache/i,
+  /prompt_cache_retention/i,
+  /reasoning\.effort/i,
+  /text\.verbosity/i,
+];
+
+export function isTuningRelatedOpenAiError(
+  httpStatus: number,
+  message: string,
+): boolean {
+  if (httpStatus !== 400) return false;
+  return TUNING_ERROR_PATTERNS.some((pattern) => pattern.test(message));
+}
+
 export function resolveCoreLayersModelPolicy(): CoreLayersModelPolicy {
   const rawRunMode =
     process.env.HR_TALENT_MAP_V2_CORE_LAYERS_RUN_MODE?.trim() || "smoke";
@@ -451,6 +630,38 @@ export function resolveCoreLayersModelPolicy(): CoreLayersModelPolicy {
   const maxOutputTokens =
     runMode === "layer" ? outputTokenPolicy.layer : outputTokenPolicy.smoke;
 
+  const tuningWarnings: string[] = [];
+  const reasoningEffort = resolveEnumEnv({
+    envName:
+      runMode === "smoke"
+        ? "HR_TALENT_MAP_V2_CORE_LAYER_REASONING_EFFORT_SMOKE"
+        : "HR_TALENT_MAP_V2_CORE_LAYER_REASONING_EFFORT_LAYER",
+    allowed: REASONING_EFFORT_VALUES,
+    fallback:
+      runMode === "smoke" ? DEFAULT_REASONING_EFFORT_SMOKE : DEFAULT_REASONING_EFFORT_LAYER,
+    warnings: tuningWarnings,
+    label: "reasoning_effort",
+  });
+  const verbosity = resolveEnumEnv({
+    envName:
+      runMode === "smoke"
+        ? "HR_TALENT_MAP_V2_CORE_LAYER_VERBOSITY_SMOKE"
+        : "HR_TALENT_MAP_V2_CORE_LAYER_VERBOSITY_LAYER",
+    allowed: VERBOSITY_VALUES,
+    fallback: runMode === "smoke" ? DEFAULT_VERBOSITY_SMOKE : DEFAULT_VERBOSITY_LAYER,
+    warnings: tuningWarnings,
+    label: "verbosity",
+  });
+  const promptCacheKeyRaw = process.env.HR_TALENT_MAP_V2_CORE_LAYER_PROMPT_CACHE_KEY?.trim();
+  const promptCacheKey = promptCacheKeyRaw || DEFAULT_PROMPT_CACHE_KEY;
+  const promptCacheRetention = resolveEnumEnv({
+    envName: "HR_TALENT_MAP_V2_CORE_LAYER_PROMPT_CACHE_RETENTION",
+    allowed: PROMPT_CACHE_RETENTION_VALUES,
+    fallback: DEFAULT_PROMPT_CACHE_RETENTION,
+    warnings: tuningWarnings,
+    label: "prompt_cache_retention",
+  });
+
   return {
     runMode,
     selectedModel,
@@ -459,6 +670,11 @@ export function resolveCoreLayersModelPolicy(): CoreLayersModelPolicy {
     reasoningModel,
     maxOutputTokens,
     outputTokenPolicy,
+    reasoningEffort,
+    verbosity,
+    promptCacheKey,
+    promptCacheRetention,
+    tuningWarnings,
   };
 }
 
@@ -1902,6 +2118,73 @@ export function validateCoreLayer(
   return { ok: true };
 }
 
+function buildResponsesRequestBody(args: {
+  model: string;
+  layerKey: CoreLayerKey;
+  instructions: string;
+  input: string;
+  maxOutputTokens: number;
+  schema: ReturnType<typeof buildCoreLayerSchema>;
+  modelPolicy?: CoreLayersModelPolicy | null;
+  includeTuning?: boolean;
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model: args.model,
+    instructions: args.instructions,
+    input: args.input,
+    max_output_tokens: args.maxOutputTokens,
+    text: {
+      format: {
+        type: "json_schema",
+        name: `hr_talent_map_${args.layerKey}_layer`,
+        strict: true,
+        schema: args.schema,
+      },
+    },
+    store: false,
+  };
+
+  const text = asRecord(body.text);
+  const includeTuning = args.includeTuning !== false && args.modelPolicy != null;
+
+  if (includeTuning && args.modelPolicy) {
+    const policy = args.modelPolicy;
+    if (policy.reasoningEffort) {
+      body.reasoning = { effort: policy.reasoningEffort };
+    }
+    if (policy.verbosity) {
+      text.verbosity = policy.verbosity;
+    }
+    if (policy.promptCacheKey) {
+      body.prompt_cache_key = policy.promptCacheKey;
+    }
+    if (policy.promptCacheRetention) {
+      body.prompt_cache_retention = policy.promptCacheRetention;
+    }
+  }
+
+  return body;
+}
+
+async function postOpenAiResponsesLayer(args: {
+  apiKey: string;
+  layerKey: CoreLayerKey;
+  requestBody: Record<string, unknown>;
+}): Promise<{ data: Record<string, unknown>; httpStatus: number }> {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${args.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(args.requestBody),
+  });
+
+  const httpStatus = response.status;
+  const data = asRecord(await response.json().catch(() => ({})));
+  return { data, httpStatus };
+}
+
 export async function callOpenAiResponsesForLayer(args: {
   apiKey: string;
   model: string;
@@ -1909,7 +2192,16 @@ export async function callOpenAiResponsesForLayer(args: {
   compactInput: Record<string, unknown>;
   maxOutputTokens: number;
   compactRetry?: boolean;
-}): Promise<{ layer: Record<string, unknown>; rawOutputChars: number; httpStatus: number }> {
+  modelPolicy?: CoreLayersModelPolicy | null;
+}): Promise<{
+  layer: Record<string, unknown>;
+  rawOutputChars: number;
+  httpStatus: number;
+  usage: OpenAiUsageSnapshot;
+  request_tuning: RequestTuningSnapshot;
+  request_tuning_fallback: boolean;
+  request_tuning_fallback_reason: string | null;
+}> {
   const instructions = buildLayerInstructions(args.layerKey);
   const input = buildLayerUserPrompt(
     args.layerKey,
@@ -1917,48 +2209,84 @@ export async function callOpenAiResponsesForLayer(args: {
     args.compactRetry === true,
   );
   const schema = buildCoreLayerSchema(args.layerKey);
+  const modelPolicy = args.modelPolicy ?? null;
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${args.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: args.model,
-      instructions,
-      input,
-      max_output_tokens: args.maxOutputTokens,
-      text: {
-        format: {
-          type: "json_schema",
-          name: `hr_talent_map_${args.layerKey}_layer`,
-          strict: true,
-          schema,
-        },
-      },
-      store: false,
-    }),
+  const tuningSnapshot = modelPolicy
+    ? buildRequestTuningSnapshot(modelPolicy)
+    : {
+        reasoning_effort: null,
+        verbosity: null,
+        prompt_cache_key: null,
+        prompt_cache_retention: null,
+        fallbacks: [],
+      };
+
+  let requestBody = buildResponsesRequestBody({
+    model: args.model,
+    layerKey: args.layerKey,
+    instructions,
+    input,
+    maxOutputTokens: args.maxOutputTokens,
+    schema,
+    modelPolicy,
+    includeTuning: true,
   });
 
-  const httpStatus = response.status;
-  const data = asRecord(await response.json().catch(() => ({})));
+  let { data, httpStatus } = await postOpenAiResponsesLayer({
+    apiKey: args.apiKey,
+    layerKey: args.layerKey,
+    requestBody,
+  });
 
-  if (!response.ok) {
+  let requestTuningFallback = false;
+  let requestTuningFallbackReason: string | null = null;
+
+  if (!responseOk(httpStatus)) {
     const message =
       asString(data.error && asRecord(data.error).message) ||
       `OpenAI Responses API error (${httpStatus})`;
-    throw new OpenAiLayerResponseError({
-      message,
-      failedLayerKey: args.layerKey,
-      responseStatus: asString(data.status) || null,
-      incompleteDetails: data.incomplete_details ?? null,
-      outputTextLength: extractResponsesOutputText(data).length,
-      outputTextTail: null,
-      parseError: null,
-      httpStatus,
-      retryable: false,
-    });
+
+    if (modelPolicy && isTuningRelatedOpenAiError(httpStatus, message)) {
+      requestBody = buildResponsesRequestBody({
+        model: args.model,
+        layerKey: args.layerKey,
+        instructions,
+        input,
+        maxOutputTokens: args.maxOutputTokens,
+        schema,
+        modelPolicy,
+        includeTuning: false,
+      });
+      ({ data, httpStatus } = await postOpenAiResponsesLayer({
+        apiKey: args.apiKey,
+        layerKey: args.layerKey,
+        requestBody,
+      }));
+      requestTuningFallback = true;
+      requestTuningFallbackReason = message;
+      tuningSnapshot.fallback_used = true;
+      tuningSnapshot.fallbacks = [
+        ...(tuningSnapshot.fallbacks ?? []),
+        "stripped_reasoning_verbosity_prompt_cache",
+      ];
+    }
+
+    if (!responseOk(httpStatus)) {
+      const retryMessage =
+        asString(data.error && asRecord(data.error).message) ||
+        `OpenAI Responses API error (${httpStatus})`;
+      throw new OpenAiLayerResponseError({
+        message: retryMessage,
+        failedLayerKey: args.layerKey,
+        responseStatus: asString(data.status) || null,
+        incompleteDetails: data.incomplete_details ?? null,
+        outputTextLength: extractResponsesOutputText(data).length,
+        outputTextTail: null,
+        parseError: null,
+        httpStatus,
+        retryable: false,
+      });
+    }
   }
 
   const { layer, rawOutputChars } = processOpenAiResponsesBody({
@@ -1967,7 +2295,19 @@ export async function callOpenAiResponsesForLayer(args: {
     httpStatus,
   });
 
-  return { layer, rawOutputChars, httpStatus };
+  return {
+    layer,
+    rawOutputChars,
+    httpStatus,
+    usage: extractOpenAiUsage(data),
+    request_tuning: tuningSnapshot,
+    request_tuning_fallback: requestTuningFallback,
+    request_tuning_fallback_reason: requestTuningFallbackReason,
+  };
+}
+
+function responseOk(httpStatus: number): boolean {
+  return httpStatus >= 200 && httpStatus < 300;
 }
 
 export async function callOpenAiResponsesForLayerWithRetry(args: {
@@ -1976,11 +2316,16 @@ export async function callOpenAiResponsesForLayerWithRetry(args: {
   layerKey: CoreLayerKey;
   compactInput: Record<string, unknown>;
   maxOutputTokens: number;
+  modelPolicy?: CoreLayersModelPolicy | null;
 }): Promise<{
   layer: Record<string, unknown>;
   rawOutputChars: number;
   httpStatus: number;
   attempts: number;
+  usage: OpenAiUsageSnapshot;
+  request_tuning: RequestTuningSnapshot;
+  request_tuning_fallback: boolean;
+  request_tuning_fallback_reason: string | null;
 }> {
   let lastRetryableError: OpenAiLayerResponseError | null = null;
 
@@ -2023,6 +2368,13 @@ export function summarizeLayerGeneration(
   let error = 0;
   let skipped = 0;
   let attempts_total = 0;
+  let tuning_fallbacks_total = 0;
+
+  const inputTokens: Array<number | null> = [];
+  const cachedInputTokens: Array<number | null> = [];
+  const outputTokens: Array<number | null> = [];
+  const reasoningTokens: Array<number | null> = [];
+  const totalTokens: Array<number | null> = [];
 
   for (const key of CORE_LAYERS_ORDER) {
     const layer = layers[key];
@@ -2030,7 +2382,26 @@ export function summarizeLayerGeneration(
     else if (layer.status === "error") error++;
     else if (layer.status === "skipped") skipped++;
     attempts_total += layer.attempts ?? 0;
+    if (layer.request_tuning_fallback) tuning_fallbacks_total++;
+
+    const usage = layer.usage;
+    if (usage) {
+      inputTokens.push(usage.input_tokens);
+      cachedInputTokens.push(usage.cached_input_tokens);
+      outputTokens.push(usage.output_tokens);
+      reasoningTokens.push(usage.reasoning_tokens);
+      totalTokens.push(usage.total_tokens);
+    }
   }
+
+  const input_tokens_total = sumNullableNumbers(inputTokens);
+  const cached_input_tokens_total = sumNullableNumbers(cachedInputTokens);
+  const output_tokens_total = sumNullableNumbers(outputTokens);
+  const reasoning_tokens_total = sumNullableNumbers(reasoningTokens);
+  const total_tokens_total = sumNullableNumbers(totalTokens);
+
+  const cached_input_tokens_ratio =
+    input_tokens_total > 0 ? cached_input_tokens_total / input_tokens_total : null;
 
   return {
     total: CORE_LAYERS_ORDER.length,
@@ -2038,6 +2409,15 @@ export function summarizeLayerGeneration(
     error,
     skipped,
     attempts_total,
+    usage_summary: {
+      input_tokens_total,
+      cached_input_tokens_total,
+      output_tokens_total,
+      reasoning_tokens_total,
+      total_tokens_total,
+      cached_input_tokens_ratio,
+      tuning_fallbacks_total,
+    },
   };
 }
 
@@ -2049,6 +2429,8 @@ export function initLayerGenerationState(
   for (const key of CORE_LAYERS_ORDER) {
     layers[key] = { status: "pending" };
   }
+  const tuningPolicy = buildTuningPolicySnapshot(modelPolicy);
+  const requestTuning = buildRequestTuningSnapshot(modelPolicy);
   return {
     status: "generating",
     started_at: pipelineStartedAt,
@@ -2066,7 +2448,10 @@ export function initLayerGenerationState(
       smoke: modelPolicy.smokeModel,
       layer: modelPolicy.layerModel,
       reasoning: modelPolicy.reasoningModel,
+      tuning_policy: tuningPolicy,
     },
+    request_tuning: requestTuning,
+    tuning_policy: tuningPolicy,
     layers_order: [...CORE_LAYERS_ORDER],
     summary: summarizeLayerGeneration(layers),
     layers,
@@ -2094,16 +2479,29 @@ export function buildModelPolicySnapshot(
   smoke: string;
   layer: string;
   reasoning: string;
+  reasoning_effort: string | null;
+  verbosity: string | null;
+  prompt_cache_key: string | null;
+  prompt_cache_retention: string | null;
+  warnings: string[];
+  tuning_policy: RequestTuningSnapshot & { warnings: string[] };
   max_output_tokens?: {
     smoke: number;
     layer: number;
     selected: number;
   };
 } {
+  const tuningPolicy = buildTuningPolicySnapshot(modelPolicy);
   return {
     smoke: modelPolicy.smokeModel,
     layer: modelPolicy.layerModel,
     reasoning: modelPolicy.reasoningModel,
+    reasoning_effort: modelPolicy.reasoningEffort,
+    verbosity: modelPolicy.verbosity,
+    prompt_cache_key: modelPolicy.promptCacheKey,
+    prompt_cache_retention: modelPolicy.promptCacheRetention,
+    warnings: [...modelPolicy.tuningWarnings],
+    tuning_policy: tuningPolicy,
     max_output_tokens: {
       smoke: modelPolicy.outputTokenPolicy.smoke,
       layer: modelPolicy.outputTokenPolicy.layer,
@@ -2147,6 +2545,8 @@ export function buildCoreLayersContentJson(args: {
         layer: args.modelPolicy.outputTokenPolicy.layer,
       },
       model_policy: buildModelPolicySnapshot(args.modelPolicy),
+      request_tuning: buildRequestTuningSnapshot(args.modelPolicy),
+      tuning_policy: buildTuningPolicySnapshot(args.modelPolicy),
       source_analysis_packet_version: SOURCE_ANALYSIS_PACKET_VERSION,
       content_contract_version: CONTENT_CONTRACT_VERSION,
       background_spike: true,

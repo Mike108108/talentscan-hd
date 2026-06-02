@@ -2513,3 +2513,116 @@
     display: none;
   }
 }
+
+.hr-tm-spike-banner {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 180, 255, 0.28);
+  background: rgba(40, 90, 160, 0.12);
+}
+
+.hr-tm-spike-banner-title {
+  margin: 0 0 6px;
+  font-weight: 650;
+  color: var(--hr-text);
+  font-size: 0.92rem;
+}
+
+.hr-tm-spike-banner-text {
+  margin: 0;
+  color: var(--hr-muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.hr-tm-spike-meta-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--hr-muted);
+}
+
+.hr-tm-core-layers-progress {
+  max-width: 640px;
+}
+
+.hr-tm-layer-status-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.hr-tm-layer-status-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--hr-line);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 0.84rem;
+}
+
+.hr-tm-layer-status-title {
+  color: var(--hr-text);
+  font-weight: 550;
+}
+
+.hr-tm-layer-status-key {
+  color: var(--hr-muted);
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.hr-tm-layer-status-badge {
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--hr-line);
+  color: var(--hr-muted);
+}
+
+.hr-tm-layer-status-row--ready .hr-tm-layer-status-badge {
+  border-color: rgba(80, 200, 120, 0.45);
+  color: rgba(120, 220, 160, 0.95);
+}
+
+.hr-tm-layer-status-row--generating .hr-tm-layer-status-badge,
+.hr-tm-layer-status-row--pending .hr-tm-layer-status-badge {
+  border-color: rgba(120, 180, 255, 0.35);
+  color: rgba(160, 200, 255, 0.9);
+}
+
+.hr-tm-layer-status-row--error .hr-tm-layer-status-badge {
+  border-color: rgba(255, 120, 120, 0.45);
+  color: rgba(255, 160, 160, 0.95);
+}
+
+.hr-tm-layer-status-row--skipped .hr-tm-layer-status-badge {
+  opacity: 0.65;
+}
+
+.hr-tm-structured-item {
+  padding: 10px 0;
+  border-top: 1px solid var(--hr-line);
+}
+
+.hr-tm-structured-item:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.hr-tm-structured-item-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--hr-text);
+}

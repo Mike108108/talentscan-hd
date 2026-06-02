@@ -6,6 +6,7 @@ import type {
 
 const V2_SCHEMA = "hr_person_talent_map_v2";
 const REPORT_TYPE = "hr_person_talent_map";
+const CORE_LAYERS_SPIKE_REPORT_TYPE = "hr_person_talent_map_core_layers_spike";
 
 function parseContentRoot(raw: unknown): Record<string, unknown> | null {
   if (raw == null) return null;
@@ -46,6 +47,10 @@ function hasSynthesisBlocksObject(root: Record<string, unknown>): boolean {
   return isPlainObject(root.synthesis_blocks);
 }
 
+function isCoreLayersSpikeContent(root: Record<string, unknown>): boolean {
+  return asString(root.report_type) === CORE_LAYERS_SPIKE_REPORT_TYPE;
+}
+
 /** Conservative v2 shape check on a parsed object root. */
 export function isTalentMapV2(root: unknown): root is HrPersonTalentMapV2 {
   if (!isPlainObject(root)) return false;
@@ -53,9 +58,18 @@ export function isTalentMapV2(root: unknown): root is HrPersonTalentMapV2 {
   const schemaVersion = asString(root.schema_version);
   const reportType = asString(root.report_type);
   const hasV2Schema = schemaVersion === V2_SCHEMA;
-  const hasReportType = reportType === REPORT_TYPE;
+  const hasReportType =
+    reportType === REPORT_TYPE || reportType === CORE_LAYERS_SPIKE_REPORT_TYPE;
+  const isSpike = isCoreLayersSpikeContent(root);
 
-  if (!hasLayerReportsArray(root) || !hasSynthesisBlocksObject(root)) {
+  if (!hasLayerReportsArray(root)) {
+    return false;
+  }
+
+  if (isSpike && hasV2Schema) return true;
+  if (isSpike && hasLayerReportsArray(root)) return true;
+
+  if (!hasSynthesisBlocksObject(root)) {
     return false;
   }
 
@@ -82,8 +96,9 @@ export function isTalentMapV2Ready(root: unknown): boolean {
   const parsed = parseContentRoot(root);
   if (!parsed || !isTalentMapV2(parsed)) return false;
   const layerReports = parsed.layer_reports;
-  const synthesis = parsed.synthesis_blocks;
   if (!Array.isArray(layerReports) || layerReports.length === 0) return false;
+  if (isCoreLayersSpikeContent(parsed)) return true;
+  const synthesis = parsed.synthesis_blocks;
   if (!synthesis || typeof synthesis !== "object") return false;
   return true;
 }

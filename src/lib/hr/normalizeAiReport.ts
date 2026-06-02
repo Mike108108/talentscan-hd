@@ -208,7 +208,20 @@ export function logReportContentShape(raw: unknown, reportId?: string): void {
   });
 }
 
-/** Whether the report can be shown in the talent map workspace. */
+const DISPLAYABLE_TALENT_MAP_REPORT_TYPES = new Set([
+  "hr_person_talent_map",
+  "hr_person_talent_map_core_layers_spike",
+]);
+
+function spikeHasLayerReports(report: HrReport): boolean {
+  if (report.report_type !== "hr_person_talent_map_core_layers_spike") return true;
+  const root = parseReportContentJson(report.content_json);
+  if (!root) return false;
+  const layerReports = root.layer_reports;
+  return Array.isArray(layerReports) && layerReports.length > 0;
+}
+
+/** Strict production v1 ready check (legacy hr_person_talent_map only). */
 export function isReadyTalentMapReport(report: HrReport | null): boolean {
   if (!report) return false;
   const status = String(report.report_status ?? "")
@@ -218,6 +231,19 @@ export function isReadyTalentMapReport(report: HrReport | null): boolean {
   const type = String(report.report_type ?? "hr_person_talent_map").trim();
   if (type !== "hr_person_talent_map") return false;
   return report.content_json != null;
+}
+
+/** Whether the report can be shown on the candidate talent map page (v1 or core-layers spike). */
+export function isDisplayableTalentMapReport(report: HrReport | null): boolean {
+  if (!report) return false;
+  const status = String(report.report_status ?? "")
+    .trim()
+    .toLowerCase();
+  if (status !== "ready") return false;
+  const type = String(report.report_type ?? "").trim();
+  if (!DISPLAYABLE_TALENT_MAP_REPORT_TYPES.has(type)) return false;
+  if (report.content_json == null) return false;
+  return spikeHasLayerReports(report);
 }
 
 /** True when content_json can be parsed into an object (workspace may use fallbacks). */

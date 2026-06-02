@@ -13,7 +13,55 @@ import type {
   HrProfile,
 } from "./types";
 import { deriveChartStatus } from "./chartStatus";
-import { isReadyTalentMapReport } from "./normalizeAiReport";
+import {
+  isDisplayableTalentMapReport,
+  isReadyTalentMapReport,
+} from "./normalizeAiReport";
+
+export const HR_CORE_LAYERS_SPIKE_REPORT_TYPE =
+  "hr_person_talent_map_core_layers_spike" as const;
+
+export type CoreLayersStartResponse = {
+  report_id: string;
+  report_status: string;
+  report_type: string;
+  prompt_version: string;
+  run_mode: string;
+  selected_model: string;
+  model_policy: Record<string, unknown> | null;
+};
+
+export type CoreLayersStatusResponse = {
+  report_id: string;
+  report_status: string;
+  report_type: string;
+  prompt_version: string | null;
+  model: string | null;
+  run_mode: string | null;
+  selected_model: string | null;
+  model_policy: Record<string, unknown> | null;
+  request_tuning: Record<string, unknown> | null;
+  tuning_policy: Record<string, unknown> | null;
+  usage_summary: Record<string, unknown> | null;
+  tuning_fallbacks_total: number;
+  max_output_tokens: number | null;
+  output_token_policy: Record<string, unknown> | null;
+  layer_generation_status: string | null;
+  generation_error: unknown;
+  layer_reports_count: number;
+  ready_layer_keys: string[];
+  error_layer_keys: string[];
+  skipped_layer_keys: string[];
+  layer_generation: Record<string, unknown> | null;
+  attempts_total?: number;
+};
+
+function isReadyReportForType(report: HrReport, reportType: HrReportType): boolean {
+  if (reportType === HR_CORE_LAYERS_SPIKE_REPORT_TYPE) {
+    return isDisplayableTalentMapReport(report);
+  }
+  return isReadyTalentMapReport(report);
+}
 
 export type HrReportFetchResult = {
   report: HrReport | null;
@@ -531,7 +579,7 @@ export async function fetchBestReadyCandidateReport(
   }
 
   const rows = (data ?? []) as HrReport[];
-  const ready = rows.find((row) => isReadyTalentMapReport(row)) ?? null;
+  const ready = rows.find((row) => isReadyReportForType(row, reportType)) ?? null;
   return { report: ready, error: null };
 }
 
@@ -637,6 +685,169 @@ export async function generateCandidateReport(
   });
 
   return report;
+}
+
+export async function startCandidateCoreLayersReport(
+  companyId: string,
+  candidateId: string,
+): Promise<CoreLayersStartResponse> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Требуется вход");
+
+  const resp = await fetch("/.netlify/functions/hr-talent-map-v2-core-layers-start", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      company_id: companyId,
+      candidate_id: candidateId,
+    }),
+  });
+
+  const rawBody = await resp.text();
+  let parsed: Record<string, unknown> = {};
+  if (rawBody) {
+    try {
+      parsed = JSON.parse(rawBody) as Record<string, unknown>;
+    } catch {
+      throw new Error(`Сервер вернул не-JSON ответ (${resp.status}).`);
+    }
+  }
+
+  if (!resp.ok) {
+    throw new Error(asString(parsed.error) || `Ошибка запуска послойной карты (${resp.status})`);
+  }
+
+  const reportId = asString(parsed.report_id);
+  if (!reportId) {
+    throw new Error("Пустой ответ: report_id не возвращён");
+  }
+
+  return {
+    report_id: reportId,
+    report_status: asString(parsed.report_status, "generating"),
+    report_type: asString(parsed.report_type, HR_CORE_LAYERS_SPIKE_REPORT_TYPE),
+    prompt_version: asString(parsed.prompt_version),
+    run_mode: asString(parsed.run_mode),
+    selected_model: asString(parsed.selected_model),
+    model_policy:
+      parsed.model_policy && typeof parsed.model_policy === "object"
+        ? (parsed.model_policy as Record<string, unknown>)
+        : null,
+  };
+}
+
+function asString(value: unknown, fallback = ""): string {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return fallback;
+}
+
+export async function fetchCoreLayersStatus(
+  reportId: string,
+): Promise<CoreLayersStatusResponse> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Требуется вход");
+
+  const resp = await fetch(
+    `/.netlify/functions/hr-talent-map-v2-core-layers-status?report_id=${encodeURIComponent(reportId)}`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+
+  const rawBody = await resp.text();
+  let parsed: Record<string, unknown> = {};
+  if (rawBody) {
+    try {
+      parsed = JSON.parse(rawBody) as Record<string, unknown>;
+    } catch {
+      throw new Error(`Сервер вернул не-JSON ответ (${resp.status}).`);
+    }
+  }
+
+  if (!resp.ok) {
+    throw new Error(asString(parsed.error) || `Ошибка статуса послойной карты (${resp.status})`);
+  }
+
+  const layerGeneration =
+    parsed.layer_generation && typeof parsed.layer_generation === "object"
+      ? (parsed.layer_generation as Record<string, unknown>)
+      : null;
+  const summary =
+    layerGeneration?.summary && typeof layerGeneration.summary === "object"
+      ? (layerGeneration.summary as Record<string, unknown>)
+      : null;
+
+  return {
+    report_id: asString(parsed.report_id, reportId),
+    report_status: asString(parsed.report_status),
+    report_type: asString(parsed.report_type, HR_CORE_LAYERS_SPIKE_REPORT_TYPE),
+    prompt_version: asString(parsed.prompt_version) || null,
+    model: asString(parsed.model) || null,
+    run_mode: asString(parsed.run_mode) || null,
+    selected_model: asString(parsed.selected_model) || null,
+    model_policy:
+      parsed.model_policy && typeof parsed.model_policy === "object"
+        ? (parsed.model_policy as Record<string, unknown>)
+        : null,
+    request_tuning:
+      parsed.request_tuning && typeof parsed.request_tuning === "object"
+        ? (parsed.request_tuning as Record<string, unknown>)
+        : null,
+    tuning_policy:
+      parsed.tuning_policy && typeof parsed.tuning_policy === "object"
+        ? (parsed.tuning_policy as Record<string, unknown>)
+        : null,
+    usage_summary:
+      parsed.usage_summary && typeof parsed.usage_summary === "object"
+        ? (parsed.usage_summary as Record<string, unknown>)
+        : null,
+    tuning_fallbacks_total:
+      typeof parsed.tuning_fallbacks_total === "number" ? parsed.tuning_fallbacks_total : 0,
+    max_output_tokens:
+      typeof parsed.max_output_tokens === "number" ? parsed.max_output_tokens : null,
+    output_token_policy:
+      parsed.output_token_policy && typeof parsed.output_token_policy === "object"
+        ? (parsed.output_token_policy as Record<string, unknown>)
+        : null,
+    layer_generation_status: asString(parsed.layer_generation_status) || null,
+    generation_error: parsed.generation_error ?? null,
+    layer_reports_count:
+      typeof parsed.layer_reports_count === "number" ? parsed.layer_reports_count : 0,
+    ready_layer_keys: Array.isArray(parsed.ready_layer_keys)
+      ? parsed.ready_layer_keys.map((k) => asString(k)).filter(Boolean)
+      : [],
+    error_layer_keys: Array.isArray(parsed.error_layer_keys)
+      ? parsed.error_layer_keys.map((k) => asString(k)).filter(Boolean)
+      : [],
+    skipped_layer_keys: Array.isArray(parsed.skipped_layer_keys)
+      ? parsed.skipped_layer_keys.map((k) => asString(k)).filter(Boolean)
+      : [],
+    layer_generation: layerGeneration,
+    attempts_total:
+      typeof summary?.attempts_total === "number" ? summary.attempts_total : undefined,
+  };
+}
+
+export async function fetchBestReadyCoreLayersSpikeReport(
+  companyId: string,
+  candidateId: string,
+): Promise<HrReportFetchResult> {
+  return fetchBestReadyCandidateReport(
+    companyId,
+    candidateId,
+    HR_CORE_LAYERS_SPIKE_REPORT_TYPE,
+  );
+}
+
+export async function fetchLatestCoreLayersSpikeReport(
+  companyId: string,
+  candidateId: string,
+): Promise<HrReportFetchResult> {
+  return fetchLatestHrReport(companyId, candidateId, HR_CORE_LAYERS_SPIKE_REPORT_TYPE);
 }
 
 export { isSupabaseConfigured };

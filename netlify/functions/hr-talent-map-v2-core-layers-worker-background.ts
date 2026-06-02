@@ -351,6 +351,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           layerKey,
           compactInput,
           maxOutputTokens: modelPolicy.maxOutputTokens,
+          modelPolicy,
         });
         layer = openAiResult.layer;
         httpStatus = openAiResult.httpStatus;
@@ -467,6 +468,10 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         prompt_version: SPIKE_PROMPT_VERSION,
         max_output_tokens: modelPolicy.maxOutputTokens,
         attempts: openAiAttempts,
+        usage: openAiResult.usage,
+        request_tuning: openAiResult.request_tuning,
+        request_tuning_fallback: openAiResult.request_tuning_fallback,
+        request_tuning_fallback_reason: openAiResult.request_tuning_fallback_reason,
       };
 
       layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);

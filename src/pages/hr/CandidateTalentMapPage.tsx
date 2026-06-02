@@ -1,18 +1,25 @@
-import { Component, useEffect, useMemo, useState } from "react";
+import { Component, useEffect, useMemo, useRef, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { HrSidePanel } from "../../components/hr/HrSidePanel";
 import {
+  CoreLayersStatusResponse,
   fetchBestReadyCandidateReport,
+  fetchBestReadyCoreLayersSpikeReport,
   fetchCandidate,
   fetchCandidateVacancies,
+  fetchCoreLayersStatus,
+  fetchLatestCoreLayersSpikeReport,
   fetchLatestHrReport,
   generateCandidateReport,
+  HR_CORE_LAYERS_SPIKE_REPORT_TYPE,
   reportMatchesCandidate,
+  startCandidateCoreLayersReport,
 } from "../../lib/hr/api";
 import {
   canParseReportContent,
   getReportContentRoot,
+  isDisplayableTalentMapReport,
   isReadyTalentMapReport,
   isTalentMapV12,
   logNormalizedWorkspaceContent,
@@ -26,7 +33,14 @@ import {
   sortLayersByPriority,
 } from "../../lib/hr/talentMapUiHelpers";
 import { hrPersonTalentMapV2Fixture } from "../../lib/hr/fixtures/hrPersonTalentMapV2Fixture";
-import type { HrCandidate, HrPersonTalentMapV1, HrReport, HrVacancy, TalentMapRole } from "../../lib/hr/types";
+import type {
+  HrCandidate,
+  HrPersonTalentMapV1,
+  HrReport,
+  HrReportStatus,
+  HrVacancy,
+  TalentMapRole,
+} from "../../lib/hr/types";
 import { formulaToSafeHtml } from "../../lib/safeHtml";
 import {
   buildReportLists,
@@ -71,6 +85,24 @@ const NAV_SECTIONS_V12: Array<{ id: SectionId; label: string; hint?: string }> =
   { id: "risks", label: "Риски" },
   { id: "management", label: "Управление" },
   { id: "layers", label: "Слои карты", hint: "HR-расшифровка по слоям" },
+];
+
+const CORE_LAYER_POLL_INTERVAL_MS = 2500;
+const CORE_LAYER_POLL_MAX_MS = 8 * 60 * 1000;
+
+const CORE_LAYER_UI_ORDER: Array<{ key: string; title: string }> = [
+  { key: "work_format", title: "Рабочий формат" },
+  { key: "task_entry", title: "Вход в задачи" },
+  { key: "decision_style", title: "Принятие решений" },
+  { key: "work_signature", title: "Рабочий почерк" },
+  { key: "inner_coherence", title: "Внутренняя связность" },
+  { key: "stable_zones", title: "Устойчивые зоны" },
+  { key: "sensitive_zones", title: "Чувствительные зоны" },
+  { key: "talent_links", title: "Связки талантов" },
+  { key: "point_talents", title: "Точечные таланты" },
+  { key: "amplified_themes", title: "Усиленные темы" },
+  { key: "conscious_axis", title: "Сознательная рабочая ось" },
+  { key: "background_axis", title: "Фоновая рабочая ось" },
 ];
 
 const NAV_SECTIONS_LEGACY: Array<{ id: SectionId; label: string; hint?: string }> = [
@@ -143,6 +175,16 @@ function logReportStep(step: string, report: HrReport | null) {
   console.info(`[CandidateTalentMapPage] ${step}`, snapshotReport(report));
 }
 
+function isCoreLayersSpikeReport(report: HrReport | null | undefined): boolean {
+  return report?.report_type === HR_CORE_LAYERS_SPIKE_REPORT_TYPE;
+}
+
+function isReportReadyForDisplay(report: HrReport | null | undefined): boolean {
+  if (!report) return false;
+  if (isCoreLayersSpikeReport(report)) return isDisplayableTalentMapReport(report);
+  return isReadyTalentMapReport(report);
+}
+
 function pickReadyReportForContext(
   companyId: string,
   candidateId: string,
@@ -152,12 +194,17 @@ function pickReadyReportForContext(
   for (const r of candidates) {
     if (!r) continue;
     if (!reportMatchesCandidate(r, companyId, candidateId)) {
-      if (!mismatch && isReadyTalentMapReport(r)) mismatch = r;
+      if (!mismatch && isReportReadyForDisplay(r)) mismatch = r;
       continue;
     }
-    if (isReadyTalentMapReport(r)) return { report: r, mismatch: null };
+    if (isReportReadyForDisplay(r)) return { report: r, mismatch: null };
   }
   return { report: null, mismatch };
+}
+
+function formatUsageMetric(value: unknown): string {
+  if (typeof value === "number" && Number.isFinite(value)) return String(Math.round(value));
+  return "—";
 }
 
 function buildMismatchMessage(
@@ -379,8 +426,17 @@ function TalentMapWorkspace({
   genError,
   isFixturePreview = false,
 }: WorkspaceProps) {
-  const [section, setSection] = useState<SectionId>("overview");
+  const isCoreLayersSpike = aiReport.report_type === HR_CORE_LAYERS_SPIKE_REPORT_TYPE;
+  const [section, setSection] = useState<SectionId>(
+    isCoreLayersSpike ? "layers" : "overview",
+  );
   const [detail, setDetail] = useState<DetailPanelState | null>(null);
+
+  useEffect(() => {
+    if (isCoreLayersSpike) {
+      setSection("layers");
+    }
+  }, [aiReport.id, isCoreLayersSpike]);
 
   useEffect(() => {
     if (generating) setDetail(null);
@@ -922,6 +978,30 @@ function TalentMapWorkspace({
     }
   };
 
+  const contentRoot = getReportContentRoot(rawAiContent);
+  const generationMeta =
+    contentRoot.generation_meta && typeof contentRoot.generation_meta === "object"
+      ? (contentRoot.generation_meta as Record<string, unknown>)
+      : {};
+  const layerGeneration =
+    generationMeta.layer_generation && typeof generationMeta.layer_generation === "object"
+      ? (generationMeta.layer_generation as Record<string, unknown>)
+      : null;
+  const layerSummary =
+    layerGeneration?.summary && typeof layerGeneration.summary === "object"
+      ? (layerGeneration.summary as Record<string, unknown>)
+      : null;
+  const usageSummary =
+    (layerSummary?.usage_summary as Record<string, unknown> | undefined) ??
+    (generationMeta.usage_summary as Record<string, unknown> | undefined);
+  const layerReportsCount = Array.isArray(contentRoot.layer_reports)
+    ? contentRoot.layer_reports.length
+    : sortedLayers.length;
+  const spikeReadyCount =
+    typeof layerSummary?.ready === "number" ? layerSummary.ready : layerReportsCount;
+  const spikeTotal =
+    typeof layerSummary?.total === "number" ? layerSummary.total : CORE_LAYER_UI_ORDER.length;
+
   const catalogLayerDetail =
     detail?.kind === "catalog_layer"
       ? getCatalogLayerByKey(mergedCatalog, detail.layerKey)
@@ -948,13 +1028,49 @@ function TalentMapWorkspace({
               disabled={generating}
               onClick={onRegenerate}
             >
-              {generating ? "Генерируем карту…" : "Перегенерировать карту"}
+              {generating
+                ? "Генерируем карту…"
+                : isCoreLayersSpike
+                  ? "Перегенерировать послойную карту"
+                  : "Перегенерировать карту"}
             </button>
           ) : null}
         </div>
 
         {isFixturePreview ? (
           <p className="hr-tm-dev-fixture-pill">DEV: показан content_json v2 fixture</p>
+        ) : null}
+
+        {isCoreLayersSpike ? (
+          <div className="hr-tm-spike-banner" role="status">
+            <p className="hr-tm-spike-banner-title">Послойная карта v2 · 12 atomic layers</p>
+            <p className="hr-tm-spike-banner-text">
+              Synthesis-блоки ещё не собраны, поэтому верхние блоки могут быть неполными. Основной
+              результат сейчас — раздел «Слои карты». Режим: smoke/layer · послойный preview
+              текущей архитектуры.
+            </p>
+            <div className="hr-tm-spike-meta-grid">
+              <span>run_mode: {getText(generationMeta.run_mode) || "—"}</span>
+              <span>
+                model: {getText(generationMeta.selected_model ?? aiReport.model) || "—"}
+              </span>
+              <span>prompt: {aiReport.prompt_version || "—"}</span>
+              <span>
+                готово: {spikeReadyCount}/{spikeTotal}
+              </span>
+              <span>слои в отчёте: {layerReportsCount}</span>
+              {typeof layerSummary?.attempts_total === "number" ? (
+                <span>attempts: {layerSummary.attempts_total}</span>
+              ) : null}
+              {usageSummary ? (
+                <span>
+                  tokens: in {formatUsageMetric(usageSummary.input_tokens_total)} · out{" "}
+                  {formatUsageMetric(usageSummary.output_tokens_total)} · total{" "}
+                  {formatUsageMetric(usageSummary.total_tokens_total)}
+                </span>
+              ) : null}
+            </div>
+          </div>
         ) : null}
 
         {generating && (
@@ -1435,6 +1551,119 @@ function PendingReportState({
   );
 }
 
+function CoreLayersProgressState({
+  candidate,
+  companyId,
+  candidateId,
+  status,
+  report,
+  onRetry,
+  generating,
+  error,
+}: {
+  candidate: HrCandidate;
+  companyId: string;
+  candidateId: string;
+  status: CoreLayersStatusResponse | null;
+  report: HrReport | null;
+  onRetry: () => void;
+  generating: boolean;
+  error: string | null;
+}) {
+  const layerGeneration = status?.layer_generation ?? null;
+  const layersRaw =
+    layerGeneration?.layers && typeof layerGeneration.layers === "object"
+      ? (layerGeneration.layers as Record<string, Record<string, unknown>>)
+      : {};
+  const readyKeys = new Set(status?.ready_layer_keys ?? []);
+  const errorKeys = new Set(status?.error_layer_keys ?? []);
+  const skippedKeys = new Set(status?.skipped_layer_keys ?? []);
+  const total = CORE_LAYER_UI_ORDER.length;
+  const readyCount = status?.ready_layer_keys.length ?? 0;
+  const usageSummary = status?.usage_summary;
+
+  return (
+    <div className="hr-tm-page">
+      <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
+        ← К кандидату
+      </Link>
+      <h2 className="hr-tm-title">Карта талантов</h2>
+      <p className="hr-tm-subtitle">
+        <b>{candidate.name}</b>
+      </p>
+
+      <div className="hr-card hr-tm-core-layers-progress">
+        <p className="hr-tm-empty-title">Генерируем послойную карту…</p>
+        <p className="hr-muted">Собираем 12 AI-слоёв кандидата</p>
+
+        <div className="hr-tm-spike-meta-grid" style={{ marginTop: 12 }}>
+          <span>status: {status?.report_status ?? report?.report_status ?? "generating"}</span>
+          <span>готово: {readyCount}/{total}</span>
+          <span>run_mode: {status?.run_mode ?? "—"}</span>
+          <span>model: {status?.selected_model ?? status?.model ?? "—"}</span>
+          <span>prompt: {status?.prompt_version ?? report?.prompt_version ?? "—"}</span>
+          <span>max_output_tokens: {status?.max_output_tokens ?? "—"}</span>
+          <span>attempts: {status?.attempts_total ?? "—"}</span>
+          {usageSummary ? (
+            <span>
+              tokens in {formatUsageMetric(usageSummary.input_tokens_total)} · cached{" "}
+              {formatUsageMetric(usageSummary.cached_input_tokens_total)} · out{" "}
+              {formatUsageMetric(usageSummary.output_tokens_total)}
+            </span>
+          ) : null}
+        </div>
+
+        {status?.generation_error ? (
+          <p className="hr-tm-banner hr-tm-banner--error" style={{ marginTop: 12 }}>
+            {typeof status.generation_error === "string"
+              ? status.generation_error
+              : JSON.stringify(status.generation_error)}
+          </p>
+        ) : null}
+        {error ? (
+          <p className="hr-tm-banner hr-tm-banner--error" style={{ marginTop: 12 }}>
+            {error}
+          </p>
+        ) : null}
+
+        <ul className="hr-tm-layer-status-list" aria-label="Статусы слоёв">
+          {CORE_LAYER_UI_ORDER.map(({ key, title }) => {
+            const layerState = layersRaw[key];
+            const layerStatus = getText(layerState?.status);
+            let visualStatus = layerStatus;
+            if (!visualStatus) {
+              if (readyKeys.has(key)) visualStatus = "ready";
+              else if (errorKeys.has(key)) visualStatus = "error";
+              else if (skippedKeys.has(key)) visualStatus = "skipped";
+              else visualStatus = "pending";
+            }
+            return (
+              <li
+                key={key}
+                className={`hr-tm-layer-status-row hr-tm-layer-status-row--${visualStatus}`}
+              >
+                <span className="hr-tm-layer-status-title">{title}</span>
+                <span className="hr-tm-layer-status-key">{key}</span>
+                <span className="hr-tm-layer-status-badge">{visualStatus}</span>
+              </li>
+            );
+          })}
+        </ul>
+
+        <button
+          type="button"
+          className="hr-btn hr-btn--ghost"
+          style={{ marginTop: 16 }}
+          disabled={generating}
+          onClick={onRetry}
+        >
+          {generating ? "Генерация…" : "Обновить / повторить"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function EmptyReportState({
   candidate,
   companyId,
@@ -1470,15 +1699,16 @@ function EmptyReportState({
 
       {generating ? (
         <div className="hr-card hr-tm-empty-card">
-          <p className="hr-tm-empty-title">Генерируем карту кандидата…</p>
-          <p className="hr-muted">Обычно это занимает 15–40 секунд.</p>
+          <p className="hr-tm-empty-title">Генерируем послойную карту…</p>
+          <p className="hr-muted">Собираем 12 AI-слоёв кандидата. Обычно это занимает несколько минут.</p>
         </div>
       ) : (
         <div className="hr-card hr-tm-empty-card">
           <p className="hr-tm-empty-title">Разбор ещё не создан</p>
           <p className="hr-muted" style={{ lineHeight: 1.55, maxWidth: 520 }}>
-            Сначала сгенерируйте карту кандидата, чтобы увидеть рабочий профиль, риски, вопросы
-            интервью, тестовое и план адаптации.
+            Сгенерируйте послойную карту кандидата, чтобы увидеть 12 рабочих AI-слоёв: рабочий
+            формат, вход в задачи, принятие решений, таланты, устойчивые и чувствительные зоны,
+            основные рабочие оси.
           </p>
           {error ? (
             <p className="hr-tm-banner hr-tm-banner--error" style={{ marginTop: 12 }}>
@@ -1499,7 +1729,7 @@ function EmptyReportState({
             disabled={generating}
             onClick={onGenerate}
           >
-            {error ? "Повторить генерацию" : "Сгенерировать карту"}
+            {error ? "Повторить генерацию" : "Сгенерировать послойную карту"}
           </button>
         </div>
       )}
@@ -1596,27 +1826,76 @@ export default function CandidateTalentMapPage() {
     refetchedReady: ReportSnapshot | null;
     latestAny: ReportSnapshot | null;
   } | null>(null);
+  const [coreLayersPollStatus, setCoreLayersPollStatus] =
+    useState<CoreLayersStatusResponse | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollStartedAtRef = useRef<number | null>(null);
+
+  const stopCoreLayersPolling = () => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    pollStartedAtRef.current = null;
+  };
+
+  useEffect(() => () => stopCoreLayersPolling(), []);
+
+  const resolveDisplayReport = (
+    spikeReady: HrReport | null,
+    spikeLatest: HrReport | null,
+    legacyReady: HrReport | null,
+  ): HrReport | null => {
+    if (spikeReady && isDisplayableTalentMapReport(spikeReady)) return spikeReady;
+    if (
+      spikeLatest &&
+      (spikeLatest.report_status === "generating" || spikeLatest.report_status === "error")
+    ) {
+      return spikeLatest;
+    }
+    if (legacyReady && isReadyTalentMapReport(legacyReady)) return legacyReady;
+    return null;
+  };
 
   const load = async (opts?: { silent?: boolean }) => {
     if (!companyId || !candidateId) return;
     if (!opts?.silent) setLoading(true);
-    const [c, links, readyResult] = await Promise.all([
-      fetchCandidate(companyId, candidateId),
-      fetchCandidateVacancies(companyId, candidateId),
-      fetchBestReadyCandidateReport(companyId, candidateId, "hr_person_talent_map"),
-    ]);
+    const [c, links, spikeReadyResult, spikeLatestResult, legacyReadyResult] =
+      await Promise.all([
+        fetchCandidate(companyId, candidateId),
+        fetchCandidateVacancies(companyId, candidateId),
+        fetchBestReadyCoreLayersSpikeReport(companyId, candidateId),
+        fetchLatestCoreLayersSpikeReport(companyId, candidateId),
+        fetchBestReadyCandidateReport(companyId, candidateId, "hr_person_talent_map"),
+      ]);
     setCandidate(c);
     setVacancies((links ?? []).map((l: { vacancy: HrVacancy }) => l.vacancy).filter(Boolean));
-    setAiReport(readyResult.report);
-    setFetchError(readyResult.error);
+
+    const displayReport = resolveDisplayReport(
+      spikeReadyResult.report,
+      spikeLatestResult.report,
+      legacyReadyResult.report,
+    );
+    setAiReport(displayReport);
+    setFetchError(
+      spikeReadyResult.error ?? spikeLatestResult.error ?? legacyReadyResult.error ?? null,
+    );
+
+    if (displayReport?.report_status === "generating" && displayReport.id) {
+      setGenerating(true);
+      startCoreLayersPolling(displayReport.id);
+    }
+
     if (!opts?.silent) setLoading(false);
 
     console.info("[CandidateTalentMapPage] context", {
       companyId,
       candidateId,
       candidateName: c?.name,
-      loadedReport: snapshotReport(readyResult.report),
-      fetchError: readyResult.error,
+      loadedReport: snapshotReport(displayReport),
+      spikeReady: snapshotReport(spikeReadyResult.report),
+      spikeLatest: snapshotReport(spikeLatestResult.report),
+      legacyReady: snapshotReport(legacyReadyResult.report),
     });
   };
 
@@ -1624,7 +1903,119 @@ export default function CandidateTalentMapPage() {
     load();
   }, [companyId, candidateId]);
 
-  const onGenerate = async (forceRegenerate = false) => {
+  const handleCoreLayersPollTick = async (reportId: string) => {
+    if (!companyId || !candidateId) return;
+
+    if (
+      pollStartedAtRef.current &&
+      Date.now() - pollStartedAtRef.current > CORE_LAYER_POLL_MAX_MS
+    ) {
+      stopCoreLayersPolling();
+      setGenerating(false);
+      setGenError(
+        "Генерация ещё идёт — обновите страницу через минуту или повторите запуск.",
+      );
+      return;
+    }
+
+    try {
+      const status = await fetchCoreLayersStatus(reportId);
+      setCoreLayersPollStatus(status);
+
+      if (status.report_status === "ready") {
+        stopCoreLayersPolling();
+        const readyResult = await fetchBestReadyCoreLayersSpikeReport(companyId, candidateId);
+        if (readyResult.report) {
+          setAiReport(readyResult.report);
+          setGenError(null);
+        }
+        setGenerating(false);
+        return;
+      }
+
+      if (status.report_status === "error") {
+        stopCoreLayersPolling();
+        const latestResult = await fetchLatestCoreLayersSpikeReport(companyId, candidateId);
+        if (latestResult.report) setAiReport(latestResult.report);
+        setGenError(
+          typeof status.generation_error === "string"
+            ? status.generation_error
+            : "Не удалось сгенерировать послойную карту.",
+        );
+        setGenerating(false);
+      }
+    } catch (err) {
+      console.error("[hr] core layers poll failed", err);
+    }
+  };
+
+  const startCoreLayersPolling = (reportId: string) => {
+    stopCoreLayersPolling();
+    pollStartedAtRef.current = Date.now();
+    void handleCoreLayersPollTick(reportId);
+    pollTimerRef.current = setInterval(() => {
+      void handleCoreLayersPollTick(reportId);
+    }, CORE_LAYER_POLL_INTERVAL_MS);
+  };
+
+  const onGenerateCoreLayers = async () => {
+    if (!companyId || !candidateId) return;
+    const previousReady = isReportReadyForDisplay(aiReport) ? aiReport : null;
+    setGenerating(true);
+    setGenError(null);
+    setFetchError(null);
+    setDisplayDebug(null);
+    setCoreLayersPollStatus(null);
+
+    try {
+      const started = await startCandidateCoreLayersReport(companyId, candidateId);
+      console.info("[CandidateTalentMapPage] core layers started", {
+        report_id: started.report_id,
+        report_status: started.report_status,
+        report_type: started.report_type,
+        run_mode: started.run_mode,
+        selected_model: started.selected_model,
+      });
+
+      const latestResult = await fetchLatestCoreLayersSpikeReport(companyId, candidateId);
+      const placeholderReport: HrReport = {
+        id: started.report_id,
+        company_id: companyId,
+        candidate_id: candidateId,
+        vacancy_id: null,
+        report_type: HR_CORE_LAYERS_SPIKE_REPORT_TYPE,
+        report_status: (started.report_status === "ready" ||
+        started.report_status === "error" ||
+        started.report_status === "draft"
+          ? started.report_status
+          : "generating") as HrReportStatus,
+        title: null,
+        summary: null,
+        fit_score: null,
+        content_json: null,
+        input_snapshot: {},
+        input_hash: "",
+        model: started.selected_model,
+        prompt_version: started.prompt_version,
+        generation_error: null,
+        generated_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      setAiReport(latestResult.report ?? placeholderReport);
+
+      startCoreLayersPolling(started.report_id);
+    } catch (err) {
+      console.error("[hr] core layers generate failed", err);
+      setGenError(
+        err instanceof Error ? err.message : "Не удалось запустить послойную генерацию",
+      );
+      if (previousReady) setAiReport(previousReady);
+      setGenerating(false);
+    }
+  };
+
+  const onGenerateLegacy = async (forceRegenerate = false) => {
     if (!companyId || !candidateId) return;
     const previousReady = isReadyTalentMapReport(aiReport) ? aiReport : null;
     setGenerating(true);
@@ -1724,6 +2115,14 @@ export default function CandidateTalentMapPage() {
     }
   };
 
+  const onGenerate = (forceRegenerate = false) => {
+    if (isCoreLayersSpikeReport(aiReport) || !isReadyTalentMapReport(aiReport)) {
+      void onGenerateCoreLayers();
+      return;
+    }
+    void onGenerateLegacy(forceRegenerate);
+  };
+
   if (loading || !candidate || !companyId || !candidateId) {
     return <p>Загрузка…</p>;
   }
@@ -1738,9 +2137,13 @@ export default function CandidateTalentMapPage() {
     });
   }
 
-  const hasReadyReport = isReadyTalentMapReport(aiReport);
+  const hasDisplayableReport = isReportReadyForDisplay(aiReport);
+  const isSpikeInProgress =
+    isCoreLayersSpikeReport(aiReport) &&
+    aiReport != null &&
+    (aiReport.report_status === "generating" || generating);
 
-  if (hasReadyReport && aiReport) {
+  if (hasDisplayableReport && aiReport) {
     return renderTalentMapWorkspace(candidate, companyId, candidateId, vacancies, aiReport, {
       onRegenerate: () => onGenerate(true),
       generating,
@@ -1748,7 +2151,22 @@ export default function CandidateTalentMapPage() {
     });
   }
 
-  if (aiReport && !hasReadyReport) {
+  if (isSpikeInProgress && aiReport) {
+    return (
+      <CoreLayersProgressState
+        candidate={candidate}
+        companyId={companyId}
+        candidateId={candidateId}
+        status={coreLayersPollStatus}
+        report={aiReport}
+        onRetry={() => onGenerate(false)}
+        generating={generating}
+        error={genError}
+      />
+    );
+  }
+
+  if (aiReport && !hasDisplayableReport) {
     return (
       <PendingReportState
         candidate={candidate}
@@ -1769,7 +2187,7 @@ export default function CandidateTalentMapPage() {
       candidate={candidate}
       companyId={companyId}
       candidateId={candidateId}
-      onGenerate={() => onGenerate(false)}
+      onGenerate={() => onGenerateCoreLayers()}
       generating={generating}
       error={genError}
       fetchError={fetchError}

@@ -10,10 +10,7 @@ import {
   fetchCandidateVacancies,
   fetchCoreLayersStatus,
   fetchLatestCoreLayersSpikeReport,
-  fetchLatestHrReport,
-  generateCandidateReport,
   HR_CORE_LAYERS_SPIKE_REPORT_TYPE,
-  reportMatchesCandidate,
   startCandidateCoreLayersReport,
 } from "../../lib/hr/api";
 import {
@@ -171,10 +168,6 @@ function snapshotReport(report: HrReport | null): ReportSnapshot | null {
   };
 }
 
-function logReportStep(step: string, report: HrReport | null) {
-  console.info(`[CandidateTalentMapPage] ${step}`, snapshotReport(report));
-}
-
 function isCoreLayersSpikeReport(report: HrReport | null | undefined): boolean {
   return report?.report_type === HR_CORE_LAYERS_SPIKE_REPORT_TYPE;
 }
@@ -185,57 +178,9 @@ function isReportReadyForDisplay(report: HrReport | null | undefined): boolean {
   return isReadyTalentMapReport(report);
 }
 
-function pickReadyReportForContext(
-  companyId: string,
-  candidateId: string,
-  ...candidates: Array<HrReport | null | undefined>
-): { report: HrReport | null; mismatch: HrReport | null } {
-  let mismatch: HrReport | null = null;
-  for (const r of candidates) {
-    if (!r) continue;
-    if (!reportMatchesCandidate(r, companyId, candidateId)) {
-      if (!mismatch && isReportReadyForDisplay(r)) mismatch = r;
-      continue;
-    }
-    if (isReportReadyForDisplay(r)) return { report: r, mismatch: null };
-  }
-  return { report: null, mismatch };
-}
-
 function formatUsageMetric(value: unknown): string {
   if (typeof value === "number" && Number.isFinite(value)) return String(Math.round(value));
   return "—";
-}
-
-function buildMismatchMessage(
-  companyId: string,
-  candidateId: string,
-  candidateName: string,
-  report: HrReport,
-): string {
-  return `Отчёт создан, но не совпал с текущим кандидатом. Текущий: ${candidateName} (${candidateId}). В отчёте: кандидат ${report.candidate_id}, компания ${report.company_id}. Ожидалась компания ${companyId}.`;
-}
-
-function buildGenerationFailureMessage(
-  generated: HrReport | null,
-  latestAny: HrReport | null,
-): string {
-  const r = latestAny ?? generated;
-  if (!r) {
-    return "Генерация завершилась, но готовый отчёт не найден. Попробуйте обновить страницу или повторить генерацию.";
-  }
-  if (r.report_status === "ready" && r.content_json == null) {
-    return "Разбор создан, но данные отчёта не удалось прочитать. Попробуйте перегенерировать карту.";
-  }
-  if (r.report_status === "error") {
-    return r.generation_error
-      ? `Не удалось сгенерировать карту. ${r.generation_error}`
-      : "Не удалось сгенерировать карту.";
-  }
-  if (r.report_status === "generating") {
-    return "Отчёт создан, но пока не готов к отображению. Статус: generating";
-  }
-  return `Отчёт создан, но пока не готов к отображению. Статус: ${r.report_status}`;
 }
 
 function normalizeHrCopy(text: unknown): string {
@@ -1029,10 +974,10 @@ function TalentMapWorkspace({
               onClick={onRegenerate}
             >
               {generating
-                ? "Генерируем карту…"
+                ? "Генерируем послойную карту…"
                 : isCoreLayersSpike
                   ? "Перегенерировать послойную карту"
-                  : "Перегенерировать карту"}
+                  : "Создать послойную карту v2"}
             </button>
           ) : null}
         </div>
@@ -1074,7 +1019,7 @@ function TalentMapWorkspace({
         ) : null}
 
         {generating && (
-          <p className="hr-tm-banner hr-tm-banner--info">Генерируем карту кандидата…</p>
+          <p className="hr-tm-banner hr-tm-banner--info">Генерируем послойную карту…</p>
         )}
         {genError && (
           <p className="hr-tm-banner hr-tm-banner--error">
@@ -2015,114 +1960,6 @@ export default function CandidateTalentMapPage() {
     }
   };
 
-  const onGenerateLegacy = async (forceRegenerate = false) => {
-    if (!companyId || !candidateId) return;
-    const previousReady = isReadyTalentMapReport(aiReport) ? aiReport : null;
-    setGenerating(true);
-    setGenError(null);
-    setFetchError(null);
-    setDisplayDebug(null);
-
-    try {
-      const primaryVacancyId = vacancies.length === 1 ? vacancies[0].id : null;
-      const generated = await generateCandidateReport(companyId, candidateId, {
-        vacancyId: primaryVacancyId,
-        reportType: "hr_person_talent_map",
-        forceRegenerate,
-      });
-      logReportStep("generated report", generated);
-
-      const readyResult = await fetchBestReadyCandidateReport(
-        companyId,
-        candidateId,
-        "hr_person_talent_map",
-      );
-      logReportStep("refetched ready report", readyResult.report);
-      if (readyResult.error) setFetchError(readyResult.error);
-
-      const latestAnyResult = await fetchLatestHrReport(
-        companyId,
-        candidateId,
-        "hr_person_talent_map",
-      );
-      logReportStep("latest any report", latestAnyResult.report);
-      if (latestAnyResult.error && !readyResult.error) {
-        setFetchError(latestAnyResult.error);
-      }
-
-      setDisplayDebug({
-        generated: snapshotReport(generated),
-        refetchedReady: snapshotReport(readyResult.report),
-        latestAny: snapshotReport(latestAnyResult.report),
-      });
-
-      const { report: resolved, mismatch } = pickReadyReportForContext(
-        companyId,
-        candidateId,
-        generated,
-        readyResult.report,
-        latestAnyResult.report,
-      );
-
-      if (resolved) {
-        setAiReport(resolved);
-        setGenError(null);
-        return;
-      }
-
-      if (mismatch && candidate) {
-        setGenError(buildMismatchMessage(companyId, candidateId, candidate.name, mismatch));
-      } else if (readyResult.error) {
-        setGenError(
-          `Не удалось прочитать отчёт из базы: ${readyResult.error}. Отчёт мог быть создан — попробуйте обновить страницу.`,
-        );
-      } else {
-        setGenError(buildGenerationFailureMessage(generated, latestAnyResult.report));
-      }
-
-      if (forceRegenerate && previousReady) {
-        setAiReport(previousReady);
-      } else {
-        setAiReport(latestAnyResult.report ?? generated ?? readyResult.report);
-      }
-    } catch (err) {
-      console.error("[hr] generate talent map failed", err);
-      setGenError(err instanceof Error ? err.message : "Не удалось сгенерировать карту");
-      try {
-        const readyResult = await fetchBestReadyCandidateReport(
-          companyId,
-          candidateId,
-          "hr_person_talent_map",
-        );
-        if (readyResult.error) setFetchError(readyResult.error);
-        const { report: resolved } = pickReadyReportForContext(
-          companyId,
-          candidateId,
-          readyResult.report,
-        );
-        if (resolved) {
-          setAiReport(resolved);
-        } else if (forceRegenerate && previousReady) {
-          setAiReport(previousReady);
-        } else if (readyResult.report) {
-          setAiReport(readyResult.report);
-        }
-      } catch {
-        if (forceRegenerate && previousReady) setAiReport(previousReady);
-      }
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const onGenerate = (forceRegenerate = false) => {
-    if (isCoreLayersSpikeReport(aiReport) || !isReadyTalentMapReport(aiReport)) {
-      void onGenerateCoreLayers();
-      return;
-    }
-    void onGenerateLegacy(forceRegenerate);
-  };
-
   if (loading || !candidate || !companyId || !candidateId) {
     return <p>Загрузка…</p>;
   }
@@ -2145,7 +1982,7 @@ export default function CandidateTalentMapPage() {
 
   if (hasDisplayableReport && aiReport) {
     return renderTalentMapWorkspace(candidate, companyId, candidateId, vacancies, aiReport, {
-      onRegenerate: () => onGenerate(true),
+      onRegenerate: () => void onGenerateCoreLayers(),
       generating,
       genError,
     });
@@ -2159,7 +1996,7 @@ export default function CandidateTalentMapPage() {
         candidateId={candidateId}
         status={coreLayersPollStatus}
         report={aiReport}
-        onRetry={() => onGenerate(false)}
+        onRetry={() => void onGenerateCoreLayers()}
         generating={generating}
         error={genError}
       />
@@ -2173,7 +2010,7 @@ export default function CandidateTalentMapPage() {
         companyId={companyId}
         candidateId={candidateId}
         report={aiReport}
-        onGenerate={() => onGenerate(true)}
+        onGenerate={() => void onGenerateCoreLayers()}
         generating={generating}
         error={genError}
         fetchError={fetchError}

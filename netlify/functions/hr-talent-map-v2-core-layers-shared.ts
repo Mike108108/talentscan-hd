@@ -10,10 +10,10 @@ import { V2_SCHEMA_VERSION } from "./hr-talent-map-v2-limited";
 
 export const SPIKE_REPORT_TYPE = "hr_person_talent_map_core_layers_spike";
 export const SPIKE_PROMPT_VERSION =
-  "hr_person_talent_map_v2_core_layers_background_0_3";
+  "hr_person_talent_map_v2_core_layers_background_0_4";
 export const GENERATION_MODE = "layered_background_core_layers_spike";
 export const SOURCE_ANALYSIS_PACKET_VERSION = "analysis_packet_v1_1";
-export const CONTENT_CONTRACT_VERSION = "2.0.0";
+export const CONTENT_CONTRACT_VERSION = "2.1.0";
 
 const DEFAULT_SMOKE_MAX_OUTPUT_TOKENS = 3500;
 const DEFAULT_LAYER_MAX_OUTPUT_TOKENS = 4500;
@@ -29,9 +29,9 @@ Keep technical sources only in pro/evidence.
 Do not include fit_score, role-fit, hire/no-hire, or vacancy match language.
 Follow the JSON Schema exactly.`;
 
-const DEFAULT_SMOKE_MODEL = "gpt-5.4-nano";
-const DEFAULT_LAYER_MODEL = "gpt-5.4-mini";
-const DEFAULT_REASONING_MODEL = "gpt-5.4";
+const DEFAULT_SMOKE_MODEL = "gpt-5-nano";
+const DEFAULT_LAYER_MODEL = "gpt-5-nano";
+const DEFAULT_REASONING_MODEL = "gpt-5-nano";
 
 const REASONING_EFFORT_VALUES = [
   "none",
@@ -44,11 +44,11 @@ const REASONING_EFFORT_VALUES = [
 const VERBOSITY_VALUES = ["low", "medium", "high"] as const;
 const PROMPT_CACHE_RETENTION_VALUES = ["in-memory", "24h"] as const;
 
-const DEFAULT_REASONING_EFFORT_SMOKE = "low";
-const DEFAULT_REASONING_EFFORT_LAYER = "low";
-const DEFAULT_VERBOSITY_SMOKE = "medium";
-const DEFAULT_VERBOSITY_LAYER = "medium";
-const DEFAULT_PROMPT_CACHE_KEY = "hr_talent_map_v2_core_layers_background_0_3";
+const DEFAULT_REASONING_EFFORT_SMOKE = "minimal";
+const DEFAULT_REASONING_EFFORT_LAYER = "minimal";
+const DEFAULT_VERBOSITY_SMOKE = "low";
+const DEFAULT_VERBOSITY_LAYER = "low";
+const DEFAULT_PROMPT_CACHE_KEY = "hr_talent_map_v2_core_layers_background_0_4";
 const DEFAULT_PROMPT_CACHE_RETENTION: PromptCacheRetention = "24h";
 
 const LAYER_OUTPUT_LENGTH_GUIDE = `=== Ограничения объёма (соблюдай строго, не раздувай JSON) ===
@@ -61,7 +61,29 @@ const LAYER_OUTPUT_LENGTH_GUIDE = `=== Ограничения объёма (со
 - what_to_check: 2–3 проверки
 - good_signals: 3–5 пунктов
 - warning_signals: 3–5 пунктов
-- connection_logic: 3–5 предложений`;
+- connection_logic: 3–5 предложений (кратко, без повторов)
+- matching_summary.summary: 1–2 предложения
+- matching_summary arrays: 2–4 коротких пункта каждый
+- Do not repeat source values in prose if they are already in source_values
+- pro.connection_logic must be concise; avoid duplicating evidence.source_fields in text`;
+
+const BUDGET_TARGET_USD = 0.5;
+const BUDGET_12_LAYERS_WARN_USD = 0.1;
+const BUDGET_34_LAYERS_PROJECTED_WARN_USD = 0.3;
+const DEFAULT_NANO_MODEL = "gpt-5-nano";
+const PRICING_SOURCE = "static_openai_pricing_snapshot" as const;
+
+type ModelPricingRates = {
+  input: number;
+  cached_input: number | null;
+  output: number;
+};
+
+const OPENAI_PRICING_SNAPSHOT: Record<string, ModelPricingRates> = {
+  "gpt-5-nano": { input: 0.05, cached_input: 0.005, output: 0.4 },
+  "gpt-5.4-nano": { input: 0.2, cached_input: null, output: 1.25 },
+  "gpt-5.4-mini": { input: 0.75, cached_input: 0.075, output: 4.5 },
+};
 
 export const CORE_LAYERS_ORDER = [
   "work_format",
@@ -79,6 +101,25 @@ export const CORE_LAYERS_ORDER = [
 ] as const;
 
 export type CoreLayerKey = (typeof CORE_LAYERS_ORDER)[number];
+
+/** Future role-fit: candidate layer → recommended vacancy layer keys. */
+export const CANDIDATE_LAYER_TO_VACANCY_LAYER_MAP: Record<
+  CoreLayerKey,
+  readonly string[]
+> = {
+  work_format: ["workload_model", "role_energy_pattern"],
+  task_entry: ["task_setting_style", "manager_request_style"],
+  decision_style: ["decision_context", "deadline_pressure", "autonomy_model"],
+  work_signature: ["learning_curve", "probation_format"],
+  inner_coherence: ["collaboration_model", "internal_alignment_expectations"],
+  stable_zones: ["required_stability", "responsibility_areas"],
+  sensitive_zones: ["role_stressors", "pressure_points"],
+  talent_links: ["responsibilities", "kpi", "value_creation"],
+  point_talents: ["specific_tasks", "niche_requirements"],
+  amplified_themes: ["repeated_role_themes", "key_challenges"],
+  conscious_axis: ["main_role_value", "primary_contribution"],
+  background_axis: ["hidden_role_demands", "long_term_role_pattern"],
+};
 
 export type CoreLayerGroup =
   | "energy_and_decision"
@@ -335,6 +376,27 @@ export type LayerGenerationUsageSummary = {
   total_tokens_total: number;
   cached_input_tokens_ratio: number | null;
   tuning_fallbacks_total: number;
+  cost_summary?: CostSummary;
+};
+
+export type CostSummary = {
+  model: string;
+  pricing_source: "static_openai_pricing_snapshot";
+  input_tokens: number;
+  cached_input_tokens: number;
+  uncached_input_tokens: number;
+  output_tokens: number;
+  reasoning_tokens: number;
+  total_tokens: number;
+  estimated_input_cost_usd: number | null;
+  estimated_cached_input_cost_usd: number | null;
+  estimated_output_cost_usd: number | null;
+  estimated_total_cost_usd: number | null;
+  cost_per_ready_layer_usd: number | null;
+  projected_34_layers_cost_usd: number | null;
+  budget_target_usd: number;
+  budget_warning: string | null;
+  budget_warnings: string[];
 };
 
 export type CoreLayersModelPolicy = {
@@ -1239,6 +1301,31 @@ function buildSourceValuesSchema(keys: readonly string[]) {
   };
 }
 
+const matchingSummarySchema = {
+  type: "object" as const,
+  properties: {
+    summary: { type: "string" },
+    strong_match_when_role_requires: stringArray,
+    risk_when_role_requires: stringArray,
+    needs_from_role: stringArray,
+    what_to_check_in_role_fit: stringArray,
+    candidate_layer_key: { type: "string" },
+    recommended_vacancy_layer_keys: stringArray,
+    confidence: confidenceEnum,
+  },
+  required: [
+    "summary",
+    "strong_match_when_role_requires",
+    "risk_when_role_requires",
+    "needs_from_role",
+    "what_to_check_in_role_fit",
+    "candidate_layer_key",
+    "recommended_vacancy_layer_keys",
+    "confidence",
+  ],
+  additionalProperties: false,
+};
+
 export function buildCoreLayerSchema(layerKey: CoreLayerKey) {
   const def = CORE_LAYER_DEFS[layerKey];
   return {
@@ -1323,6 +1410,7 @@ export function buildCoreLayerSchema(layerKey: CoreLayerKey) {
         ],
         additionalProperties: false,
       },
+      matching_summary: matchingSummarySchema,
     },
     required: [
       "layer_key",
@@ -1333,6 +1421,7 @@ export function buildCoreLayerSchema(layerKey: CoreLayerKey) {
       "base",
       "pro",
       "evidence",
+      "matching_summary",
     ],
     additionalProperties: false,
   } as const;
@@ -1545,6 +1634,7 @@ Base НЕ должен использовать: Дизайн, Солнце Ди
 
 export function buildLayerInstructions(layerKey: CoreLayerKey): string {
   const def = CORE_LAYER_DEFS[layerKey];
+  const vacancyLayerKeys = CANDIDATE_LAYER_TO_VACANCY_LAYER_MAP[layerKey];
   return `TalentScan HR Layer Engine — background core layers spike (Stage 4.6).
 
 Верни один JSON-объект layer_report для слоя ${def.layer_key}.
@@ -1556,7 +1646,16 @@ status=ready. Пиши только на русском языке в base-по�
 
 ${layerFocusInstructions(layerKey)}
 
-=== ЗАПРЕЩЕНО в Base (ни в одном base-поле) ===
+=== matching_summary (обязательно) ===
+Компактная смысловая упаковка слоя для будущего дешёвого сравнения с вакансией.
+Это НЕ UI-описание и НЕ role-fit. Не упоминай конкретную вакансию.
+Без процентов, без выводов о найме, без технического HD-языка.
+Коротко: summary 1–2 предложения; массивы по 2–4 пункта.
+candidate_layer_key="${def.layer_key}".
+recommended_vacancy_layer_keys: ${JSON.stringify([...vacancyLayerKeys])} (можно дополнить, но сохрани смысл).
+confidence: high | medium | low | unknown.
+
+=== ЗАПРЕЩЕНО в Base и matching_summary ===
 fit_score, score, match percentage, процент соответствия, подходит на XX%, соответствует на XX%,
 брать / не брать, нанять / не нанять, решение о найме, финальное решение по кандидату,
 оценка под вакансию, соответствие вакансии, role-fit, vacancy fit, hire decision, hire/no hire.
@@ -1584,9 +1683,10 @@ signature, not-self, Splenic, Wait for Invitation, соционика, соци�
 === Pro/evidence ===
 pro.technical_sources — массив объектов с source_key, source_label, raw_path, value_summary, confidence.
 pro.source_values — заполни только разрешённые поля из compact_input.chart (не выдумывать отсутствующие значения; null если нет данных).
-pro.connection_logic — почему эти поля дают HR-вывод.
+pro.connection_logic — почему эти поля дают HR-вывод (кратко, без повторения source_values).
 evidence.source_fields — пути к полям chart.
 what_to_check — массив объектов с hypothesis, check_method, good_signal, warning_signal (отдельные поля, не в одной строке).
+Не повторяй значения source_values длинным текстом в base или pro, если они уже в source_values.
 
 ${LAYER_OUTPUT_LENGTH_GUIDE}
 
@@ -1604,13 +1704,14 @@ export function buildLayerUserPrompt(
     : "";
   return `Сгенерируй один layer_report ${def.layer_key} по compact_input ниже.
 Используй только релевантные поля chart из compact_input.
-В Base НЕ используй: fit_score, score, match percentage, проценты соответствия вакансии,
-«подходит на XX%», «брать/не брать», «нанять/не нанять», решение о найме, оценку под вакансию.
+В Base и matching_summary НЕ используй: fit_score, score, match percentage, проценты соответствия вакансии,
+«подходит на XX%», «брать/не брать», «нанять/не нанять», решение о найме, оценку под вакансию, упоминание конкретной вакансии.
 Base must never contain technical chart terminology; technical terms belong only in pro/evidence.
 If reasoning needs a chart term, translate it into applied HR language in base.
+matching_summary must be concise and describe role-requirement fit patterns, not hire verdicts.
 
-Соблюдай ограничения объёма из instructions: пиши содержательно, подробно по смыслу,
-без воды, повторов и лишнего раздувания JSON. Не превращай слой в короткую выжимку.
+Соблюдай ограничения объёма из instructions: Base полезен, но без повторов;
+pro.connection_logic кратко; не дублируй source_values в prose.
 Без markdown. Без HTML.${retryBlock}
 
 compact_input:
@@ -1803,6 +1904,36 @@ export function scanLayerBaseFitHireLanguage(
 ): OffendingMatch[] {
   return scanPatternInBaseFields(
     collectLayerBaseTextFields(layer),
+    FIT_HIRE_FORBIDDEN_PATTERNS,
+  );
+}
+
+function collectMatchingSummaryTextFields(layer: Record<string, unknown>): BaseTextField[] {
+  const matching = asRecord(layer.matching_summary);
+  const fields: BaseTextField[] = [];
+  const summary = asString(matching.summary);
+  if (summary) fields.push({ path: "matching_summary.summary", text: summary });
+
+  for (const key of [
+    "strong_match_when_role_requires",
+    "risk_when_role_requires",
+    "needs_from_role",
+    "what_to_check_in_role_fit",
+    "recommended_vacancy_layer_keys",
+  ]) {
+    asStringArray(matching[key]).forEach((text, index) => {
+      if (text) fields.push({ path: `matching_summary.${key}[${index}]`, text });
+    });
+  }
+
+  return fields;
+}
+
+export function scanLayerMatchingSummaryFitHireLanguage(
+  layer: Record<string, unknown>,
+): OffendingMatch[] {
+  return scanPatternInBaseFields(
+    collectMatchingSummaryTextFields(layer),
     FIT_HIRE_FORBIDDEN_PATTERNS,
   );
 }
@@ -2070,6 +2201,40 @@ export function validateCoreLayer(
     };
   }
 
+  const matchingSummary = asRecord(layer.matching_summary);
+  if (!asString(matchingSummary.summary)) {
+    return {
+      ok: false,
+      stage: "validate_layer",
+      message: "matching_summary.summary is required",
+    };
+  }
+  if (asString(matchingSummary.candidate_layer_key) !== def.layer_key) {
+    return {
+      ok: false,
+      stage: "validate_layer",
+      message: `matching_summary.candidate_layer_key must be ${def.layer_key}`,
+    };
+  }
+  for (const field of [
+    "strong_match_when_role_requires",
+    "risk_when_role_requires",
+    "needs_from_role",
+    "what_to_check_in_role_fit",
+    "recommended_vacancy_layer_keys",
+  ]) {
+    const err = nonEmptyArray(matchingSummary[field], `matching_summary.${field}`);
+    if (err) return err;
+  }
+  const confidenceValues = ["high", "medium", "low", "unknown"];
+  if (!confidenceValues.includes(asString(matchingSummary.confidence))) {
+    return {
+      ok: false,
+      stage: "validate_layer",
+      message: "matching_summary.confidence must be high, medium, low, or unknown",
+    };
+  }
+
   const baseFields = collectLayerBaseTextFields(layer);
 
   for (const field of baseFields) {
@@ -2096,6 +2261,16 @@ export function validateCoreLayer(
       stage: "validate_layer",
       message: "Base contains forbidden fit/hire/percentage language",
       offending_matches: fitHireMatches,
+    };
+  }
+
+  const matchingFitHireMatches = scanLayerMatchingSummaryFitHireLanguage(layer);
+  if (matchingFitHireMatches.length > 0) {
+    return {
+      ok: false,
+      stage: "validate_layer",
+      message: "matching_summary contains forbidden fit/hire/percentage language",
+      offending_matches: matchingFitHireMatches,
     };
   }
 
@@ -2361,8 +2536,126 @@ export async function callOpenAiResponsesForLayerWithRetry(args: {
   throw new Error("openai_layer_retry_exhausted");
 }
 
+function normalizeModelForPricing(model: string): string {
+  return model.trim().toLowerCase();
+}
+
+function resolveModelPricing(model: string): ModelPricingRates | null {
+  const normalized = normalizeModelForPricing(model);
+  if (OPENAI_PRICING_SNAPSHOT[normalized]) {
+    return OPENAI_PRICING_SNAPSHOT[normalized];
+  }
+  const withoutPrefix = normalized.replace(/^openai\//, "");
+  return OPENAI_PRICING_SNAPSHOT[withoutPrefix] ?? null;
+}
+
+function roundUsd(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+export function computeCostSummary(args: {
+  model: string;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  readyLayers: number;
+}): CostSummary {
+  const uncachedInputTokens = Math.max(args.inputTokens - args.cachedInputTokens, 0);
+  const pricing = resolveModelPricing(args.model);
+  const budgetWarnings: string[] = [];
+
+  let estimatedInputCostUsd: number | null = null;
+  let estimatedCachedInputCostUsd: number | null = null;
+  let estimatedOutputCostUsd: number | null = null;
+  let estimatedTotalCostUsd: number | null = null;
+  let costPerReadyLayerUsd: number | null = null;
+  let projected34LayersCostUsd: number | null = null;
+
+  if (!pricing) {
+    budgetWarnings.push(`unknown model pricing: ${args.model}`);
+  } else {
+    estimatedInputCostUsd = roundUsd(
+      (uncachedInputTokens / 1_000_000) * pricing.input,
+    );
+    if (pricing.cached_input != null && args.cachedInputTokens > 0) {
+      estimatedCachedInputCostUsd = roundUsd(
+        (args.cachedInputTokens / 1_000_000) * pricing.cached_input,
+      );
+    } else {
+      estimatedCachedInputCostUsd = 0;
+    }
+    estimatedOutputCostUsd = roundUsd((args.outputTokens / 1_000_000) * pricing.output);
+    estimatedTotalCostUsd = roundUsd(
+      (estimatedInputCostUsd ?? 0) +
+        (estimatedCachedInputCostUsd ?? 0) +
+        (estimatedOutputCostUsd ?? 0),
+    );
+
+    if (args.readyLayers > 0) {
+      costPerReadyLayerUsd = roundUsd(estimatedTotalCostUsd / args.readyLayers);
+      projected34LayersCostUsd = roundUsd(costPerReadyLayerUsd * 34);
+    }
+  }
+
+  if (
+    estimatedTotalCostUsd != null &&
+    estimatedTotalCostUsd > BUDGET_12_LAYERS_WARN_USD
+  ) {
+    budgetWarnings.push(
+      `estimated_total_cost_usd ${estimatedTotalCostUsd} exceeds ${BUDGET_12_LAYERS_WARN_USD} for 12 layers`,
+    );
+  }
+
+  if (
+    projected34LayersCostUsd != null &&
+    projected34LayersCostUsd > BUDGET_34_LAYERS_PROJECTED_WARN_USD
+  ) {
+    budgetWarnings.push(
+      `projected_34_layers_cost_usd ${projected34LayersCostUsd} exceeds ${BUDGET_34_LAYERS_PROJECTED_WARN_USD}`,
+    );
+  }
+
+  if (
+    args.outputTokens > 0 &&
+    args.reasoningTokens > args.outputTokens * 0.3
+  ) {
+    budgetWarnings.push(
+      `reasoning_tokens ${args.reasoningTokens} exceed 30% of output_tokens ${args.outputTokens}`,
+    );
+  }
+
+  if (normalizeModelForPricing(args.model) !== DEFAULT_NANO_MODEL) {
+    budgetWarnings.push(
+      `actual model "${args.model}" is not default ${DEFAULT_NANO_MODEL}`,
+    );
+  }
+
+  return {
+    model: args.model,
+    pricing_source: PRICING_SOURCE,
+    input_tokens: args.inputTokens,
+    cached_input_tokens: args.cachedInputTokens,
+    uncached_input_tokens: uncachedInputTokens,
+    output_tokens: args.outputTokens,
+    reasoning_tokens: args.reasoningTokens,
+    total_tokens: args.totalTokens,
+    estimated_input_cost_usd: estimatedInputCostUsd,
+    estimated_cached_input_cost_usd: estimatedCachedInputCostUsd,
+    estimated_output_cost_usd: estimatedOutputCostUsd,
+    estimated_total_cost_usd: estimatedTotalCostUsd,
+    cost_per_ready_layer_usd: costPerReadyLayerUsd,
+    projected_34_layers_cost_usd: projected34LayersCostUsd,
+    budget_target_usd: BUDGET_TARGET_USD,
+    budget_warning: budgetWarnings[0] ?? null,
+    budget_warnings: budgetWarnings,
+  };
+}
+
 export function summarizeLayerGeneration(
   layers: Record<CoreLayerKey, LayerRunStatus>,
+  selectedModel?: string,
 ): LayerGenerationSummary {
   let ready = 0;
   let error = 0;
@@ -2403,6 +2696,21 @@ export function summarizeLayerGeneration(
   const cached_input_tokens_ratio =
     input_tokens_total > 0 ? cached_input_tokens_total / input_tokens_total : null;
 
+  const modelForCost =
+    selectedModel ??
+    CORE_LAYERS_ORDER.map((key) => asString(layers[key].model)).find(Boolean) ??
+    DEFAULT_NANO_MODEL;
+
+  const cost_summary = computeCostSummary({
+    model: modelForCost,
+    inputTokens: input_tokens_total,
+    cachedInputTokens: cached_input_tokens_total,
+    outputTokens: output_tokens_total,
+    reasoningTokens: reasoning_tokens_total,
+    totalTokens: total_tokens_total,
+    readyLayers: ready,
+  });
+
   return {
     total: CORE_LAYERS_ORDER.length,
     ready,
@@ -2417,6 +2725,7 @@ export function summarizeLayerGeneration(
       total_tokens_total,
       cached_input_tokens_ratio,
       tuning_fallbacks_total,
+      cost_summary,
     },
   };
 }
@@ -2453,7 +2762,7 @@ export function initLayerGenerationState(
     request_tuning: requestTuning,
     tuning_policy: tuningPolicy,
     layers_order: [...CORE_LAYERS_ORDER],
-    summary: summarizeLayerGeneration(layers),
+    summary: summarizeLayerGeneration(layers, modelPolicy.selectedModel),
     layers,
   };
 }
@@ -2527,6 +2836,26 @@ export function buildCoreLayersContentJson(args: {
   const name = asString(args.candidate.name, "Кандидат");
   const dataQuality = buildMinimalDataQuality(args.candidate, args.normalizedChart);
 
+  const layerGenerationSummary = asRecord(asRecord(args.layerGeneration).summary);
+  const usageSummary = asRecord(layerGenerationSummary.usage_summary);
+  const costSummary = asRecord(usageSummary.cost_summary);
+  const costBudgetWarnings = asStringArray(costSummary.budget_warnings);
+
+  const tuningPolicy = buildTuningPolicySnapshot(args.modelPolicy);
+  const mergedTuningWarnings = [
+    ...tuningPolicy.warnings,
+    ...costBudgetWarnings.filter((w) => !tuningPolicy.warnings.includes(w)),
+  ];
+  const tuningPolicyWithCost = {
+    ...tuningPolicy,
+    warnings: mergedTuningWarnings,
+  };
+  const modelPolicySnapshot = {
+    ...buildModelPolicySnapshot(args.modelPolicy),
+    warnings: mergedTuningWarnings,
+    tuning_policy: tuningPolicyWithCost,
+  };
+
   return {
     schema_version: V2_SCHEMA_VERSION,
     report_type: SPIKE_REPORT_TYPE,
@@ -2544,9 +2873,11 @@ export function buildCoreLayersContentJson(args: {
         smoke: args.modelPolicy.outputTokenPolicy.smoke,
         layer: args.modelPolicy.outputTokenPolicy.layer,
       },
-      model_policy: buildModelPolicySnapshot(args.modelPolicy),
+      model_policy: modelPolicySnapshot,
       request_tuning: buildRequestTuningSnapshot(args.modelPolicy),
-      tuning_policy: buildTuningPolicySnapshot(args.modelPolicy),
+      tuning_policy: tuningPolicyWithCost,
+      tuningWarnings: mergedTuningWarnings,
+      usage_summary: Object.keys(usageSummary).length > 0 ? usageSummary : undefined,
       source_analysis_packet_version: SOURCE_ANALYSIS_PACKET_VERSION,
       content_contract_version: CONTENT_CONTRACT_VERSION,
       background_spike: true,

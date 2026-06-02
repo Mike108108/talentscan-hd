@@ -183,6 +183,18 @@ function formatUsageMetric(value: unknown): string {
   return "—";
 }
 
+function formatCostUsd(value: unknown): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `$${value.toFixed(4)}`;
+}
+
+function getCostSummary(usageSummary: Record<string, unknown> | undefined) {
+  if (!usageSummary) return null;
+  const cost = usageSummary.cost_summary;
+  if (!cost || typeof cost !== "object") return null;
+  return cost as Record<string, unknown>;
+}
+
 function normalizeHrCopy(text: unknown): string {
   const t = getText(text);
   if (!t) return "";
@@ -939,6 +951,10 @@ function TalentMapWorkspace({
   const usageSummary =
     (layerSummary?.usage_summary as Record<string, unknown> | undefined) ??
     (generationMeta.usage_summary as Record<string, unknown> | undefined);
+  const costSummary = getCostSummary(usageSummary);
+  const budgetWarnings = Array.isArray(costSummary?.budget_warnings)
+    ? (costSummary.budget_warnings as unknown[]).map((w) => getText(w)).filter(Boolean)
+    : [];
   const layerReportsCount = Array.isArray(contentRoot.layer_reports)
     ? contentRoot.layer_reports.length
     : sortedLayers.length;
@@ -1013,6 +1029,15 @@ function TalentMapWorkspace({
                   {formatUsageMetric(usageSummary.output_tokens_total)} · total{" "}
                   {formatUsageMetric(usageSummary.total_tokens_total)}
                 </span>
+              ) : null}
+              {costSummary ? (
+                <span>
+                  est. cost: {formatCostUsd(costSummary.estimated_total_cost_usd)} · 34-layer
+                  proj: {formatCostUsd(costSummary.projected_34_layers_cost_usd)}
+                </span>
+              ) : null}
+              {budgetWarnings.length > 0 ? (
+                <span>warnings: {budgetWarnings.join("; ")}</span>
               ) : null}
             </div>
           </div>
@@ -1526,6 +1551,14 @@ function CoreLayersProgressState({
   const total = CORE_LAYER_UI_ORDER.length;
   const readyCount = status?.ready_layer_keys.length ?? 0;
   const usageSummary = status?.usage_summary;
+  const costSummary = getCostSummary(
+    usageSummary && typeof usageSummary === "object"
+      ? (usageSummary as Record<string, unknown>)
+      : undefined,
+  );
+  const budgetWarnings = Array.isArray(costSummary?.budget_warnings)
+    ? (costSummary.budget_warnings as unknown[]).map((w) => getText(w)).filter(Boolean)
+    : [];
 
   return (
     <div className="hr-tm-page">
@@ -1555,6 +1588,15 @@ function CoreLayersProgressState({
               {formatUsageMetric(usageSummary.cached_input_tokens_total)} · out{" "}
               {formatUsageMetric(usageSummary.output_tokens_total)}
             </span>
+          ) : null}
+          {costSummary ? (
+            <span>
+              est. cost {formatCostUsd(costSummary.estimated_total_cost_usd)} · 34-layer proj{" "}
+              {formatCostUsd(costSummary.projected_34_layers_cost_usd)}
+            </span>
+          ) : null}
+          {budgetWarnings.length > 0 ? (
+            <span>warnings: {budgetWarnings.join("; ")}</span>
           ) : null}
         </div>
 

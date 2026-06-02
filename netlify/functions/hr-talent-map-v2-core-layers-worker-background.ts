@@ -80,7 +80,10 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       layerGeneration.status = "error";
       layerGeneration.finished_at = finishedAt;
       layerGeneration.duration_ms = durationMs;
-      layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
+      layerGeneration.summary = summarizeLayerGeneration(
+        layerGeneration.layers,
+        modelPolicy?.selectedModel,
+      );
     }
 
     logSpikeStage("worker", "save_error", logCtx, {
@@ -399,7 +402,10 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           },
         };
 
-        layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
+        layerGeneration.summary = summarizeLayerGeneration(
+        layerGeneration.layers,
+        modelPolicy?.selectedModel,
+      );
 
         markRemainingLayersSkipped(layerKey, layerGeneration.layers);
 
@@ -448,7 +454,10 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           },
         };
 
-        layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
+        layerGeneration.summary = summarizeLayerGeneration(
+        layerGeneration.layers,
+        modelPolicy?.selectedModel,
+      );
 
         markRemainingLayersSkipped(layerKey, layerGeneration.layers);
 
@@ -478,7 +487,10 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           openAiCallResult?.request_tuning_fallback_reason ?? null,
       };
 
-      layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
+      layerGeneration.summary = summarizeLayerGeneration(
+        layerGeneration.layers,
+        modelPolicy?.selectedModel,
+      );
 
       layerReports.push(layer);
     }
@@ -491,7 +503,10 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
     layerGeneration.status = "ready";
     layerGeneration.finished_at = generatedAt;
     layerGeneration.duration_ms = pipelineDurationMs;
-    layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);
+    layerGeneration.summary = summarizeLayerGeneration(
+      layerGeneration.layers,
+      modelPolicy.selectedModel,
+    );
 
     const contentJson = buildCoreLayersContentJson({
       layerReports,

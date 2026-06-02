@@ -343,9 +343,12 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       let layer: Record<string, unknown>;
       let httpStatus = 0;
       let openAiAttempts = 0;
+      let openAiCallResult: Awaited<
+        ReturnType<typeof callOpenAiResponsesForLayerWithRetry>
+      > | null = null;
 
       try {
-        const openAiResult = await callOpenAiResponsesForLayerWithRetry({
+        openAiCallResult = await callOpenAiResponsesForLayerWithRetry({
           apiKey,
           model,
           layerKey,
@@ -353,9 +356,9 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           maxOutputTokens: modelPolicy.maxOutputTokens,
           modelPolicy,
         });
-        layer = openAiResult.layer;
-        httpStatus = openAiResult.httpStatus;
-        openAiAttempts = openAiResult.attempts;
+        layer = openAiCallResult.layer;
+        httpStatus = openAiCallResult.httpStatus;
+        openAiAttempts = openAiCallResult.attempts;
       } catch (err) {
         const openAiErr =
           err instanceof OpenAiLayerRetryExhaustedError
@@ -468,10 +471,11 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         prompt_version: SPIKE_PROMPT_VERSION,
         max_output_tokens: modelPolicy.maxOutputTokens,
         attempts: openAiAttempts,
-        usage: openAiResult.usage,
-        request_tuning: openAiResult.request_tuning,
-        request_tuning_fallback: openAiResult.request_tuning_fallback,
-        request_tuning_fallback_reason: openAiResult.request_tuning_fallback_reason,
+        usage: openAiCallResult?.usage,
+        request_tuning: openAiCallResult?.request_tuning,
+        request_tuning_fallback: openAiCallResult?.request_tuning_fallback,
+        request_tuning_fallback_reason:
+          openAiCallResult?.request_tuning_fallback_reason ?? null,
       };
 
       layerGeneration.summary = summarizeLayerGeneration(layerGeneration.layers);

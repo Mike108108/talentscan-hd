@@ -51,6 +51,27 @@ const DEFAULT_VERBOSITY_LAYER = "low";
 const DEFAULT_PROMPT_CACHE_KEY = "hr_talent_map_v2_core_layers_background_0_4";
 const DEFAULT_PROMPT_CACHE_RETENTION: PromptCacheRetention = "24h";
 
+const BASE_HR_LANGUAGE_ONLY_GUIDE = `=== Base / matching_summary: только HR-язык (строго) ===
+Base fields must be written in plain HR language only.
+
+Do not use technical Human Design terms in Base or matching_summary:
+Projector, Generator, Manifesting Generator, Manifestor, Reflector,
+Splenic, Sacral, Emotional, Ego, Self-Projected,
+Wait for the Invitation, Wait to Respond, Inform, lunar cycle,
+strategy, authority, profile, centers, gates, channels, Human Design, bodygraph.
+
+Technical terms are allowed only in pro/evidence/source_values/source_fields.
+
+Translate technical inputs into HR meaning:
+- Projector → адресный экспертный вклад / человек точнее включается, когда его взгляд запрошен
+- Splenic → быстрое внутреннее распознавание риска, готовности и момента
+- Wait for the Invitation → включается точнее при явном запросе, роли и контексте
+- Strategy / authority / profile → do not name them in Base; translate into work behavior
+
+matching_summary is also HR-language only.
+Do not put technical terms into matching_summary.
+matching_summary is for future role-fit comparison, not for technical explanation.`;
+
 const LAYER_OUTPUT_LENGTH_GUIDE = `=== Ограничения объёма (соблюдай строго, не раздувай JSON) ===
 - short_summary: 1–2 предложения
 - detailed_explanation: 4–6 предложений
@@ -426,6 +447,11 @@ export type LayerRunStatus = {
   prompt_version?: string;
   max_output_tokens?: number;
   attempts?: number;
+  repair_attempts?: number;
+  forbidden_terms_repair_attempted?: boolean;
+  forbidden_terms_repair_success?: boolean;
+  forbidden_terms_repair_reason?: string | null;
+  forbidden_terms_repair_terms?: string[];
   error?: string | Record<string, unknown> | null;
   usage?: OpenAiUsageSnapshot;
   request_tuning?: RequestTuningSnapshot;
@@ -716,6 +742,12 @@ export function resolveCoreLayersModelPolicy(): CoreLayersModelPolicy {
   });
   const promptCacheKeyRaw = process.env.HR_TALENT_MAP_V2_CORE_LAYER_PROMPT_CACHE_KEY?.trim();
   const promptCacheKey = promptCacheKeyRaw || DEFAULT_PROMPT_CACHE_KEY;
+  const expectedPromptCacheMarker = "background_0_4";
+  if (!promptCacheKey.includes(expectedPromptCacheMarker)) {
+    tuningWarnings.push(
+      `prompt_cache_key "${promptCacheKey}" does not match prompt_version suffix ${expectedPromptCacheMarker}; set HR_TALENT_MAP_V2_CORE_LAYER_PROMPT_CACHE_KEY=${DEFAULT_PROMPT_CACHE_KEY}`,
+    );
+  }
   const promptCacheRetention = resolveEnumEnv({
     envName: "HR_TALENT_MAP_V2_CORE_LAYER_PROMPT_CACHE_RETENTION",
     allowed: PROMPT_CACHE_RETENTION_VALUES,
@@ -1663,6 +1695,8 @@ fit_score, score, match percentage, процент соответствия, п�
 Допустимо в Base: «подходит более динамичный формат задач», «важно принимать решения без давления» —
 если речь о рабочем стиле, а не о найме или % соответствия вакансии.
 
+${BASE_HR_LANGUAGE_ONLY_GUIDE}
+
 === Base: HR-язык (строго) ===
 Base must never contain technical chart terminology.
 Technical chart terms are allowed only in pro/evidence/source_values/source_fields.
@@ -1693,6 +1727,73 @@ ${LAYER_OUTPUT_LENGTH_GUIDE}
 ui_priority=${def.ui_priority}. group=${def.group}. hr_title=«${def.hr_title}». layer_key=${def.layer_key}.`;
 }
 
+export function buildForbiddenBaseTermsRepairPrompt(args: {
+  layerKey: CoreLayerKey;
+  compactInput: Record<string, unknown>;
+  offendingMatches: OffendingMatch[];
+}): string {
+  const def = CORE_LAYER_DEFS[args.layerKey];
+  const offenderLines =
+    args.offendingMatches.length > 0
+      ? args.offendingMatches
+          .map(
+            (match) =>
+              `- term "${match.term}" at ${match.path}: "${match.snippet}"`,
+          )
+          .join("\n")
+      : "- technical terms detected in Base or matching_summary";
+
+  return `REPAIR layer_report for ${def.layer_key}.
+
+The previous output failed validation because Base or matching_summary contained forbidden technical terms:
+${offenderLines}
+
+Rewrite the layer JSON using the same schema.
+Keep pro/evidence/source_values technical sources if needed.
+But Base and matching_summary must contain only HR-language.
+Do not use the words: Projector, Splenic, Strategy, Authority, Profile, Human Design, centers, gates, channels, Generator, Manifestor, Reflector, Sacral, Wait for the Invitation, bodygraph, etc.
+Translate them into practical workplace meaning.
+
+${BASE_HR_LANGUAGE_ONLY_GUIDE}
+
+compact_input:
+${JSON.stringify(args.compactInput)}`;
+}
+
+export function isForbiddenBaseTermsValidation(
+  validation: LayerValidationResult,
+): boolean {
+  return (
+    !validation.ok &&
+    (validation.stage === "forbidden_base_terms" ||
+      validation.message === "base_forbidden_technical_terms")
+  );
+}
+
+export function mergeOpenAiUsageSnapshots(
+  primary: OpenAiUsageSnapshot,
+  secondary: OpenAiUsageSnapshot,
+): OpenAiUsageSnapshot {
+  const sumField = (
+    a: number | null,
+    b: number | null,
+  ): number | null => {
+    if (a == null && b == null) return null;
+    return (a ?? 0) + (b ?? 0);
+  };
+
+  return {
+    input_tokens: sumField(primary.input_tokens, secondary.input_tokens),
+    cached_input_tokens: sumField(
+      primary.cached_input_tokens,
+      secondary.cached_input_tokens,
+    ),
+    output_tokens: sumField(primary.output_tokens, secondary.output_tokens),
+    reasoning_tokens: sumField(primary.reasoning_tokens, secondary.reasoning_tokens),
+    total_tokens: sumField(primary.total_tokens, secondary.total_tokens),
+  };
+}
+
 export function buildLayerUserPrompt(
   layerKey: CoreLayerKey,
   compactInput: Record<string, unknown>,
@@ -1708,7 +1809,7 @@ export function buildLayerUserPrompt(
 «подходит на XX%», «брать/не брать», «нанять/не нанять», решение о найме, оценку под вакансию, упоминание конкретной вакансии.
 Base must never contain technical chart terminology; technical terms belong only in pro/evidence.
 If reasoning needs a chart term, translate it into applied HR language in base.
-matching_summary must be concise and describe role-requirement fit patterns, not hire verdicts.
+matching_summary must be concise HR-language only; no technical HD terms; describe role-requirement fit patterns, not hire verdicts.
 
 Соблюдай ограничения объёма из instructions: Base полезен, но без повторов;
 pro.connection_logic кратко; не дублируй source_values в prose.
@@ -2360,6 +2461,38 @@ async function postOpenAiResponsesLayer(args: {
   return { data, httpStatus };
 }
 
+export async function callOpenAiResponsesForLayerForbiddenTermsRepair(args: {
+  apiKey: string;
+  model: string;
+  layerKey: CoreLayerKey;
+  compactInput: Record<string, unknown>;
+  maxOutputTokens: number;
+  modelPolicy?: CoreLayersModelPolicy | null;
+  offendingMatches: OffendingMatch[];
+}): Promise<{
+  layer: Record<string, unknown>;
+  rawOutputChars: number;
+  httpStatus: number;
+  usage: OpenAiUsageSnapshot;
+  request_tuning: RequestTuningSnapshot;
+  request_tuning_fallback: boolean;
+  request_tuning_fallback_reason: string | null;
+}> {
+  return callOpenAiResponsesForLayer({
+    apiKey: args.apiKey,
+    model: args.model,
+    layerKey: args.layerKey,
+    compactInput: args.compactInput,
+    maxOutputTokens: args.maxOutputTokens,
+    modelPolicy: args.modelPolicy,
+    inputOverride: buildForbiddenBaseTermsRepairPrompt({
+      layerKey: args.layerKey,
+      compactInput: args.compactInput,
+      offendingMatches: args.offendingMatches,
+    }),
+  });
+}
+
 export async function callOpenAiResponsesForLayer(args: {
   apiKey: string;
   model: string;
@@ -2368,6 +2501,7 @@ export async function callOpenAiResponsesForLayer(args: {
   maxOutputTokens: number;
   compactRetry?: boolean;
   modelPolicy?: CoreLayersModelPolicy | null;
+  inputOverride?: string;
 }): Promise<{
   layer: Record<string, unknown>;
   rawOutputChars: number;
@@ -2378,11 +2512,13 @@ export async function callOpenAiResponsesForLayer(args: {
   request_tuning_fallback_reason: string | null;
 }> {
   const instructions = buildLayerInstructions(args.layerKey);
-  const input = buildLayerUserPrompt(
-    args.layerKey,
-    args.compactInput,
-    args.compactRetry === true,
-  );
+  const input =
+    args.inputOverride ??
+    buildLayerUserPrompt(
+      args.layerKey,
+      args.compactInput,
+      args.compactRetry === true,
+    );
   const schema = buildCoreLayerSchema(args.layerKey);
   const modelPolicy = args.modelPolicy ?? null;
 
@@ -2674,7 +2810,7 @@ export function summarizeLayerGeneration(
     if (layer.status === "ready") ready++;
     else if (layer.status === "error") error++;
     else if (layer.status === "skipped") skipped++;
-    attempts_total += layer.attempts ?? 0;
+    attempts_total += (layer.attempts ?? 0) + (layer.repair_attempts ?? 0);
     if (layer.request_tuning_fallback) tuning_fallbacks_total++;
 
     const usage = layer.usage;

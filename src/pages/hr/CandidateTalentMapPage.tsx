@@ -1631,7 +1631,10 @@ function CoreLayersProgressState({
               >
                 <span className="hr-tm-layer-status-title">{title}</span>
                 <span className="hr-tm-layer-status-key">{key}</span>
-                <span className="hr-tm-layer-status-badge">{visualStatus}</span>
+                <span className="hr-tm-layer-status-badge">
+                  {visualStatus}
+                  {layerState?.forbidden_terms_repair_success === true ? " · repaired" : null}
+                </span>
               </li>
             );
           })}

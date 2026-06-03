@@ -993,13 +993,18 @@ export async function cancelHrTalentMapCoreLayersGeneration(
     throw new Error(asString(parsed.error) || `Ошибка отмены генерации (${resp.status})`);
   }
 
+  const ok = parsed.ok === true || parsed.success === true;
+  if (!ok) {
+    throw new Error(asString(parsed.error) || "Сервер не подтвердил отмену генерации.");
+  }
+
   const cancellationRaw =
     parsed.cancellation && typeof parsed.cancellation === "object"
       ? (parsed.cancellation as Record<string, unknown>)
       : null;
 
   return {
-    success: parsed.success === true,
+    success: true,
     report_id: asString(parsed.report_id, reportId),
     report_status: asString(parsed.report_status, "generating"),
     cancel_requested: parsed.cancel_requested === true,

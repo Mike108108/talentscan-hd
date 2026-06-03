@@ -59,7 +59,9 @@ export const handler: Handler = async (
     let reportId: string;
     try {
       reportId = requireUuid(
-        asString(body.report_id) || asString(body.reportId),
+        asString(body.report_id) ||
+          asString(body.reportId) ||
+          asString(body.id),
         "report_id",
       );
     } catch (err) {
@@ -102,7 +104,9 @@ export const handler: Handler = async (
 
     const contentJson = asRecord(report.content_json);
     const generationMeta = asRecord(contentJson.generation_meta);
-    const layerGeneration = asRecord(generationMeta.layer_generation);
+    const layerGeneration = {
+      ...asRecord(generationMeta.layer_generation),
+    };
 
     layerGeneration.cancel_requested = true;
     layerGeneration.cancel_requested_at = requestedAt;
@@ -120,18 +124,23 @@ export const handler: Handler = async (
       generation_meta: {
         ...generationMeta,
         layer_generation: layerGeneration,
-        cancellation,
+        cancellation: {
+          ...asRecord(generationMeta.cancellation),
+          ...cancellation,
+        },
       },
     };
 
-    const { error: updateErr } = await db
+    const { data: updatedRow, error: updateErr } = await db
       .from("hr_reports")
       .update({
         content_json: nextContentJson,
         updated_at: requestedAt,
       })
       .eq("id", reportId)
-      .eq("report_status", "generating");
+      .eq("report_status", "generating")
+      .select("id")
+      .maybeSingle();
 
     if (updateErr) {
       console.error("[hr-talent-map-v2-core-layers-cancel] update failed", {
@@ -144,9 +153,19 @@ export const handler: Handler = async (
       });
     }
 
+    if (!updatedRow) {
+      return jsonResponse(409, {
+        error: "Не удалось обновить отчёт: генерация уже завершена или статус изменился.",
+        source: "report_status",
+        report_id: reportId,
+        report_status: report.report_status,
+      });
+    }
+
     logSpikeStage("cancel", "requested", logCtx, { requested_by: requestedBy });
 
     return jsonResponse(200, {
+      ok: true,
       success: true,
       report_id: reportId,
       report_status: "generating",

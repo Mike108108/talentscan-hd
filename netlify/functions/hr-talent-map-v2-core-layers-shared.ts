@@ -4125,6 +4125,48 @@ export function buildPartialCoreLayersContentJson(args: {
   };
 }
 
+export function preserveCancellationInContentJson(
+  existingContentJson: Record<string, unknown>,
+  nextContentJson: Record<string, unknown>,
+): Record<string, unknown> {
+  const existingMeta = asRecord(existingContentJson.generation_meta);
+  const existingCancellation = asRecord(existingMeta.cancellation);
+  const existingLayerGeneration = asRecord(existingMeta.layer_generation);
+
+  const nextMeta = asRecord(nextContentJson.generation_meta);
+  const nextLayerGeneration = asRecord(nextMeta.layer_generation);
+
+  const cancelRequested =
+    existingLayerGeneration.cancel_requested === true ||
+    existingCancellation.requested === true;
+
+  if (cancelRequested) {
+    nextLayerGeneration.cancel_requested = true;
+    nextLayerGeneration.cancel_requested_at =
+      asString(existingLayerGeneration.cancel_requested_at) ||
+      asString(existingCancellation.requested_at) ||
+      null;
+    nextLayerGeneration.cancelled_by =
+      asString(existingLayerGeneration.cancelled_by) ||
+      asString(existingCancellation.requested_by) ||
+      null;
+  }
+
+  if (Object.keys(existingCancellation).length > 0) {
+    nextMeta.cancellation = {
+      ...existingCancellation,
+      ...asRecord(nextMeta.cancellation),
+    };
+  }
+
+  nextMeta.layer_generation = nextLayerGeneration;
+
+  return {
+    ...nextContentJson,
+    generation_meta: nextMeta,
+  };
+}
+
 export async function saveLayerGenerationProgress(
   db: SupabaseClient,
   reportId: string,
@@ -4134,7 +4176,21 @@ export async function saveLayerGenerationProgress(
     cancellation?: GenerationCancellationMeta;
   },
 ): Promise<void> {
-  const contentJson = buildPartialCoreLayersContentJson(args);
+  let contentJson = buildPartialCoreLayersContentJson(args);
+
+  const { data: existingRow } = await db
+    .from("hr_reports")
+    .select("content_json")
+    .eq("id", reportId)
+    .maybeSingle();
+
+  if (existingRow?.content_json && typeof existingRow.content_json === "object") {
+    contentJson = preserveCancellationInContentJson(
+      asRecord(existingRow.content_json),
+      contentJson,
+    );
+  }
+
   const { error } = await db
     .from("hr_reports")
     .update({

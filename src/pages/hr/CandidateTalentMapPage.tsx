@@ -1,5 +1,5 @@
 import { Component, useEffect, useMemo, useRef, useState } from "react";
-import type { ErrorInfo, ReactNode } from "react";
+import type { ErrorInfo, MutableRefObject, ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { HrSidePanel } from "../../components/hr/HrSidePanel";
 import {
@@ -347,6 +347,24 @@ function resolveCoreLayersProgressReport(args: {
 function isRealGenerationReportId(reportId: string | null | undefined): boolean {
   if (!reportId || reportId === "__pending__") return false;
   return /^[0-9a-f-]{36}$/i.test(reportId);
+}
+
+function resolveActiveCoreLayersReportId(args: {
+  activeGenerationReportIdRef: MutableRefObject<string | null>;
+  activeGenerationReportId: string | null;
+  pollStatus: CoreLayersStatusResponse | null;
+  aiReport: HrReport | null;
+}): string | null {
+  const candidates = [
+    args.activeGenerationReportIdRef.current,
+    args.activeGenerationReportId,
+    args.pollStatus?.report_id,
+    args.aiReport?.id,
+  ];
+  for (const candidate of candidates) {
+    if (isRealGenerationReportId(candidate)) return candidate as string;
+  }
+  return null;
 }
 
 function formatUsageMetric(value: unknown): string {
@@ -1745,6 +1763,7 @@ function CoreLayersProgressState({
   cancelling,
   generationFlowActive,
   activeGenerationReportId,
+  cancelActionError,
   error,
 }: {
   candidate: HrCandidate;
@@ -1758,6 +1777,7 @@ function CoreLayersProgressState({
   cancelling: boolean;
   generationFlowActive: boolean;
   activeGenerationReportId: string | null;
+  cancelActionError: string | null;
   error: string | null;
 }) {
   const layerGenerationFromReport = (() => {
@@ -1884,12 +1904,48 @@ function CoreLayersProgressState({
           </>
         ) : (
           <>
-            <p className="hr-tm-empty-title">Генерируем послойную карту</p>
-            {hasLiveProgress ? (
-              <>
+            <div className="hr-tm-progress-header">
+              <div className="hr-tm-progress-header-main">
+                <p className="hr-tm-empty-title">Генерируем послойную карту</p>
+                {canCancelGeneration ? (
+                  <div className="hr-tm-progress-header-actions">
+                    <button
+                      type="button"
+                      className="hr-btn hr-btn--ghost"
+                      disabled={cancelling || cancelRequested}
+                      onClick={onCancel}
+                    >
+                      {cancelling ? "Отменяем…" : "Отменить генерацию"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              {hasLiveProgress ? (
                 <p className="hr-muted" style={{ marginTop: 4 }}>
                   Готово {readyCount} из {total}
                 </p>
+              ) : (
+                <p className="hr-muted" style={{ marginTop: 4 }}>
+                  Подготавливаем послойную генерацию…
+                </p>
+              )}
+            </div>
+
+            {cancelActionError ? (
+              <p className="hr-tm-banner hr-tm-banner--error" style={{ marginTop: 12 }}>
+                {cancelActionError}
+              </p>
+            ) : null}
+
+            {cancelRequested ? (
+              <p className="hr-tm-banner" style={{ marginTop: 12 }}>
+                Отмена запрошена. Текущий слой может завершиться, новые слои не будут
+                запускаться.
+              </p>
+            ) : null}
+
+            {hasLiveProgress ? (
+              <>
                 <div
                   className="hr-tm-overall-progress"
                   role="progressbar"
@@ -1907,23 +1963,15 @@ function CoreLayersProgressState({
                   Сейчас:{" "}
                   <b>
                     {currentLayerTitle ||
-                      (reportIsGenerating ? "Генерация слоя…" : "Подготавливаем послойную генерацию…")}
+                      (reportIsGenerating
+                        ? "Генерация слоя…"
+                        : "Подготавливаем послойную генерацию…")}
                   </b>
                 </p>
               </>
-            ) : (
-              <p className="hr-muted" style={{ marginTop: 4 }}>
-                Подготавливаем послойную генерацию…
-              </p>
-            )}
+            ) : null}
           </>
         )}
-
-        {cancelRequested ? (
-          <p className="hr-tm-banner" style={{ marginTop: 12 }}>
-            Отмена запрошена. Текущий слой может завершиться, новые слои не будут запускаться.
-          </p>
-        ) : null}
 
         <div className="hr-tm-spike-meta-grid" style={{ marginTop: 12 }}>
           <span>status: {status?.report_status ?? report?.report_status ?? "generating"}</span>
@@ -1995,16 +2043,6 @@ function CoreLayersProgressState({
         ) : null}
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
-          {canCancelGeneration ? (
-            <button
-              type="button"
-              className="hr-btn hr-btn--ghost"
-              disabled={generating || cancelling || cancelRequested}
-              onClick={onCancel}
-            >
-              {cancelling ? "Отменяем…" : "Отменить генерацию"}
-            </button>
-          ) : null}
           {isCancelled ? (
             <button
               type="button"
@@ -2195,6 +2233,7 @@ export default function CandidateTalentMapPage() {
     useState<CoreLayersStatusResponse | null>(null);
   const [activeGenerationReportId, setActiveGenerationReportId] = useState<string | null>(null);
   const [cancellingGeneration, setCancellingGeneration] = useState(false);
+  const [cancelActionError, setCancelActionError] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartedAtRef = useRef<number | null>(null);
   const activeGenerationReportIdRef = useRef<string | null>(null);
@@ -2351,20 +2390,57 @@ export default function CandidateTalentMapPage() {
   };
 
   const onCancelCoreLayersGeneration = async () => {
-    const reportId =
-      activeGenerationReportIdRef.current ??
-      activeGenerationReportId ??
-      aiReport?.id ??
-      coreLayersPollStatus?.report_id;
-    if (!reportId) return;
+    const reportId = resolveActiveCoreLayersReportId({
+      activeGenerationReportIdRef,
+      activeGenerationReportId,
+      pollStatus: coreLayersPollStatus,
+      aiReport,
+    });
+    if (!reportId) {
+      setCancelActionError("Не удалось определить активную генерацию для отмены.");
+      return;
+    }
+
     setCancellingGeneration(true);
-    setGenError(null);
+    setCancelActionError(null);
     try {
-      await cancelHrTalentMapCoreLayersGeneration(reportId);
+      const result = await cancelHrTalentMapCoreLayersGeneration(reportId);
+      setCoreLayersPollStatus((prev) => ({
+        ...(prev ?? {
+          report_id: reportId,
+          report_status: "generating",
+          report_type: HR_CORE_LAYERS_SPIKE_REPORT_TYPE,
+          prompt_version: null,
+          model: null,
+          run_mode: null,
+          selected_model: null,
+          model_policy: null,
+          request_tuning: null,
+          tuning_policy: null,
+          usage_summary: null,
+          tuning_fallbacks_total: 0,
+          max_output_tokens: null,
+          output_token_policy: null,
+          layer_generation_status: "generating",
+          generation_error: null,
+          layer_reports_count: 0,
+          ready_layer_keys: [],
+          error_layer_keys: [],
+          skipped_layer_keys: [],
+          layer_generation: null,
+        }),
+        report_id: result.report_id || reportId,
+        report_status: result.report_status || "generating",
+        cancel_requested: true,
+        cancellation: result.cancellation ?? {
+          requested: true,
+          status: "requested",
+        },
+      }));
       await handleCoreLayersPollTick(reportId);
     } catch (err) {
       console.error("[hr] core layers cancel failed", err);
-      setGenError(
+      setCancelActionError(
         err instanceof Error ? err.message : "Не удалось запросить отмену генерации",
       );
     } finally {
@@ -2381,6 +2457,7 @@ export default function CandidateTalentMapPage() {
     setDisplayDebug(null);
     setCoreLayersPollStatus(null);
     setCancellingGeneration(false);
+    setCancelActionError(null);
 
     try {
       const started = await startCandidateCoreLayersReport(companyId, candidateId);
@@ -2467,6 +2544,7 @@ export default function CandidateTalentMapPage() {
         cancelling={cancellingGeneration}
         generationFlowActive={generationFlowActive}
         activeGenerationReportId={activeGenerationReportId}
+        cancelActionError={cancelActionError}
         error={genError}
       />
     );

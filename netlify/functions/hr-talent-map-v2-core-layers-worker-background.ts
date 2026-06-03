@@ -67,6 +67,9 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
 
   const persistProgress = async (cancellation?: GenerationCancellationMeta) => {
     if (!db || !reportId || !layerGeneration) return;
+    if (await isGenerationCancelRequested(db, reportId)) {
+      layerGeneration.cancel_requested = true;
+    }
     syncLayerGenerationProgress(layerGeneration);
     await saveLayerGenerationProgress(db, reportId, {
       layerGeneration,

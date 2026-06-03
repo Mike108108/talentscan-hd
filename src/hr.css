@@ -2555,6 +2555,37 @@
   max-width: 640px;
 }
 
+.hr-tm-progress-header {
+  display: grid;
+  gap: 4px;
+}
+
+.hr-tm-progress-header-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hr-tm-progress-header-main .hr-tm-empty-title {
+  margin: 0;
+}
+
+.hr-tm-progress-header-actions {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .hr-tm-progress-header-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hr-tm-progress-header-actions .hr-btn {
+    width: 100%;
+  }
+}
+
 .hr-tm-overall-progress {
   margin-top: 10px;
   height: 8px;

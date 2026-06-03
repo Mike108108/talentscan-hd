@@ -1,3 +1,5 @@
+export type { CoreLayerProgressItem, CoreLayersStatusResponse } from "./api";
+
 export type HrProfile = {
   id: string;
   full_name: string;

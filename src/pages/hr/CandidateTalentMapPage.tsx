@@ -84,8 +84,18 @@ const NAV_SECTIONS_V12: Array<{ id: SectionId; label: string; hint?: string }> =
   { id: "layers", label: "Слои карты", hint: "HR-расшифровка по слоям" },
 ];
 
-const CORE_LAYER_POLL_INTERVAL_MS = 2500;
+const CORE_LAYER_POLL_INTERVAL_MS = 2000;
 const CORE_LAYER_POLL_MAX_MS = 8 * 60 * 1000;
+
+const CORE_LAYER_STATUS_LABEL: Record<string, string> = {
+  pending: "В очереди",
+  generating: "Генерируется",
+  repairing: "Уточняем формулировки",
+  validating: "Проверяем",
+  ready: "ready",
+  error: "Ошибка",
+  skipped: "Пропущен",
+};
 
 const CORE_LAYER_UI_ORDER: Array<{ key: string; title: string }> = [
   { key: "work_format", title: "Рабочий формат" },
@@ -1521,6 +1531,47 @@ function PendingReportState({
   );
 }
 
+function LayerRowProgressBar({
+  percent,
+  active,
+}: {
+  percent: number | null;
+  active: boolean;
+}) {
+  if (percent === 100) {
+    return (
+      <div className="hr-tm-layer-progress-bar" aria-hidden>
+        <div className="hr-tm-layer-progress-bar__fill" style={{ width: "100%" }} />
+      </div>
+    );
+  }
+  if (typeof percent === "number" && percent >= 0) {
+    return (
+      <div className="hr-tm-layer-progress-bar" aria-hidden>
+        <div
+          className="hr-tm-layer-progress-bar__fill"
+          style={{ width: `${Math.min(100, percent)}%` }}
+        />
+      </div>
+    );
+  }
+  if (active) {
+    return (
+      <div
+        className="hr-tm-layer-progress-bar hr-tm-layer-progress-bar--indeterminate"
+        aria-hidden
+      >
+        <div className="hr-tm-layer-progress-bar__fill" />
+      </div>
+    );
+  }
+  return (
+    <div className="hr-tm-layer-progress-bar" aria-hidden>
+      <div className="hr-tm-layer-progress-bar__fill" style={{ width: "0%" }} />
+    </div>
+  );
+}
+
 function CoreLayersProgressState({
   candidate,
   companyId,
@@ -1548,8 +1599,62 @@ function CoreLayersProgressState({
   const readyKeys = new Set(status?.ready_layer_keys ?? []);
   const errorKeys = new Set(status?.error_layer_keys ?? []);
   const skippedKeys = new Set(status?.skipped_layer_keys ?? []);
-  const total = CORE_LAYER_UI_ORDER.length;
-  const readyCount = status?.ready_layer_keys.length ?? 0;
+  const total = status?.total_count ?? CORE_LAYER_UI_ORDER.length;
+  const readyCount =
+    status?.ready_count ??
+    status?.ready_layer_keys.length ??
+    0;
+  const hasLiveProgress =
+    (status?.layers_progress?.length ?? 0) > 0 ||
+    (typeof layerGeneration?.ready_count === "number" &&
+      typeof layerGeneration?.total_count === "number");
+  const currentLayerTitle =
+    status?.current_layer_title ||
+    CORE_LAYER_UI_ORDER.find((l) => l.key === status?.current_layer_key)?.title ||
+    null;
+  const overallPercent =
+    total > 0 ? Math.min(100, Math.round((readyCount / total) * 100)) : 0;
+
+  const layerRows =
+    status?.layers_progress && status.layers_progress.length > 0
+      ? status.layers_progress.map((item) => ({
+          key: item.layer_key,
+          title: item.hr_title,
+          status: item.status,
+          progressPercent: item.progress_percent,
+          error: item.error,
+        }))
+      : CORE_LAYER_UI_ORDER.map(({ key, title }) => {
+          const layerState = layersRaw[key];
+          const layerStatus = getText(layerState?.status);
+          let visualStatus = layerStatus;
+          if (!visualStatus) {
+            if (readyKeys.has(key)) visualStatus = "ready";
+            else if (errorKeys.has(key)) visualStatus = "error";
+            else if (skippedKeys.has(key)) visualStatus = "skipped";
+            else visualStatus = "pending";
+          }
+          const progressPercent =
+            typeof layerState?.progress_percent === "number"
+              ? layerState.progress_percent
+              : visualStatus === "ready"
+                ? 100
+                : visualStatus === "repairing"
+                  ? 70
+                  : visualStatus === "validating"
+                    ? 85
+                    : visualStatus === "pending"
+                      ? 0
+                      : null;
+          return {
+            key,
+            title,
+            status: visualStatus,
+            progressPercent,
+            error: layerState?.error,
+          };
+        });
+
   const usageSummary = status?.usage_summary;
   const costSummary = getCostSummary(
     usageSummary && typeof usageSummary === "object"
@@ -1571,8 +1676,34 @@ function CoreLayersProgressState({
       </p>
 
       <div className="hr-card hr-tm-core-layers-progress">
-        <p className="hr-tm-empty-title">Генерируем послойную карту…</p>
-        <p className="hr-muted">Собираем 12 AI-слоёв кандидата</p>
+        <p className="hr-tm-empty-title">Генерируем послойную карту</p>
+        {hasLiveProgress ? (
+          <>
+            <p className="hr-muted" style={{ marginTop: 4 }}>
+              Готово {readyCount} из {total}
+            </p>
+            <div
+              className="hr-tm-overall-progress"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={total}
+              aria-valuenow={readyCount}
+              aria-label={`Готово ${readyCount} из ${total} слоёв`}
+            >
+              <div
+                className="hr-tm-overall-progress__fill"
+                style={{ width: `${overallPercent}%` }}
+              />
+            </div>
+            {currentLayerTitle ? (
+              <p className="hr-tm-current-layer" style={{ marginTop: 12 }}>
+                Сейчас: <b>{currentLayerTitle}</b>
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <p className="hr-muted">Собираем 12 AI-слоёв кандидата. Обычно это занимает несколько минут.</p>
+        )}
 
         <div className="hr-tm-spike-meta-grid" style={{ marginTop: 12 }}>
           <span>status: {status?.report_status ?? report?.report_status ?? "generating"}</span>
@@ -1580,8 +1711,6 @@ function CoreLayersProgressState({
           <span>run_mode: {status?.run_mode ?? "—"}</span>
           <span>model: {status?.selected_model ?? status?.model ?? "—"}</span>
           <span>prompt: {status?.prompt_version ?? report?.prompt_version ?? "—"}</span>
-          <span>max_output_tokens: {status?.max_output_tokens ?? "—"}</span>
-          <span>attempts: {status?.attempts_total ?? "—"}</span>
           {usageSummary ? (
             <span>
               tokens in {formatUsageMetric(usageSummary.input_tokens_total)} · cached{" "}
@@ -1613,32 +1742,38 @@ function CoreLayersProgressState({
           </p>
         ) : null}
 
-        <ul className="hr-tm-layer-status-list" aria-label="Статусы слоёв">
-          {CORE_LAYER_UI_ORDER.map(({ key, title }) => {
-            const layerState = layersRaw[key];
-            const layerStatus = getText(layerState?.status);
-            let visualStatus = layerStatus;
-            if (!visualStatus) {
-              if (readyKeys.has(key)) visualStatus = "ready";
-              else if (errorKeys.has(key)) visualStatus = "error";
-              else if (skippedKeys.has(key)) visualStatus = "skipped";
-              else visualStatus = "pending";
-            }
-            return (
-              <li
-                key={key}
-                className={`hr-tm-layer-status-row hr-tm-layer-status-row--${visualStatus}`}
-              >
-                <span className="hr-tm-layer-status-title">{title}</span>
-                <span className="hr-tm-layer-status-key">{key}</span>
-                <span className="hr-tm-layer-status-badge">
-                  {visualStatus}
-                  {layerState?.forbidden_terms_repair_success === true ? " · repaired" : null}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        {hasLiveProgress ? (
+          <ul className="hr-tm-layer-status-list" aria-label="Статусы слоёв">
+            {layerRows.map(({ key, title, status: layerStatus, progressPercent, error: layerError }) => {
+              const isActive =
+                layerStatus === "generating" ||
+                layerStatus === "repairing" ||
+                layerStatus === "validating";
+              const statusLabel =
+                CORE_LAYER_STATUS_LABEL[layerStatus] ?? layerStatus;
+              return (
+                <li
+                  key={key}
+                  className={`hr-tm-layer-status-row hr-tm-layer-status-row--${layerStatus}`}
+                >
+                  <div className="hr-tm-layer-status-main">
+                    <span className="hr-tm-layer-status-title">{title}</span>
+                    <LayerRowProgressBar percent={progressPercent} active={isActive} />
+                  </div>
+                  <span className="hr-tm-layer-status-badge">{statusLabel}</span>
+                  {layerStatus === "error" && layerError ? (
+                    <span className="hr-tm-layer-status-error">
+                      {typeof layerError === "string"
+                        ? layerError
+                        : getText((layerError as Record<string, unknown>).message) ||
+                          JSON.stringify(layerError)}
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
 
         <button
           type="button"

@@ -20,6 +20,8 @@ import {
   OpenAiLayerRetryExhaustedError,
   extractBearerToken,
   initLayerGenerationState,
+  saveLayerGenerationProgress,
+  syncLayerGenerationProgress,
   isForbiddenBaseTermsValidation,
   loadActiveCandidateChart,
   logSpikeStage,
@@ -60,6 +62,15 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
   let modelPolicy: CoreLayersModelPolicy | null = null;
   let layerGeneration: LayerGenerationState | null = null;
 
+  const persistProgress = async () => {
+    if (!db || !reportId || !layerGeneration) return;
+    syncLayerGenerationProgress(layerGeneration);
+    await saveLayerGenerationProgress(db, reportId, {
+      layerGeneration,
+      layerReports,
+    });
+  };
+
   const fail = async (
     stage: string,
     message: string,
@@ -99,6 +110,20 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       offending_match_count: extra?.offending_matches?.length ?? 0,
       ...extra,
     });
+
+    if (
+      db &&
+      reportId &&
+      layerGeneration &&
+      logCtx.companyId &&
+      logCtx.candidateId
+    ) {
+      syncLayerGenerationProgress(layerGeneration);
+      await saveLayerGenerationProgress(db, reportId, {
+        layerGeneration,
+        layerReports,
+      });
+    }
 
     if (db && reportId && logCtx.companyId && logCtx.candidateId) {
       const { data: company } = await db
@@ -302,6 +327,8 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       return;
     }
 
+    await persistProgress();
+
     const normalizedChart =
       chart.normalized_chart_data && typeof chart.normalized_chart_data === "object"
         ? (chart.normalized_chart_data as Record<string, unknown>)
@@ -334,10 +361,12 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       layerGeneration.layers[layerKey] = {
         status: "generating",
         started_at: layerStartedIso,
+        completed_at: null,
         model,
         prompt_version: SPIKE_PROMPT_VERSION,
         max_output_tokens: modelPolicy.maxOutputTokens,
       };
+      await persistProgress();
 
       logSpikeStage("worker", "openai_responses_start", logCtx, { model, layer_key: layerKey });
 
@@ -413,6 +442,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         );
 
         markRemainingLayersSkipped(layerKey, layerGeneration.layers);
+        await persistProgress();
 
         const resolvedHttpStatus = openAiErr?.httpStatus ?? (httpStatus || undefined);
 
@@ -436,6 +466,12 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         duration_ms: layerDurationMs,
         http_status: httpStatus,
       });
+
+      layerGeneration.layers[layerKey] = {
+        ...layerGeneration.layers[layerKey],
+        status: "validating",
+      };
+      await persistProgress();
 
       logSpikeStage("worker", "validate_layer", logCtx, { layer_key: layerKey });
 
@@ -467,6 +503,12 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           new Set((validation.offending_matches ?? []).map((match) => match.term)),
         );
         forbiddenTermsRepairReason = validation.message;
+
+        layerGeneration.layers[layerKey] = {
+          ...layerGeneration.layers[layerKey],
+          status: "repairing",
+        };
+        await persistProgress();
 
         logSpikeStage("worker", "forbidden_terms_repair_start", logCtx, {
           layer_key: layerKey,
@@ -559,6 +601,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         );
 
         markRemainingLayersSkipped(layerKey, layerGeneration.layers);
+        await persistProgress();
 
         await fail(validation.stage, validation.message, layerKey, {
           validation_result: validation.details ?? null,
@@ -574,6 +617,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         status: "ready",
         started_at: layerStartedIso,
         finished_at: layerFinishedIso,
+        completed_at: layerFinishedIso,
         duration_ms: layerDurationMs,
         model,
         prompt_version: SPIKE_PROMPT_VERSION,
@@ -597,6 +641,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       );
 
       layerReports.push(layer);
+      await persistProgress();
     }
 
     if (!layerGeneration || !modelPolicy) return;

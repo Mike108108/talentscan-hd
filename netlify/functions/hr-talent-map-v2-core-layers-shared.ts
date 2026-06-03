@@ -447,10 +447,22 @@ export type CoreLayersModelPolicy = {
   tuningWarnings: string[];
 };
 
+export type LayerRunPhase =
+  | "pending"
+  | "generating"
+  | "repairing"
+  | "validating"
+  | "ready"
+  | "error"
+  | "skipped";
+
 export type LayerRunStatus = {
-  status: "pending" | "generating" | "ready" | "error" | "skipped";
+  status: LayerRunPhase;
+  hr_title?: string;
+  progress_percent?: number | null;
   started_at?: string;
-  finished_at?: string;
+  finished_at?: string | null;
+  completed_at?: string | null;
   duration_ms?: number;
   model?: string;
   prompt_version?: string;
@@ -477,11 +489,28 @@ export type LayerGenerationSummary = {
   usage_summary?: LayerGenerationUsageSummary;
 };
 
+export type LayerProgressItem = {
+  layer_key: CoreLayerKey;
+  hr_title: string;
+  status: LayerRunPhase;
+  progress_percent: number | null;
+  started_at: string | null;
+  completed_at: string | null;
+  attempts: number;
+  repair_attempts: number;
+  error?: string | Record<string, unknown> | null;
+};
+
 export type LayerGenerationState = {
   status: "generating" | "ready" | "error";
   started_at: string;
+  updated_at?: string;
   finished_at: string | null;
   duration_ms: number;
+  ready_count?: number;
+  total_count?: number;
+  current_layer_key?: CoreLayerKey | null;
+  current_layer_title?: string | null;
   mode: "sequential";
   run_mode: CoreLayersRunMode;
   selected_model: string;
@@ -3478,19 +3507,173 @@ export function summarizeLayerGeneration(
   };
 }
 
+export function layerPhaseProgressPercent(
+  status: LayerRunPhase,
+): number | null {
+  switch (status) {
+    case "pending":
+      return 0;
+    case "generating":
+      return null;
+    case "repairing":
+      return 70;
+    case "validating":
+      return 85;
+    case "ready":
+      return 100;
+    case "error":
+    case "skipped":
+    default:
+      return null;
+  }
+}
+
+export function syncLayerGenerationProgress(
+  layerGeneration: LayerGenerationState,
+): void {
+  const updatedAt = new Date().toISOString();
+  layerGeneration.updated_at = updatedAt;
+
+  let readyCount = 0;
+  let currentLayerKey: CoreLayerKey | null = null;
+  let currentLayerTitle: string | null = null;
+
+  for (const key of CORE_LAYERS_ORDER) {
+    const layer = layerGeneration.layers[key];
+    const def = CORE_LAYER_DEFS[key];
+    layer.hr_title = def.hr_title;
+    layer.progress_percent = layerPhaseProgressPercent(layer.status);
+
+    if (layer.status === "ready") {
+      readyCount++;
+      continue;
+    }
+
+    if (
+      !currentLayerKey &&
+      (layer.status === "generating" ||
+        layer.status === "repairing" ||
+        layer.status === "validating")
+    ) {
+      currentLayerKey = key;
+      currentLayerTitle = def.hr_title;
+    }
+  }
+
+  layerGeneration.ready_count = readyCount;
+  layerGeneration.total_count = CORE_LAYERS_ORDER.length;
+  layerGeneration.current_layer_key = currentLayerKey;
+  layerGeneration.current_layer_title = currentLayerTitle;
+}
+
+export function buildLayersProgressArray(
+  layerGeneration: Record<string, unknown>,
+): LayerProgressItem[] {
+  const layers = asRecord(layerGeneration.layers);
+  return CORE_LAYERS_ORDER.map((key) => {
+    const layer = asRecord(layers[key]);
+    const def = CORE_LAYER_DEFS[key];
+    const statusRaw = asString(layer.status);
+    const knownPhases: LayerRunPhase[] = [
+      "pending",
+      "generating",
+      "repairing",
+      "validating",
+      "ready",
+      "error",
+      "skipped",
+    ];
+    const status = knownPhases.includes(statusRaw as LayerRunPhase)
+      ? (statusRaw as LayerRunPhase)
+      : "pending";
+    const progressPercent =
+      typeof layer.progress_percent === "number"
+        ? layer.progress_percent
+        : layerPhaseProgressPercent(status);
+
+    return {
+      layer_key: key,
+      hr_title: asString(layer.hr_title) || def.hr_title,
+      status,
+      progress_percent: progressPercent,
+      started_at: asString(layer.started_at) || null,
+      completed_at:
+        asString(layer.completed_at) ||
+        asString(layer.finished_at) ||
+        null,
+      attempts: typeof layer.attempts === "number" ? layer.attempts : 0,
+      repair_attempts:
+        typeof layer.repair_attempts === "number" ? layer.repair_attempts : 0,
+      error: layer.error ?? null,
+    };
+  });
+}
+
+export function buildPartialCoreLayersContentJson(args: {
+  layerGeneration: LayerGenerationState;
+  layerReports: Record<string, unknown>[];
+}): Record<string, unknown> {
+  syncLayerGenerationProgress(args.layerGeneration);
+  return {
+    schema_version: V2_SCHEMA_VERSION,
+    report_type: SPIKE_REPORT_TYPE,
+    layer_reports: args.layerReports,
+    generation_meta: {
+      prompt_version: SPIKE_PROMPT_VERSION,
+      schema_version: V2_SCHEMA_VERSION,
+      generation_mode: GENERATION_MODE,
+      content_contract_version: CONTENT_CONTRACT_VERSION,
+      source_analysis_packet_version: SOURCE_ANALYSIS_PACKET_VERSION,
+      layer_generation: args.layerGeneration,
+    },
+  };
+}
+
+export async function saveLayerGenerationProgress(
+  db: SupabaseClient,
+  reportId: string,
+  args: {
+    layerGeneration: LayerGenerationState;
+    layerReports: Record<string, unknown>[];
+  },
+): Promise<void> {
+  const contentJson = buildPartialCoreLayersContentJson(args);
+  const { error } = await db
+    .from("hr_reports")
+    .update({
+      content_json: contentJson,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", reportId)
+    .eq("report_status", "generating");
+
+  if (error) {
+    console.error("[hr-talent-map-v2-core-layers] save progress failed", {
+      report_id: reportId,
+      message: error.message,
+    });
+  }
+}
+
 export function initLayerGenerationState(
   pipelineStartedAt: string,
   modelPolicy: CoreLayersModelPolicy,
 ): LayerGenerationState {
   const layers = {} as Record<CoreLayerKey, LayerRunStatus>;
   for (const key of CORE_LAYERS_ORDER) {
-    layers[key] = { status: "pending" };
+    const def = CORE_LAYER_DEFS[key];
+    layers[key] = {
+      status: "pending",
+      hr_title: def.hr_title,
+      progress_percent: 0,
+    };
   }
   const tuningPolicy = buildTuningPolicySnapshot(modelPolicy);
   const requestTuning = buildRequestTuningSnapshot(modelPolicy);
-  return {
+  const state: LayerGenerationState = {
     status: "generating",
     started_at: pipelineStartedAt,
+    updated_at: pipelineStartedAt,
     finished_at: null,
     duration_ms: 0,
     mode: "sequential",
@@ -3513,6 +3696,8 @@ export function initLayerGenerationState(
     summary: summarizeLayerGeneration(layers, modelPolicy.selectedModel),
     layers,
   };
+  syncLayerGenerationProgress(state);
+  return state;
 }
 
 export function extractLayerKeysByStatus(

@@ -100,6 +100,13 @@ const CORE_LAYER_UI_ORDER: Array<{ key: string; title: string }> = [
   { key: "amplified_themes", title: "Усиленные темы" },
   { key: "conscious_axis", title: "Сознательная рабочая ось" },
   { key: "background_axis", title: "Фоновая рабочая ось" },
+  { key: "communication_style", title: "Коммуникация и объяснение" },
+  { key: "values_and_culture", title: "Ценности и культура" },
+  { key: "growth_tension", title: "Напряжение и рост" },
+  { key: "responsibility_and_rules", title: "Ответственность и правила" },
+  { key: "work_environment_and_recovery", title: "Среда и восстановление" },
+  { key: "motivation_and_focus", title: "Мотивация и фокус" },
+  { key: "team_contribution_type", title: "Тип вклада в команду" },
 ];
 
 const NAV_SECTIONS_LEGACY: Array<{ id: SectionId; label: string; hint?: string }> = [
@@ -1572,7 +1579,7 @@ function CoreLayersProgressState({
 
       <div className="hr-card hr-tm-core-layers-progress">
         <p className="hr-tm-empty-title">Генерируем послойную карту…</p>
-        <p className="hr-muted">Собираем 12 AI-слоёв кандидата</p>
+        <p className="hr-muted">Собираем 19 AI-слоёв кандидата</p>
 
         <div className="hr-tm-spike-meta-grid" style={{ marginTop: 12 }}>
           <span>status: {status?.report_status ?? report?.report_status ?? "generating"}</span>
@@ -1690,15 +1697,14 @@ function EmptyReportState({
       {generating ? (
         <div className="hr-card hr-tm-empty-card">
           <p className="hr-tm-empty-title">Генерируем послойную карту…</p>
-          <p className="hr-muted">Собираем 12 AI-слоёв кандидата. Обычно это занимает несколько минут.</p>
+          <p className="hr-muted">Собираем 19 AI-слоёв кандидата. Обычно это занимает несколько минут.</p>
         </div>
       ) : (
         <div className="hr-card hr-tm-empty-card">
           <p className="hr-tm-empty-title">Разбор ещё не создан</p>
           <p className="hr-muted" style={{ lineHeight: 1.55, maxWidth: 520 }}>
-            Сгенерируйте послойную карту кандидата, чтобы увидеть 12 рабочих AI-слоёв: рабочий
-            формат, вход в задачи, принятие решений, таланты, устойчивые и чувствительные зоны,
-            основные рабочие оси.
+            Сгенерируйте послойную карту кандидата, чтобы увидеть 19 рабочих AI-слоёв: базовые
+            source-слои, merged product-слои и 7 продуктовых narrative-слоёв v0.2.
           </p>
           {error ? (
             <p className="hr-tm-banner hr-tm-banner--error" style={{ marginTop: 12 }}>

@@ -346,6 +346,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         candidate: candidate as Record<string, unknown>,
         company: company as Record<string, unknown>,
         normalizedChart,
+        priorLayerReports: layerReports,
       });
 
       let layer: Record<string, unknown>;

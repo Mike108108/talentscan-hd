@@ -273,9 +273,21 @@ export type HrLayerCatalogEntry = {
   status: HrLayerCatalogStatus;
 };
 
+import type {
+  ProductLayerReportV02,
+  ProductLayerSourceRuntimePartV02,
+  ProductLayerStatusV02,
+} from "./productLayerAdapter";
+
 export type MergedLayerCatalogItem = HrLayerCatalogEntry & {
   aiLayer?: HrTalentMapLayer;
   v2LayerReport?: HrTalentMapLayerReportV2;
+  /** v0.2 product layer from runtime adapter (when v2 layer_reports present). */
+  productLayerV02?: ProductLayerReportV02;
+  /** Runtime source parts for merged product layers (sidebar detail). */
+  sourceRuntimeParts?: ProductLayerSourceRuntimePartV02[];
+  /** Raw adapter status before UI normalization. */
+  adapterStatus?: ProductLayerStatusV02;
   resolvedStatus: HrLayerCatalogStatus;
   relatedEvidence: HrTalentMapEvidenceItem[];
 };

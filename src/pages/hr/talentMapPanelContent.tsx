@@ -4,6 +4,7 @@ import type {
   HrLayerCatalogGroup,
   HrLayerCatalogStatus,
   HrPersonTalentMapV1,
+  HrTalentMapDataQualityV2,
   HrTalentMapEvidenceItem,
   HrTalentMapHypothesisCard,
   HrTalentMapLayer,
@@ -15,7 +16,18 @@ import type {
   MergedLayerCatalogItem,
   TalentMapRole,
 } from "../../lib/hr/types";
-import { getV2LayerReports } from "../../lib/hr/talentMapContentV2";
+import { PRODUCT_LAYER_CATALOG_V0_2 } from "../../lib/hr/talentMapLayerArchitecture";
+import type {
+  ProductLayerReportV02,
+  ProductLayerSourceRuntimePartV02,
+  ProductLayerStatusV02,
+} from "../../lib/hr/productLayerAdapter";
+import {
+  adaptRuntimeLayersToProductLayersV02,
+  getV2LayerReports,
+  hasTalentMapV2LayerReports,
+  parseTalentMapV2,
+} from "../../lib/hr/talentMapContentV2";
 import {
   coerceRolesList,
   coerceStringArray,
@@ -68,6 +80,156 @@ export const LAYER_STATUS_LABELS: Record<HrLayerCatalogStatus, string> = {
   partial: "Частично",
   planned: "Запланировано",
 };
+
+/** UI group for v0.2 product layers when adapter does not supply group. */
+const PRODUCT_LAYER_UI_GROUPS: Record<string, HrLayerCatalogGroup> = {
+  work_format: "energy_and_decision",
+  task_entry: "energy_and_decision",
+  decision_style: "energy_and_decision",
+  work_signature: "core",
+  inner_coherence: "core",
+  main_work_axis: "core",
+  stability_and_risk_zones: "centers_channels_gates",
+  talent_links: "centers_channels_gates",
+  point_talents_and_strong_themes: "centers_channels_gates",
+  communication_style: "planetary_activations",
+  values_and_culture: "planetary_activations",
+  growth_tension: "planetary_activations",
+  responsibility_and_rules: "planetary_activations",
+  work_environment_and_recovery: "environment_and_motivation",
+  motivation_and_focus: "environment_and_motivation",
+  team_contribution_type: "environment_and_motivation",
+  data_quality: "evidence_and_quality",
+};
+
+function mapProductLayerStatusToCatalogStatus(
+  status: ProductLayerStatusV02,
+): HrLayerCatalogStatus {
+  if (status === "ready" || status === "system") return "ready";
+  if (status === "partial" || status === "error") return "partial";
+  return "planned";
+}
+
+function runtimePartToV2Report(
+  part: ProductLayerSourceRuntimePartV02,
+): HrTalentMapLayerReportV2 {
+  return {
+    layer_key: part.runtime_layer_key,
+    hr_title: part.hr_title,
+    group: part.group,
+    ui_priority: part.ui_priority,
+    base: part.base,
+    pro: part.pro,
+    evidence: part.evidence,
+  };
+}
+
+function productLayerToV2Report(
+  productLayer: ProductLayerReportV02,
+): HrTalentMapLayerReportV2 | undefined {
+  if (productLayer.source_runtime_parts.length === 1) {
+    return runtimePartToV2Report(productLayer.source_runtime_parts[0]);
+  }
+  if (productLayer.base || productLayer.pro || productLayer.evidence) {
+    return {
+      layer_key: productLayer.product_layer_key,
+      hr_title: productLayer.hr_title,
+      group: productLayer.group,
+      ui_priority: productLayer.ui_priority,
+      base: productLayer.base,
+      pro: productLayer.pro,
+      evidence: productLayer.evidence,
+    };
+  }
+  return undefined;
+}
+
+function isProductLayerMerged(productLayer: ProductLayerReportV02): boolean {
+  return (
+    productLayer.adapter_meta?.mapping_mode === "merged" ||
+    productLayer.source_runtime_parts.length > 1
+  );
+}
+
+function isProductLayerPlannedOnly(productLayer: ProductLayerReportV02): boolean {
+  if (productLayer.product_layer_key === "data_quality") return false;
+  if (productLayer.status === "ready" || productLayer.status === "system") return false;
+  if (productLayer.status === "partial" || productLayer.status === "error") return false;
+  return (
+    productLayer.source_runtime_parts.length === 0 &&
+    !productLayer.base &&
+    !productLayer.pro &&
+    !productLayer.evidence
+  );
+}
+
+function v2ReportHasBaseContent(report: HrTalentMapLayerReportV2): boolean {
+  const base = asRec(report.base);
+  return [
+    base.short_summary,
+    base.detailed_explanation,
+    base.how_it_appears_at_work,
+    base.where_useful,
+    base.risks,
+    base.management_tips,
+    base.what_to_check,
+    base.good_signals,
+    base.warning_signals,
+  ].some((v) => fieldHasText(v));
+}
+
+function buildProductLayerCatalog(
+  layerMap: HrTalentMapLayer[],
+  evidenceMap: HrTalentMapEvidenceItem[],
+  rawContent: unknown,
+): MergedLayerCatalogItem[] {
+  const v2Root = parseTalentMapV2(rawContent);
+  const adapterResult = adaptRuntimeLayersToProductLayersV02(v2Root ?? rawContent);
+
+  return adapterResult.product_layers.map((productLayer) => {
+    const layerKey = productLayer.product_layer_key;
+    const catalogDef = PRODUCT_LAYER_CATALOG_V0_2[layerKey];
+    const group =
+      productLayer.group ??
+      PRODUCT_LAYER_UI_GROUPS[layerKey] ??
+      "core";
+    const resolvedStatus = mapProductLayerStatusToCatalogStatus(productLayer.status);
+    const sourceRuntimeKeys = productLayer.source_runtime_layer_keys;
+    const isMerged = isProductLayerMerged(productLayer);
+    const v2LayerReport =
+      !isMerged && !isProductLayerPlannedOnly(productLayer)
+        ? productLayerToV2Report(productLayer)
+        : productLayer.product_layer_key === "data_quality" &&
+            productLayer.adapter_meta?.data_quality_from === "layer_report"
+          ? productLayerToV2Report(productLayer)
+          : undefined;
+
+    const relatedEvidence = evidenceMap.filter((item) =>
+      item.source_layer_ids?.some(
+        (id) =>
+          id === layerKey ||
+          sourceRuntimeKeys.includes(id) ||
+          id === v2LayerReport?.layer_key,
+      ),
+    );
+
+    return {
+      layer_key: layerKey,
+      hr_title: productLayer.hr_title || catalogDef.hr_title,
+      group,
+      short_description: catalogDef.meaning,
+      technical_sources: [...catalogDef.source_signals],
+      status: resolvedStatus,
+      aiLayer: findAiLayerForKey(layerKey, layerMap),
+      v2LayerReport,
+      productLayerV02: productLayer,
+      sourceRuntimeParts: productLayer.source_runtime_parts,
+      adapterStatus: productLayer.status,
+      resolvedStatus,
+      relatedEvidence,
+    };
+  });
+}
 
 const LAYER_CATALOG_FALLBACK: HrLayerCatalogEntry[] = [
   {
@@ -415,6 +577,10 @@ export function buildMergedLayerCatalog(
   evidenceMap: HrTalentMapEvidenceItem[],
   rawContent?: unknown,
 ): MergedLayerCatalogItem[] {
+  if (rawContent != null && hasTalentMapV2LayerReports(rawContent)) {
+    return buildProductLayerCatalog(layerMap, evidenceMap, rawContent);
+  }
+
   const v2ByKey = new Map(
     getV2LayerReports(rawContent).map((report) => [report.layer_key, report]),
   );
@@ -880,15 +1046,171 @@ function V2LayerProPanel({ report }: { report: HrTalentMapLayerReportV2 }) {
   );
 }
 
+function ProductLayerPlannedPanel({ productLayer }: { productLayer: ProductLayerReportV02 }) {
+  const meaning = PRODUCT_LAYER_CATALOG_V0_2[productLayer.product_layer_key]?.meaning;
+  return (
+    <>
+      <p className="hr-tm-panel-lead hr-muted">
+        Этот продуктовый слой запланирован для следующего этапа генерации.
+      </p>
+      {meaning ? <MetaRow label="Смысл слоя" value={meaning} /> : null}
+    </>
+  );
+}
+
+function ProductMergedLayerBasePanel({
+  parts,
+}: {
+  parts: ProductLayerSourceRuntimePartV02[];
+}) {
+  const sections = parts.filter((part) => v2ReportHasBaseContent(runtimePartToV2Report(part)));
+  if (sections.length === 0) {
+    return <p className="hr-tm-panel-lead hr-muted">{BASE_PLACEHOLDER}</p>;
+  }
+  return (
+    <>
+      {sections.map((part) => (
+        <SectionBlock key={part.runtime_layer_key} title={part.hr_title}>
+          <V2LayerBasePanel report={runtimePartToV2Report(part)} />
+        </SectionBlock>
+      ))}
+    </>
+  );
+}
+
+function runtimePartHasProContent(part: ProductLayerSourceRuntimePartV02): boolean {
+  const report = runtimePartToV2Report(part);
+  const pro = asRec(report.pro);
+  const evidence = asRec(report.evidence);
+  return (
+    toSafeArray(pro.technical_sources).some(
+      (src) => fieldHasText(src) || (src != null && typeof src === "object"),
+    ) ||
+    formatSourceValues(pro.source_values).length > 0 ||
+    fieldHasText(pro.connection_logic) ||
+    fieldHasText(pro.human_check) ||
+    fieldHasText(evidence.limitations) ||
+    toSafeArray(pro.limitations).some((l) => fieldHasText(l)) ||
+    toSafeArray(evidence.source_fields).some((f) => fieldHasText(f)) ||
+    toSafeArray(evidence.source_layer_keys).some((k) => fieldHasText(k)) ||
+    toSafeArray(evidence.source_chart_elements).length > 0 ||
+    toSafeArray(evidence.warnings).some((w) => fieldHasText(w))
+  );
+}
+
+function ProductMergedLayerProPanel({
+  parts,
+}: {
+  parts: ProductLayerSourceRuntimePartV02[];
+}) {
+  const sections = parts.filter((part) => runtimePartHasProContent(part));
+  if (sections.length === 0) {
+    return <p className="hr-tm-panel-lead hr-muted">{PRO_PLACEHOLDER}</p>;
+  }
+  return (
+    <>
+      {sections.map((part) => (
+        <SectionBlock key={part.runtime_layer_key} title={part.hr_title}>
+          <V2LayerProPanel report={runtimePartToV2Report(part)} />
+        </SectionBlock>
+      ))}
+    </>
+  );
+}
+
+function ProductLayerDataQualityBasePanel({ item }: { item: MergedLayerCatalogItem }) {
+  const productLayer = item.productLayerV02;
+  if (item.v2LayerReport && v2ReportHasBaseContent(item.v2LayerReport)) {
+    return <V2LayerBasePanel report={item.v2LayerReport} />;
+  }
+
+  const payload = productLayer?.adapter_meta?.data_quality_payload as
+    | HrTalentMapDataQualityV2
+    | undefined;
+  if (!payload) {
+    return (
+      <>
+        <p className="hr-tm-panel-lead hr-muted">
+          Данные о качестве входных данных пока не сформированы.
+        </p>
+        {PRODUCT_LAYER_CATALOG_V0_2.data_quality.meaning ? (
+          <MetaRow label="Смысл слоя" value={PRODUCT_LAYER_CATALOG_V0_2.data_quality.meaning} />
+        ) : null}
+      </>
+    );
+  }
+
+  const metrics = Array.isArray(payload.metrics) ? payload.metrics : [];
+  return (
+    <>
+      <MetaRow label="Полнота данных" value={payload.completeness} />
+      <MetaRow label="Уверенность" value={payload.confidence} />
+      <MetaRow label="Примечания" value={payload.notes} />
+      {metrics.length > 0 ? (
+        <SectionBlock title="Метрики">
+          <ul className="hr-tm-bullets">
+            {metrics.map((metric, i) => (
+              <li key={`dq-metric-${i}-${metric.label ?? i}`}>
+                {[metric.label, metric.value, metric.hint].filter(Boolean).join(" · ")}
+              </li>
+            ))}
+          </ul>
+        </SectionBlock>
+      ) : null}
+      {payload.missing?.length ? (
+        <SectionBlock title="Чего не хватает">
+          <BulletList items={payload.missing} />
+        </SectionBlock>
+      ) : null}
+      {payload.add_data?.length ? (
+        <SectionBlock title="Что добавить">
+          <BulletList items={payload.add_data} />
+        </SectionBlock>
+      ) : null}
+    </>
+  );
+}
+
+function ProductLayerDataQualityProPanel({ item }: { item: MergedLayerCatalogItem }) {
+  if (item.v2LayerReport) {
+    return <V2LayerProPanel report={item.v2LayerReport} />;
+  }
+  const payload = item.productLayerV02?.adapter_meta?.data_quality_payload as
+    | HrTalentMapDataQualityV2
+    | undefined;
+  if (!payload) {
+    return <p className="hr-tm-panel-lead hr-muted">{PRO_PLACEHOLDER}</p>;
+  }
+  return (
+    <>
+      {payload.reduces_accuracy ? (
+        <MetaRow label="Что снижает точность" value={payload.reduces_accuracy} />
+      ) : null}
+      {payload.suggested_data?.length ? (
+        <SectionBlock title="Рекомендуемые данные">
+          <BulletList items={payload.suggested_data} />
+        </SectionBlock>
+      ) : null}
+    </>
+  );
+}
+
 export function CatalogLayerDetailPanel({ item }: { item: MergedLayerCatalogItem }) {
   const [mode, setMode] = useState<"base" | "pro">("base");
+  const productLayer = item.productLayerV02;
 
   useEffect(() => {
     setMode("base");
   }, [item.layer_key]);
 
+  const isMergedProduct = productLayer ? isProductLayerMerged(productLayer) : false;
+  const isPlannedProduct = productLayer ? isProductLayerPlannedOnly(productLayer) : false;
+  const isDataQualityProduct = productLayer?.product_layer_key === "data_quality";
+
   const hasProEvidence =
     Boolean(item.v2LayerReport?.pro || item.v2LayerReport?.evidence) ||
+    (productLayer?.source_runtime_parts.some((part) => runtimePartHasProContent(part)) ??
+      false) ||
     item.relatedEvidence.length > 0 ||
     item.technical_sources.length > 0;
 
@@ -916,12 +1238,59 @@ export function CatalogLayerDetailPanel({ item }: { item: MergedLayerCatalogItem
       </div>
 
       {mode === "base" ? (
-        item.v2LayerReport ? (
+        productLayer ? (
+          isDataQualityProduct ? (
+            <ProductLayerDataQualityBasePanel item={item} />
+          ) : isPlannedProduct ? (
+            <ProductLayerPlannedPanel productLayer={productLayer} />
+          ) : isMergedProduct ? (
+            <ProductMergedLayerBasePanel parts={productLayer.source_runtime_parts} />
+          ) : item.v2LayerReport ? (
+            <V2LayerBasePanel report={item.v2LayerReport} />
+          ) : (
+            <p className="hr-tm-panel-lead hr-muted">{BASE_PLACEHOLDER}</p>
+          )
+        ) : item.v2LayerReport ? (
           <V2LayerBasePanel report={item.v2LayerReport} />
         ) : item.aiLayer ? (
           <LayerDetailPanel layer={item.aiLayer} />
         ) : (
           <p className="hr-tm-panel-lead hr-muted">{BASE_PLACEHOLDER}</p>
+        )
+      ) : productLayer ? (
+        isDataQualityProduct ? (
+          <ProductLayerDataQualityProPanel item={item} />
+        ) : isPlannedProduct ? (
+          <p className="hr-tm-panel-lead hr-muted">{PRO_PLACEHOLDER}</p>
+        ) : isMergedProduct ? (
+          <ProductMergedLayerProPanel parts={productLayer.source_runtime_parts} />
+        ) : item.v2LayerReport ? (
+          <V2LayerProPanel report={item.v2LayerReport} />
+        ) : hasProEvidence ? (
+          <>
+            {item.technical_sources.length > 0 ? (
+              <SectionBlock title="Технические источники">
+                <ul className="hr-tm-bullets">
+                  {item.technical_sources.map((src, i) => (
+                    <li key={`catalog-tech-${i}-${renderTextValue(src).slice(0, 24)}`}>
+                      {renderTextValue(src)}
+                    </li>
+                  ))}
+                </ul>
+              </SectionBlock>
+            ) : null}
+            {item.relatedEvidence.map((evidence) => (
+              <SectionBlock key={evidence.id} title="Основание">
+                <p className="hr-tm-panel-lead">{evidence.conclusion}</p>
+                {evidence.based_on?.length ? (
+                  <MetaRow label="На основе" value={evidence.based_on.join(", ")} />
+                ) : null}
+                <ConfidenceBadge confidence={evidence.confidence} />
+              </SectionBlock>
+            ))}
+          </>
+        ) : (
+          <p className="hr-tm-panel-lead hr-muted">{PRO_PLACEHOLDER}</p>
         )
       ) : item.v2LayerReport ? (
         <V2LayerProPanel report={item.v2LayerReport} />
@@ -966,9 +1335,13 @@ export function LayerCatalogList({
   onSelectLayer: (layerKey: string) => void;
 }) {
   const groups = groupLayerCatalog(catalog);
+  const usesProductCatalogV02 = catalog.some((item) => item.productLayerV02 != null);
 
   return (
     <div className="hr-layer-catalog">
+      {usesProductCatalogV02 ? (
+        <p className="hr-tm-product-catalog-badge">Product layers v0.2</p>
+      ) : null}
       {groups.map((group) => (
         <div key={group.group} className="hr-layer-catalog-group">
           <h4 className="hr-layer-catalog-group-title">{group.label}</h4>

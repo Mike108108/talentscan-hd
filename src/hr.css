@@ -2371,6 +2371,12 @@
   gap: 1.25rem;
 }
 
+.hr-tm-product-catalog-badge {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--hr-muted, #64748b);
+}
+
 .hr-layer-catalog-group-title {
   margin: 0 0 8px;
   font-size: 0.82rem;

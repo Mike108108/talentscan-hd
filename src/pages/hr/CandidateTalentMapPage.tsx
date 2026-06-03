@@ -1004,11 +1004,11 @@ function TalentMapWorkspace({
 
         {isCoreLayersSpike ? (
           <div className="hr-tm-spike-banner" role="status">
-            <p className="hr-tm-spike-banner-title">Послойная карта v2 · 12 atomic layers</p>
+            <p className="hr-tm-spike-banner-title">Product layers v0.2 · послойная карта</p>
             <p className="hr-tm-spike-banner-text">
               Synthesis-блоки ещё не собраны, поэтому верхние блоки могут быть неполными. Основной
-              результат сейчас — раздел «Слои карты». Режим: smoke/layer · послойный preview
-              текущей архитектуры.
+              результат сейчас — раздел «Слои карты» с продуктовой структурой v0.2 (16 слоёв +
+              надёжность данных).
             </p>
             <div className="hr-tm-spike-meta-grid">
               <span>run_mode: {getText(generationMeta.run_mode) || "—"}</span>

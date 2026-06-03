@@ -155,3 +155,9 @@ export function parseTalentMapV2(root: unknown): HrPersonTalentMapV2 | null {
   if (!parsed || !isTalentMapV2(parsed)) return null;
   return parsed;
 }
+
+/** Whether content_json is v2-shaped and has a layer_reports array (may be empty). */
+export function hasTalentMapV2LayerReports(root: unknown): boolean {
+  const parsed = parseTalentMapV2(root);
+  return parsed != null && Array.isArray(parsed.layer_reports);
+}

@@ -1,5 +1,5 @@
 /**
- * Shared helpers for HR Talent Map v2 core layers background spike (Stage 4.6).
+ * Shared helpers for HR Talent Map v2 core layers pipeline (Stage 4.6.2).
  * Architecturally separate from Stage 4.2 work_format spike.
  */
 
@@ -549,24 +549,10 @@ export function resolveOpenAiApiKey(): string {
   return apiKey;
 }
 
-function resolvePositiveIntEnv(name: string, fallback: number): number {
-  const raw = process.env[name]?.trim();
-  if (!raw) return fallback;
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return parsed;
-}
-
 export function resolveCoreLayerMaxOutputTokens(runMode: CoreLayersRunMode): number {
-  const smoke = resolvePositiveIntEnv(
-    "HR_TALENT_MAP_V2_CORE_LAYER_MAX_OUTPUT_TOKENS_SMOKE",
-    DEFAULT_SMOKE_MAX_OUTPUT_TOKENS,
-  );
-  const layer = resolvePositiveIntEnv(
-    "HR_TALENT_MAP_V2_CORE_LAYER_MAX_OUTPUT_TOKENS_LAYER",
-    DEFAULT_LAYER_MAX_OUTPUT_TOKENS,
-  );
-  return runMode === "layer" ? layer : smoke;
+  return runMode === "layer"
+    ? DEFAULT_LAYER_MAX_OUTPUT_TOKENS
+    : DEFAULT_SMOKE_MAX_OUTPUT_TOKENS;
 }
 
 export function resolveCoreLayerOutputTokenPolicy(): {
@@ -574,33 +560,9 @@ export function resolveCoreLayerOutputTokenPolicy(): {
   layer: number;
 } {
   return {
-    smoke: resolvePositiveIntEnv(
-      "HR_TALENT_MAP_V2_CORE_LAYER_MAX_OUTPUT_TOKENS_SMOKE",
-      DEFAULT_SMOKE_MAX_OUTPUT_TOKENS,
-    ),
-    layer: resolvePositiveIntEnv(
-      "HR_TALENT_MAP_V2_CORE_LAYER_MAX_OUTPUT_TOKENS_LAYER",
-      DEFAULT_LAYER_MAX_OUTPUT_TOKENS,
-    ),
+    smoke: DEFAULT_SMOKE_MAX_OUTPUT_TOKENS,
+    layer: DEFAULT_LAYER_MAX_OUTPUT_TOKENS,
   };
-}
-
-function resolveEnumEnv<T extends string>(args: {
-  envName: string;
-  allowed: readonly T[];
-  fallback: T;
-  warnings: string[];
-  label: string;
-}): T {
-  const raw = process.env[args.envName]?.trim();
-  if (!raw) return args.fallback;
-  if ((args.allowed as readonly string[]).includes(raw)) {
-    return raw as T;
-  }
-  args.warnings.push(
-    `${args.label}: invalid env ${args.envName}="${raw}", using default "${args.fallback}"`,
-  );
-  return args.fallback;
 }
 
 function buildRequestTuningSnapshot(
@@ -704,66 +666,15 @@ export function isTuningRelatedOpenAiError(
   return TUNING_ERROR_PATTERNS.some((pattern) => pattern.test(message));
 }
 
+/** Stage 4.6.2 code defaults — not overridden by Netlify env. */
 export function resolveCoreLayersModelPolicy(): CoreLayersModelPolicy {
-  const rawRunMode =
-    process.env.HR_TALENT_MAP_V2_CORE_LAYERS_RUN_MODE?.trim() || "smoke";
-
-  if (rawRunMode !== "smoke" && rawRunMode !== "layer") {
-    throw new SpikeConfigError(
-      `Invalid HR_TALENT_MAP_V2_CORE_LAYERS_RUN_MODE: "${rawRunMode}". Allowed: smoke, layer.`,
-    );
-  }
-
-  const runMode = rawRunMode as CoreLayersRunMode;
-  const smokeModel =
-    process.env.OPENAI_RESPONSES_MODEL_SMOKE?.trim() || DEFAULT_SMOKE_MODEL;
-  const layerModel =
-    process.env.OPENAI_RESPONSES_MODEL_LAYER?.trim() || DEFAULT_LAYER_MODEL;
-  const reasoningModel =
-    process.env.OPENAI_RESPONSES_MODEL_REASONING?.trim() ||
-    DEFAULT_REASONING_MODEL;
-  const selectedModel = runMode === "smoke" ? smokeModel : layerModel;
+  const runMode: CoreLayersRunMode = "smoke";
+  const smokeModel = DEFAULT_SMOKE_MODEL;
+  const layerModel = DEFAULT_LAYER_MODEL;
+  const reasoningModel = DEFAULT_REASONING_MODEL;
+  const selectedModel = smokeModel;
   const outputTokenPolicy = resolveCoreLayerOutputTokenPolicy();
-  const maxOutputTokens =
-    runMode === "layer" ? outputTokenPolicy.layer : outputTokenPolicy.smoke;
-
-  const tuningWarnings: string[] = [];
-  const reasoningEffort = resolveEnumEnv({
-    envName:
-      runMode === "smoke"
-        ? "HR_TALENT_MAP_V2_CORE_LAYER_REASONING_EFFORT_SMOKE"
-        : "HR_TALENT_MAP_V2_CORE_LAYER_REASONING_EFFORT_LAYER",
-    allowed: REASONING_EFFORT_VALUES,
-    fallback:
-      runMode === "smoke" ? DEFAULT_REASONING_EFFORT_SMOKE : DEFAULT_REASONING_EFFORT_LAYER,
-    warnings: tuningWarnings,
-    label: "reasoning_effort",
-  });
-  const verbosity = resolveEnumEnv({
-    envName:
-      runMode === "smoke"
-        ? "HR_TALENT_MAP_V2_CORE_LAYER_VERBOSITY_SMOKE"
-        : "HR_TALENT_MAP_V2_CORE_LAYER_VERBOSITY_LAYER",
-    allowed: VERBOSITY_VALUES,
-    fallback: runMode === "smoke" ? DEFAULT_VERBOSITY_SMOKE : DEFAULT_VERBOSITY_LAYER,
-    warnings: tuningWarnings,
-    label: "verbosity",
-  });
-  const promptCacheKeyRaw = process.env.HR_TALENT_MAP_V2_CORE_LAYER_PROMPT_CACHE_KEY?.trim();
-  const promptCacheKey = promptCacheKeyRaw || DEFAULT_PROMPT_CACHE_KEY;
-  const expectedPromptCacheMarker = "background_0_4";
-  if (!promptCacheKey.includes(expectedPromptCacheMarker)) {
-    tuningWarnings.push(
-      `prompt_cache_key "${promptCacheKey}" does not match prompt_version suffix ${expectedPromptCacheMarker}; set HR_TALENT_MAP_V2_CORE_LAYER_PROMPT_CACHE_KEY=${DEFAULT_PROMPT_CACHE_KEY}`,
-    );
-  }
-  const promptCacheRetention = resolveEnumEnv({
-    envName: "HR_TALENT_MAP_V2_CORE_LAYER_PROMPT_CACHE_RETENTION",
-    allowed: PROMPT_CACHE_RETENTION_VALUES,
-    fallback: DEFAULT_PROMPT_CACHE_RETENTION,
-    warnings: tuningWarnings,
-    label: "prompt_cache_retention",
-  });
+  const maxOutputTokens = outputTokenPolicy.smoke;
 
   return {
     runMode,
@@ -773,18 +684,12 @@ export function resolveCoreLayersModelPolicy(): CoreLayersModelPolicy {
     reasoningModel,
     maxOutputTokens,
     outputTokenPolicy,
-    reasoningEffort,
-    verbosity,
-    promptCacheKey,
-    promptCacheRetention,
-    tuningWarnings,
+    reasoningEffort: DEFAULT_REASONING_EFFORT_SMOKE,
+    verbosity: DEFAULT_VERBOSITY_SMOKE,
+    promptCacheKey: DEFAULT_PROMPT_CACHE_KEY,
+    promptCacheRetention: DEFAULT_PROMPT_CACHE_RETENTION,
+    tuningWarnings: [],
   };
-}
-
-export function isSpikeEnabled(): boolean {
-  return (
-    process.env.HR_TALENT_MAP_V2_BACKGROUND_CORE_LAYERS_ENABLED === "true"
-  );
 }
 
 export function createSupabaseClient(url: string, anonKey: string, token?: string) {

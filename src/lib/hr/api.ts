@@ -31,6 +31,18 @@ export type CoreLayersStartResponse = {
   model_policy: Record<string, unknown> | null;
 };
 
+export type CoreLayerProgressItem = {
+  layer_key: string;
+  hr_title: string;
+  status: string;
+  progress_percent: number | null;
+  started_at: string | null;
+  completed_at: string | null;
+  attempts: number;
+  repair_attempts: number;
+  error?: unknown;
+};
+
 export type CoreLayersStatusResponse = {
   report_id: string;
   report_status: string;
@@ -53,6 +65,11 @@ export type CoreLayersStatusResponse = {
   error_layer_keys: string[];
   skipped_layer_keys: string[];
   layer_generation: Record<string, unknown> | null;
+  ready_count: number;
+  total_count: number;
+  current_layer_key: string | null;
+  current_layer_title: string | null;
+  layers_progress: CoreLayerProgressItem[];
   attempts_total?: number;
 };
 
@@ -772,10 +789,37 @@ export async function fetchCoreLayersStatus(
     throw new Error(asString(parsed.error) || `Ошибка статуса послойной карты (${resp.status})`);
   }
 
+  const readyLayerKeys = Array.isArray(parsed.ready_layer_keys)
+    ? parsed.ready_layer_keys.map((k) => asString(k)).filter(Boolean)
+    : [];
+
   const layerGeneration =
     parsed.layer_generation && typeof parsed.layer_generation === "object"
       ? (parsed.layer_generation as Record<string, unknown>)
       : null;
+  const layersProgressRaw = Array.isArray(parsed.layers_progress)
+    ? parsed.layers_progress
+    : [];
+  const layersProgress: CoreLayerProgressItem[] = [];
+  for (const item of layersProgressRaw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const layerKey = asString(row.layer_key);
+    if (!layerKey) continue;
+    layersProgress.push({
+      layer_key: layerKey,
+      hr_title: asString(row.hr_title),
+      status: asString(row.status) || "pending",
+      progress_percent:
+        typeof row.progress_percent === "number" ? row.progress_percent : null,
+      started_at: asString(row.started_at) || null,
+      completed_at: asString(row.completed_at) || null,
+      attempts: typeof row.attempts === "number" ? row.attempts : 0,
+      repair_attempts:
+        typeof row.repair_attempts === "number" ? row.repair_attempts : 0,
+      error: row.error ?? null,
+    });
+  }
   const summary =
     layerGeneration?.summary && typeof layerGeneration.summary === "object"
       ? (layerGeneration.summary as Record<string, unknown>)
@@ -817,9 +861,7 @@ export async function fetchCoreLayersStatus(
     generation_error: parsed.generation_error ?? null,
     layer_reports_count:
       typeof parsed.layer_reports_count === "number" ? parsed.layer_reports_count : 0,
-    ready_layer_keys: Array.isArray(parsed.ready_layer_keys)
-      ? parsed.ready_layer_keys.map((k) => asString(k)).filter(Boolean)
-      : [],
+    ready_layer_keys: readyLayerKeys,
     error_layer_keys: Array.isArray(parsed.error_layer_keys)
       ? parsed.error_layer_keys.map((k) => asString(k)).filter(Boolean)
       : [],
@@ -827,6 +869,27 @@ export async function fetchCoreLayersStatus(
       ? parsed.skipped_layer_keys.map((k) => asString(k)).filter(Boolean)
       : [],
     layer_generation: layerGeneration,
+    ready_count:
+      typeof parsed.ready_count === "number"
+        ? parsed.ready_count
+        : typeof layerGeneration?.ready_count === "number"
+          ? (layerGeneration.ready_count as number)
+          : readyLayerKeys.length,
+    total_count:
+      typeof parsed.total_count === "number"
+        ? parsed.total_count
+        : typeof layerGeneration?.total_count === "number"
+          ? (layerGeneration.total_count as number)
+          : 12,
+    current_layer_key:
+      asString(parsed.current_layer_key) ||
+      asString(layerGeneration?.current_layer_key) ||
+      null,
+    current_layer_title:
+      asString(parsed.current_layer_title) ||
+      asString(layerGeneration?.current_layer_title) ||
+      null,
+    layers_progress: layersProgress,
     attempts_total:
       typeof summary?.attempts_total === "number" ? summary.attempts_total : undefined,
   };

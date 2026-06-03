@@ -11,6 +11,7 @@ import {
   asStringArray,
   createSupabaseClient,
   extractBearerToken,
+  buildLayersProgressArray,
   extractLayerKeysByStatus,
   extractReadyLayerKeys,
   jsonResponse,
@@ -187,6 +188,32 @@ export const handler: Handler = async (
         : 0;
 
     const readyLayerKeys = extractReadyLayerKeys(layerReports);
+    const layersProgress = hasLayerGeneration
+      ? buildLayersProgressArray(layerGeneration)
+      : [];
+    const readyCount =
+      typeof layerGeneration.ready_count === "number"
+        ? layerGeneration.ready_count
+        : readyLayerKeys.length;
+    const totalCount =
+      typeof layerGeneration.total_count === "number"
+        ? layerGeneration.total_count
+        : layersProgress.length > 0
+          ? layersProgress.length
+          : 12;
+    const currentLayerKey =
+      asString(layerGeneration.current_layer_key) ||
+      layersProgress.find(
+        (item) =>
+          item.status === "generating" ||
+          item.status === "repairing" ||
+          item.status === "validating",
+      )?.layer_key ||
+      null;
+    const currentLayerTitle =
+      asString(layerGeneration.current_layer_title) ||
+      layersProgress.find((item) => item.layer_key === currentLayerKey)?.hr_title ||
+      null;
     const errorLayerKeys = hasLayerGeneration
       ? extractLayerKeysByStatus(layerGeneration, "error")
       : [];
@@ -236,6 +263,11 @@ export const handler: Handler = async (
       error_layer_keys: errorLayerKeys,
       skipped_layer_keys: skippedLayerKeys,
       layer_generation: hasLayerGeneration ? layerGeneration : null,
+      ready_count: readyCount,
+      total_count: totalCount,
+      current_layer_key: currentLayerKey,
+      current_layer_title: currentLayerTitle,
+      layers_progress: layersProgress,
       qa: {
         fit_score_is_null: report.fit_score == null,
         vacancy_id_is_null: report.vacancy_id == null,

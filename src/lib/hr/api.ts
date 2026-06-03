@@ -779,7 +779,8 @@ export async function startCandidateCoreLayersReport(
     throw new Error(asString(parsed.error) || `Ошибка запуска послойной карты (${resp.status})`);
   }
 
-  const reportId = asString(parsed.report_id);
+  const reportId =
+    asString(parsed.report_id) || asString(parsed.reportId) || asString(parsed.id);
   if (!reportId) {
     throw new Error("Пустой ответ: report_id не возвращён");
   }

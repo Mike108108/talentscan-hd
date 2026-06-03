@@ -10,6 +10,21 @@ export {
   PRODUCT_LAYER_CATALOG_VERSION,
 } from "./talentMapLayerArchitecture";
 
+/** Product layer adapter v0.2 (runtime 12 → product 16 + system). */
+export {
+  PRODUCT_LAYER_ADAPTER_VERSION,
+  adaptRuntimeLayersToProductLayersV02,
+} from "./productLayerAdapter";
+
+export type {
+  ProductLayerAdapterInputV02,
+  ProductLayerAdapterMetaV02,
+  ProductLayerAdapterResultV02,
+  ProductLayerReportV02,
+  ProductLayerSourceRuntimePartV02,
+  ProductLayerStatusV02,
+} from "./productLayerAdapter";
+
 const V2_SCHEMA = "hr_person_talent_map_v2";
 const REPORT_TYPE = "hr_person_talent_map";
 const CORE_LAYERS_SPIKE_REPORT_TYPE = "hr_person_talent_map_core_layers_spike";

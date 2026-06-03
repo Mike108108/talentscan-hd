@@ -1,5 +1,5 @@
 /**
- * QA status endpoint for HR Talent Map v2 core layers background spike.
+ * QA status endpoint for HR Talent Map v2 core layers pipeline.
  * Stage 4.6: 12 sequential layers, run_mode, model_policy, output token ceiling, layer key diagnostics.
  */
 
@@ -13,7 +13,6 @@ import {
   extractBearerToken,
   extractLayerKeysByStatus,
   extractReadyLayerKeys,
-  isSpikeEnabled,
   jsonResponse,
   logSpikeStage,
   requireUuid,
@@ -41,10 +40,6 @@ export const handler: Handler = async (
   try {
     if (event.httpMethod !== "GET" && event.httpMethod !== "POST") {
       return jsonResponse(405, { error: "Разрешены методы GET и POST." });
-    }
-
-    if (!isSpikeEnabled()) {
-      return jsonResponse(403, { error: "background_core_layers_spike_disabled" });
     }
 
     const token = extractBearerToken(event);
@@ -107,7 +102,7 @@ export const handler: Handler = async (
 
     if (report.report_type !== SPIKE_REPORT_TYPE) {
       return jsonResponse(404, {
-        error: "Отчёт не является core layers spike.",
+        error: "Отчёт не является послойной картой кандидата v2.",
         source: "report_type",
       });
     }

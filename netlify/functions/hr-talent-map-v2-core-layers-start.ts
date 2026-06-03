@@ -1,5 +1,5 @@
 /**
- * Sync starter for HR Talent Map v2 core layers background spike (Stage 4.5).
+ * Sync starter for HR Talent Map v2 core layers pipeline.
  */
 
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
@@ -15,7 +15,6 @@ import {
   extractBearerToken,
   findExistingSpikeReport,
   getFunctionOrigin,
-  isSpikeEnabled,
   jsonResponse,
   loadActiveCandidateChart,
   logSpikeStage,
@@ -39,10 +38,6 @@ export const handler: Handler = async (
 
     if (event.httpMethod !== "POST") {
       return jsonResponse(405, { error: "Разрешён только метод POST." });
-    }
-
-    if (!isSpikeEnabled()) {
-      return jsonResponse(403, { error: "background_core_layers_spike_disabled" });
     }
 
     let modelPolicy;

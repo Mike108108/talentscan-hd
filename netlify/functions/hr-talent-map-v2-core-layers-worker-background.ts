@@ -1,5 +1,5 @@
 /**
- * Background worker for HR Talent Map v2 core layers spike (12 layers, sequential).
+ * Background worker for HR Talent Map v2 core layers pipeline (12 layers, sequential).
  * Stage 4.6: expand to 12 layers; talent/axis layers; output token ceiling policy.
  */
 

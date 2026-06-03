@@ -4,6 +4,12 @@ import type {
   HrTalentMapSynthesisBlocksV2,
 } from "./types";
 
+/** Layer architecture v0.2 catalogs/mappings (spec only; not wired to generation). */
+export {
+  LAYER_ARCHITECTURE_VERSION,
+  PRODUCT_LAYER_CATALOG_VERSION,
+} from "./talentMapLayerArchitecture";
+
 const V2_SCHEMA = "hr_person_talent_map_v2";
 const REPORT_TYPE = "hr_person_talent_map";
 const CORE_LAYERS_SPIKE_REPORT_TYPE = "hr_person_talent_map_core_layers_spike";

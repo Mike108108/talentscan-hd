@@ -4,6 +4,8 @@ import { Link, useParams } from "react-router-dom";
 import { HrSidePanel } from "../../components/hr/HrSidePanel";
 import {
   CoreLayersStatusResponse,
+  cancelHrTalentMapCoreLayersGeneration,
+  DEFAULT_RUNTIME_CORE_LAYER_COUNT,
   fetchBestReadyCandidateReport,
   fetchBestReadyCoreLayersSpikeReport,
   fetchCandidate,
@@ -11,6 +13,7 @@ import {
   fetchCoreLayersStatus,
   fetchLatestCoreLayersSpikeReport,
   HR_CORE_LAYERS_SPIKE_REPORT_TYPE,
+  isCoreLayersGenerationCancelled,
   startCandidateCoreLayersReport,
 } from "../../lib/hr/api";
 import {
@@ -109,6 +112,16 @@ const CORE_LAYER_UI_ORDER: Array<{ key: string; title: string }> = [
   { key: "team_contribution_type", title: "Тип вклада в команду" },
 ];
 
+const CORE_LAYER_STATUS_LABEL: Record<string, string> = {
+  pending: "ожидание",
+  generating: "генерация",
+  repairing: "исправление",
+  validating: "проверка",
+  ready: "готово",
+  error: "ошибка",
+  skipped: "пропущен",
+};
+
 const NAV_SECTIONS_LEGACY: Array<{ id: SectionId; label: string; hint?: string }> = [
   { id: "overview", label: "Обзор" },
   { id: "formula", label: "Рабочая формула" },
@@ -183,6 +196,34 @@ function isReportReadyForDisplay(report: HrReport | null | undefined): boolean {
   if (!report) return false;
   if (isCoreLayersSpikeReport(report)) return isDisplayableTalentMapReport(report);
   return isReadyTalentMapReport(report);
+}
+
+function parseReportGenerationError(report: HrReport | null | undefined): unknown {
+  if (!report?.generation_error) return null;
+  try {
+    return JSON.parse(report.generation_error);
+  } catch {
+    return report.generation_error;
+  }
+}
+
+function isCancelledCoreLayersReport(
+  report: HrReport | null | undefined,
+  status: CoreLayersStatusResponse | null,
+): boolean {
+  if (isCoreLayersGenerationCancelled(status ?? undefined)) return true;
+  return isCoreLayersGenerationCancelled({
+    generation_error: parseReportGenerationError(report),
+    cancellation: status?.cancellation ?? null,
+    cancelled: status?.cancelled,
+  });
+}
+
+function clampProgressPercent(readyCount: number, totalCount: number): number {
+  if (!Number.isFinite(readyCount) || !Number.isFinite(totalCount) || totalCount <= 0) {
+    return 0;
+  }
+  return Math.min(100, Math.max(0, Math.round((readyCount / totalCount) * 100)));
 }
 
 function formatUsageMetric(value: unknown): string {
@@ -1528,6 +1569,47 @@ function PendingReportState({
   );
 }
 
+function LayerRowProgressBar({
+  percent,
+  active,
+}: {
+  percent: number | null;
+  active: boolean;
+}) {
+  if (percent === 100) {
+    return (
+      <div className="hr-tm-layer-progress-bar" aria-hidden>
+        <div className="hr-tm-layer-progress-bar__fill" style={{ width: "100%" }} />
+      </div>
+    );
+  }
+  if (typeof percent === "number" && percent >= 0) {
+    return (
+      <div className="hr-tm-layer-progress-bar" aria-hidden>
+        <div
+          className="hr-tm-layer-progress-bar__fill"
+          style={{ width: `${Math.min(100, percent)}%` }}
+        />
+      </div>
+    );
+  }
+  if (active) {
+    return (
+      <div
+        className="hr-tm-layer-progress-bar hr-tm-layer-progress-bar--indeterminate"
+        aria-hidden
+      >
+        <div className="hr-tm-layer-progress-bar__fill" />
+      </div>
+    );
+  }
+  return (
+    <div className="hr-tm-layer-progress-bar" aria-hidden>
+      <div className="hr-tm-layer-progress-bar__fill" style={{ width: "0%" }} />
+    </div>
+  );
+}
+
 function CoreLayersProgressState({
   candidate,
   companyId,
@@ -1535,7 +1617,9 @@ function CoreLayersProgressState({
   status,
   report,
   onRetry,
+  onCancel,
   generating,
+  cancelling,
   error,
 }: {
   candidate: HrCandidate;
@@ -1544,10 +1628,24 @@ function CoreLayersProgressState({
   status: CoreLayersStatusResponse | null;
   report: HrReport | null;
   onRetry: () => void;
+  onCancel: () => void;
   generating: boolean;
+  cancelling: boolean;
   error: string | null;
 }) {
-  const layerGeneration = status?.layer_generation ?? null;
+  const layerGenerationFromReport = (() => {
+    if (status?.layer_generation) return null;
+    const root = getReportContentRoot(report);
+    const genMeta =
+      root?.generation_meta && typeof root.generation_meta === "object"
+        ? (root.generation_meta as Record<string, unknown>)
+        : null;
+    const fromReport = genMeta?.layer_generation;
+    return fromReport && typeof fromReport === "object"
+      ? (fromReport as Record<string, unknown>)
+      : null;
+  })();
+  const layerGeneration = status?.layer_generation ?? layerGenerationFromReport ?? null;
   const layersRaw =
     layerGeneration?.layers && typeof layerGeneration.layers === "object"
       ? (layerGeneration.layers as Record<string, Record<string, unknown>>)
@@ -1555,8 +1653,72 @@ function CoreLayersProgressState({
   const readyKeys = new Set(status?.ready_layer_keys ?? []);
   const errorKeys = new Set(status?.error_layer_keys ?? []);
   const skippedKeys = new Set(status?.skipped_layer_keys ?? []);
-  const total = CORE_LAYER_UI_ORDER.length;
-  const readyCount = status?.ready_layer_keys.length ?? 0;
+  const layersProgress = status?.layers_progress ?? [];
+  const total =
+    status?.total_count ??
+    (layersProgress.length > 0 ? layersProgress.length : DEFAULT_RUNTIME_CORE_LAYER_COUNT);
+  const readyCount =
+    status?.ready_count ??
+    layersProgress.filter((item) => item.status === "ready").length ??
+    status?.ready_layer_keys.length ??
+    0;
+  const hasLiveProgress =
+    layersProgress.length > 0 ||
+    (typeof layerGeneration?.ready_count === "number" &&
+      typeof layerGeneration?.total_count === "number");
+  const currentLayerTitle =
+    status?.current_layer_title ||
+    CORE_LAYER_UI_ORDER.find((l) => l.key === status?.current_layer_key)?.title ||
+    (status?.current_layer_key ? status.current_layer_key : null) ||
+    null;
+  const overallPercent =
+    typeof status?.progress_percent === "number" && Number.isFinite(status.progress_percent)
+      ? Math.min(100, Math.max(0, status.progress_percent))
+      : clampProgressPercent(readyCount, total);
+  const isCancelled = isCancelledCoreLayersReport(report, status);
+  const cancelRequested = status?.cancel_requested === true && !isCancelled;
+  const reportIsGenerating = (status?.report_status ?? report?.report_status) === "generating";
+
+  const layerRows =
+    layersProgress.length > 0
+      ? layersProgress.map((item) => ({
+          key: item.layer_key,
+          title: item.hr_title,
+          status: item.status,
+          progressPercent: item.progress_percent,
+          error: item.error,
+        }))
+      : CORE_LAYER_UI_ORDER.map(({ key, title }) => {
+          const layerState = layersRaw[key];
+          const layerStatus = getText(layerState?.status);
+          let visualStatus = layerStatus;
+          if (!visualStatus) {
+            if (readyKeys.has(key)) visualStatus = "ready";
+            else if (errorKeys.has(key)) visualStatus = "error";
+            else if (skippedKeys.has(key)) visualStatus = "skipped";
+            else visualStatus = "pending";
+          }
+          const progressPercent =
+            typeof layerState?.progress_percent === "number"
+              ? layerState.progress_percent
+              : visualStatus === "ready"
+                ? 100
+                : visualStatus === "repairing"
+                  ? 70
+                  : visualStatus === "validating"
+                    ? 85
+                    : visualStatus === "pending"
+                      ? 0
+                      : null;
+          return {
+            key,
+            title,
+            status: visualStatus,
+            progressPercent,
+            error: layerState?.error,
+          };
+        });
+
   const usageSummary = status?.usage_summary;
   const costSummary = getCostSummary(
     usageSummary && typeof usageSummary === "object"
@@ -1578,8 +1740,56 @@ function CoreLayersProgressState({
       </p>
 
       <div className="hr-card hr-tm-core-layers-progress">
-        <p className="hr-tm-empty-title">Генерируем послойную карту…</p>
-        <p className="hr-muted">Собираем 19 AI-слоёв кандидата</p>
+        {isCancelled ? (
+          <>
+            <p className="hr-tm-empty-title">Генерация отменена</p>
+            <p className="hr-muted" style={{ marginTop: 4 }}>
+              Готово {readyCount} из {total}. Частично сгенерированные слои сохранены, но карта не
+              открывается как готовая.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="hr-tm-empty-title">Генерируем послойную карту</p>
+            {hasLiveProgress ? (
+              <>
+                <p className="hr-muted" style={{ marginTop: 4 }}>
+                  Готово {readyCount} из {total}
+                </p>
+                <div
+                  className="hr-tm-overall-progress"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={overallPercent}
+                  aria-label={`Готово ${readyCount} из ${total} слоёв`}
+                >
+                  <div
+                    className="hr-tm-overall-progress__fill"
+                    style={{ width: `${overallPercent}%` }}
+                  />
+                </div>
+                <p className="hr-tm-current-layer" style={{ marginTop: 12 }}>
+                  Сейчас:{" "}
+                  <b>
+                    {currentLayerTitle ||
+                      (reportIsGenerating ? "Генерация слоя…" : "Подготавливаем послойную генерацию…")}
+                  </b>
+                </p>
+              </>
+            ) : (
+              <p className="hr-muted" style={{ marginTop: 4 }}>
+                Подготавливаем послойную генерацию…
+              </p>
+            )}
+          </>
+        )}
+
+        {cancelRequested ? (
+          <p className="hr-tm-banner" style={{ marginTop: 12 }}>
+            Отмена запрошена. Текущий слой может завершиться, новые слои не будут запускаться.
+          </p>
+        ) : null}
 
         <div className="hr-tm-spike-meta-grid" style={{ marginTop: 12 }}>
           <span>status: {status?.report_status ?? report?.report_status ?? "generating"}</span>
@@ -1587,8 +1797,6 @@ function CoreLayersProgressState({
           <span>run_mode: {status?.run_mode ?? "—"}</span>
           <span>model: {status?.selected_model ?? status?.model ?? "—"}</span>
           <span>prompt: {status?.prompt_version ?? report?.prompt_version ?? "—"}</span>
-          <span>max_output_tokens: {status?.max_output_tokens ?? "—"}</span>
-          <span>attempts: {status?.attempts_total ?? "—"}</span>
           {usageSummary ? (
             <span>
               tokens in {formatUsageMetric(usageSummary.input_tokens_total)} · cached{" "}
@@ -1607,7 +1815,7 @@ function CoreLayersProgressState({
           ) : null}
         </div>
 
-        {status?.generation_error ? (
+        {!isCancelled && status?.generation_error && !isCoreLayersGenerationCancelled(status) ? (
           <p className="hr-tm-banner hr-tm-banner--error" style={{ marginTop: 12 }}>
             {typeof status.generation_error === "string"
               ? status.generation_error
@@ -1620,42 +1828,69 @@ function CoreLayersProgressState({
           </p>
         ) : null}
 
-        <ul className="hr-tm-layer-status-list" aria-label="Статусы слоёв">
-          {CORE_LAYER_UI_ORDER.map(({ key, title }) => {
-            const layerState = layersRaw[key];
-            const layerStatus = getText(layerState?.status);
-            let visualStatus = layerStatus;
-            if (!visualStatus) {
-              if (readyKeys.has(key)) visualStatus = "ready";
-              else if (errorKeys.has(key)) visualStatus = "error";
-              else if (skippedKeys.has(key)) visualStatus = "skipped";
-              else visualStatus = "pending";
-            }
-            return (
-              <li
-                key={key}
-                className={`hr-tm-layer-status-row hr-tm-layer-status-row--${visualStatus}`}
-              >
-                <span className="hr-tm-layer-status-title">{title}</span>
-                <span className="hr-tm-layer-status-key">{key}</span>
-                <span className="hr-tm-layer-status-badge">
-                  {visualStatus}
-                  {layerState?.forbidden_terms_repair_success === true ? " · repaired" : null}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        {hasLiveProgress || layerRows.length > 0 ? (
+          <ul className="hr-tm-layer-status-list" aria-label="Статусы слоёв">
+            {layerRows.map(({ key, title, status: layerStatus, progressPercent, error: layerError }) => {
+              const isActive =
+                layerStatus === "generating" ||
+                layerStatus === "repairing" ||
+                layerStatus === "validating";
+              const statusLabel = CORE_LAYER_STATUS_LABEL[layerStatus] ?? layerStatus;
+              return (
+                <li
+                  key={key}
+                  className={`hr-tm-layer-status-row hr-tm-layer-status-row--${layerStatus}`}
+                >
+                  <div className="hr-tm-layer-status-main">
+                    <span className="hr-tm-layer-status-title">{title}</span>
+                    <LayerRowProgressBar percent={progressPercent} active={isActive} />
+                  </div>
+                  <span className="hr-tm-layer-status-badge">{statusLabel}</span>
+                  {layerStatus === "error" && layerError ? (
+                    <span className="hr-tm-layer-status-error">
+                      {typeof layerError === "string"
+                        ? layerError
+                        : getText((layerError as Record<string, unknown>).message) ||
+                          JSON.stringify(layerError)}
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
 
-        <button
-          type="button"
-          className="hr-btn hr-btn--ghost"
-          style={{ marginTop: 16 }}
-          disabled={generating}
-          onClick={onRetry}
-        >
-          {generating ? "Генерация…" : "Обновить / повторить"}
-        </button>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
+          {reportIsGenerating && !isCancelled ? (
+            <button
+              type="button"
+              className="hr-btn hr-btn--ghost"
+              disabled={generating || cancelling || cancelRequested}
+              onClick={onCancel}
+            >
+              {cancelling ? "Отменяем…" : "Отменить генерацию"}
+            </button>
+          ) : null}
+          {isCancelled ? (
+            <button
+              type="button"
+              className="hr-btn"
+              disabled={generating}
+              onClick={onRetry}
+            >
+              {generating ? "Запуск…" : "Запустить заново"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="hr-btn hr-btn--ghost"
+              disabled={generating}
+              onClick={onRetry}
+            >
+              {generating ? "Генерация…" : "Обновить / повторить"}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1824,6 +2059,7 @@ export default function CandidateTalentMapPage() {
   } | null>(null);
   const [coreLayersPollStatus, setCoreLayersPollStatus] =
     useState<CoreLayersStatusResponse | null>(null);
+  const [cancellingGeneration, setCancellingGeneration] = useState(false);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartedAtRef = useRef<number | null>(null);
 
@@ -1880,6 +2116,16 @@ export default function CandidateTalentMapPage() {
     if (displayReport?.report_status === "generating" && displayReport.id) {
       setGenerating(true);
       startCoreLayersPolling(displayReport.id);
+    } else if (
+      displayReport &&
+      isCoreLayersSpikeReport(displayReport) &&
+      displayReport.report_status === "error" &&
+      isCancelledCoreLayersReport(displayReport, null) &&
+      displayReport.id
+    ) {
+      void fetchCoreLayersStatus(displayReport.id)
+        .then(setCoreLayersPollStatus)
+        .catch((err) => console.error("[hr] core layers status preload failed", err));
     }
 
     if (!opts?.silent) setLoading(false);
@@ -1931,14 +2177,18 @@ export default function CandidateTalentMapPage() {
 
       if (status.report_status === "error") {
         stopCoreLayersPolling();
+        const cancelled = isCoreLayersGenerationCancelled(status);
         const latestResult = await fetchLatestCoreLayersSpikeReport(companyId, candidateId);
         if (latestResult.report) setAiReport(latestResult.report);
         setGenError(
-          typeof status.generation_error === "string"
-            ? status.generation_error
-            : "Не удалось сгенерировать послойную карту.",
+          cancelled
+            ? null
+            : typeof status.generation_error === "string"
+              ? status.generation_error
+              : "Не удалось сгенерировать послойную карту.",
         );
         setGenerating(false);
+        setCancellingGeneration(false);
       }
     } catch (err) {
       console.error("[hr] core layers poll failed", err);
@@ -1954,6 +2204,24 @@ export default function CandidateTalentMapPage() {
     }, CORE_LAYER_POLL_INTERVAL_MS);
   };
 
+  const onCancelCoreLayersGeneration = async () => {
+    const reportId = aiReport?.id ?? coreLayersPollStatus?.report_id;
+    if (!reportId) return;
+    setCancellingGeneration(true);
+    setGenError(null);
+    try {
+      await cancelHrTalentMapCoreLayersGeneration(reportId);
+      await handleCoreLayersPollTick(reportId);
+    } catch (err) {
+      console.error("[hr] core layers cancel failed", err);
+      setGenError(
+        err instanceof Error ? err.message : "Не удалось запросить отмену генерации",
+      );
+    } finally {
+      setCancellingGeneration(false);
+    }
+  };
+
   const onGenerateCoreLayers = async () => {
     if (!companyId || !candidateId) return;
     const previousReady = isReportReadyForDisplay(aiReport) ? aiReport : null;
@@ -1962,6 +2230,7 @@ export default function CandidateTalentMapPage() {
     setFetchError(null);
     setDisplayDebug(null);
     setCoreLayersPollStatus(null);
+    setCancellingGeneration(false);
 
     try {
       const started = await startCandidateCoreLayersReport(companyId, candidateId);
@@ -2030,6 +2299,13 @@ export default function CandidateTalentMapPage() {
     isCoreLayersSpikeReport(aiReport) &&
     aiReport != null &&
     (aiReport.report_status === "generating" || generating);
+  const showCoreLayersProgressScreen =
+    isCoreLayersSpikeReport(aiReport) &&
+    aiReport != null &&
+    !hasDisplayableReport &&
+    (isSpikeInProgress ||
+      isCancelledCoreLayersReport(aiReport, coreLayersPollStatus) ||
+      coreLayersPollStatus?.cancel_requested === true);
 
   if (hasDisplayableReport && aiReport) {
     return renderTalentMapWorkspace(candidate, companyId, candidateId, vacancies, aiReport, {
@@ -2039,7 +2315,7 @@ export default function CandidateTalentMapPage() {
     });
   }
 
-  if (isSpikeInProgress && aiReport) {
+  if (showCoreLayersProgressScreen && aiReport) {
     return (
       <CoreLayersProgressState
         candidate={candidate}
@@ -2048,7 +2324,9 @@ export default function CandidateTalentMapPage() {
         status={coreLayersPollStatus}
         report={aiReport}
         onRetry={() => void onGenerateCoreLayers()}
+        onCancel={() => void onCancelCoreLayersGeneration()}
         generating={generating}
+        cancelling={cancellingGeneration}
         error={genError}
       />
     );

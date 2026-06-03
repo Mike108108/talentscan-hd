@@ -1,14 +1,16 @@
 /**
  * QA status endpoint for HR Talent Map v2 core layers pipeline.
- * Stage 4.6: 12 sequential layers, run_mode, model_policy, output token ceiling, layer key diagnostics.
+ * Stage 4.8-B: 19 sequential layers + live progress contract.
  */
 
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
 import {
+  RUNTIME_CORE_LAYER_COUNT,
   SPIKE_REPORT_TYPE,
   asRecord,
   asString,
   asStringArray,
+  buildLayersProgressArray,
   createSupabaseClient,
   extractBearerToken,
   extractLayerKeysByStatus,
@@ -187,6 +189,47 @@ export const handler: Handler = async (
         : 0;
 
     const readyLayerKeys = extractReadyLayerKeys(layerReports);
+    const layersProgress = hasLayerGeneration
+      ? buildLayersProgressArray(layerGeneration)
+      : [];
+    const readyCountFromProgress = layersProgress.filter(
+      (item) => item.status === "ready",
+    ).length;
+    const readyCount =
+      typeof layerGeneration.ready_count === "number"
+        ? layerGeneration.ready_count
+        : readyCountFromProgress > 0
+          ? readyCountFromProgress
+          : readyLayerKeys.length;
+    const totalCount =
+      typeof layerGeneration.total_count === "number"
+        ? layerGeneration.total_count
+        : layersProgress.length > 0
+          ? layersProgress.length
+          : RUNTIME_CORE_LAYER_COUNT;
+    const progressPercent =
+      totalCount > 0
+        ? Math.min(100, Math.max(0, Math.round((readyCount / totalCount) * 100)))
+        : 0;
+    const currentLayerKey =
+      asString(layerGeneration.current_layer_key) ||
+      layersProgress.find(
+        (item) =>
+          item.status === "generating" ||
+          item.status === "repairing" ||
+          item.status === "validating",
+      )?.layer_key ||
+      null;
+    const currentLayerTitle =
+      asString(layerGeneration.current_layer_title) ||
+      layersProgress.find((item) => item.layer_key === currentLayerKey)?.hr_title ||
+      null;
+    const cancellation = asRecord(generationMeta.cancellation);
+    const cancelRequested =
+      layerGeneration.cancel_requested === true || cancellation.requested === true;
+    const cancelled =
+      cancellation.status === "cancelled" ||
+      layerGeneration.cancelled_at != null;
     const errorLayerKeys = hasLayerGeneration
       ? extractLayerKeysByStatus(layerGeneration, "error")
       : [];
@@ -236,6 +279,15 @@ export const handler: Handler = async (
       error_layer_keys: errorLayerKeys,
       skipped_layer_keys: skippedLayerKeys,
       layer_generation: hasLayerGeneration ? layerGeneration : null,
+      ready_count: readyCount,
+      total_count: totalCount,
+      progress_percent: progressPercent,
+      current_layer_key: currentLayerKey,
+      current_layer_title: currentLayerTitle,
+      layers_progress: layersProgress,
+      cancel_requested: cancelRequested,
+      cancelled,
+      cancellation: Object.keys(cancellation).length > 0 ? cancellation : null,
       qa: {
         fit_score_is_null: report.fit_score == null,
         vacancy_id_is_null: report.vacancy_id == null,

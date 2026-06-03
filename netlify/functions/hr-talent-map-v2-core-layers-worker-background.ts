@@ -1,6 +1,5 @@
 /**
- * Background worker for HR Talent Map v2 core layers pipeline (12 layers, sequential).
- * Stage 4.6: expand to 12 layers; talent/axis layers; output token ceiling policy.
+ * Background worker for HR Talent Map v2 core layers pipeline (19 layers, sequential).
  */
 
 import type { BackgroundHandler, HandlerEvent } from "@netlify/functions";
@@ -13,6 +12,7 @@ import {
   asString,
   buildCoreLayersCompactInput,
   buildCoreLayersContentJson,
+  buildPartialCoreLayersContentJson,
   callOpenAiResponsesForLayerForbiddenTermsRepair,
   callOpenAiResponsesForLayerWithRetry,
   createSupabaseClient,
@@ -20,6 +20,10 @@ import {
   OpenAiLayerRetryExhaustedError,
   extractBearerToken,
   initLayerGenerationState,
+  isGenerationCancelRequested,
+  saveLayerGenerationProgress,
+  serializeGenerationCancelledError,
+  syncLayerGenerationProgress,
   isForbiddenBaseTermsValidation,
   loadActiveCandidateChart,
   logSpikeStage,
@@ -36,6 +40,7 @@ import {
   validateCoreLayer,
   type CoreLayerKey,
   type CoreLayersModelPolicy,
+  type GenerationCancellationMeta,
   type LayerGenerationState,
   type LayerRunStatus,
   type OffendingMatch,
@@ -59,6 +64,72 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
   let layerReports: Record<string, unknown>[] = [];
   let modelPolicy: CoreLayersModelPolicy | null = null;
   let layerGeneration: LayerGenerationState | null = null;
+
+  const persistProgress = async (cancellation?: GenerationCancellationMeta) => {
+    if (!db || !reportId || !layerGeneration) return;
+    syncLayerGenerationProgress(layerGeneration);
+    await saveLayerGenerationProgress(db, reportId, {
+      layerGeneration,
+      layerReports,
+      cancellation,
+    });
+  };
+
+  const finishCancelled = async (afterLayerKey?: CoreLayerKey) => {
+    if (!db || !reportId || !layerGeneration || !modelPolicy) return;
+
+    const finishedAt = new Date().toISOString();
+    const durationMs = Date.now() - startedAt;
+
+    if (afterLayerKey) {
+      markRemainingLayersSkipped(afterLayerKey, layerGeneration.layers);
+    } else {
+      for (const key of CORE_LAYERS_ORDER) {
+        if (layerGeneration.layers[key].status === "pending") {
+          layerGeneration.layers[key] = { status: "skipped" };
+        }
+      }
+    }
+
+    layerGeneration.status = "error";
+    layerGeneration.finished_at = finishedAt;
+    layerGeneration.duration_ms = durationMs;
+    layerGeneration.cancelled_at = finishedAt;
+    layerGeneration.current_layer_key = null;
+    layerGeneration.current_layer_title = null;
+    layerGeneration.summary = summarizeLayerGeneration(
+      layerGeneration.layers,
+      modelPolicy.selectedModel,
+    );
+
+    const cancellation: GenerationCancellationMeta = {
+      requested: true,
+      requested_at: layerGeneration.cancel_requested_at ?? finishedAt,
+      requested_by: layerGeneration.cancelled_by ?? null,
+      status: "cancelled",
+      cancelled_at: finishedAt,
+    };
+
+    syncLayerGenerationProgress(layerGeneration);
+
+    const partialContentJson = buildPartialCoreLayersContentJson({
+      layerGeneration,
+      layerReports,
+      cancellation,
+    });
+
+    logSpikeStage("worker", "generation_cancelled", logCtx, {
+      duration_ms: durationMs,
+      ready_layers: layerGeneration.ready_count ?? 0,
+    });
+
+    await saveReportError(
+      db,
+      reportId,
+      serializeGenerationCancelledError(),
+      partialContentJson,
+    );
+  };
 
   const fail = async (
     stage: string,
@@ -99,6 +170,20 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       offending_match_count: extra?.offending_matches?.length ?? 0,
       ...extra,
     });
+
+    if (
+      db &&
+      reportId &&
+      layerGeneration &&
+      logCtx.companyId &&
+      logCtx.candidateId
+    ) {
+      syncLayerGenerationProgress(layerGeneration);
+      await saveLayerGenerationProgress(db, reportId, {
+        layerGeneration,
+        layerReports,
+      });
+    }
 
     if (db && reportId && logCtx.companyId && logCtx.candidateId) {
       const { data: company } = await db
@@ -312,6 +397,8 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       return;
     }
 
+    await persistProgress();
+
     let apiKey: string;
     try {
       apiKey = resolveOpenAiApiKey();
@@ -325,7 +412,13 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
     }
 
     for (const layerKey of CORE_LAYERS_ORDER) {
-      if (!layerGeneration) break;
+      if (!layerGeneration || !db || !reportId) break;
+
+      if (await isGenerationCancelRequested(db, reportId)) {
+        layerGeneration.cancel_requested = true;
+        await finishCancelled();
+        return;
+      }
 
       logCtx.layerKey = layerKey;
       const layerStartedAt = Date.now();
@@ -338,6 +431,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         prompt_version: SPIKE_PROMPT_VERSION,
         max_output_tokens: modelPolicy.maxOutputTokens,
       };
+      await persistProgress();
 
       logSpikeStage("worker", "openai_responses_start", logCtx, { model, layer_key: layerKey });
 
@@ -414,6 +508,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         );
 
         markRemainingLayersSkipped(layerKey, layerGeneration.layers);
+        await persistProgress();
 
         const resolvedHttpStatus = openAiErr?.httpStatus ?? (httpStatus || undefined);
 
@@ -437,6 +532,12 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         duration_ms: layerDurationMs,
         http_status: httpStatus,
       });
+
+      layerGeneration.layers[layerKey] = {
+        ...layerGeneration.layers[layerKey],
+        status: "validating",
+      };
+      await persistProgress();
 
       logSpikeStage("worker", "validate_layer", logCtx, { layer_key: layerKey });
 
@@ -468,6 +569,12 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           new Set((validation.offending_matches ?? []).map((match) => match.term)),
         );
         forbiddenTermsRepairReason = validation.message;
+
+        layerGeneration.layers[layerKey] = {
+          ...layerGeneration.layers[layerKey],
+          status: "repairing",
+        };
+        await persistProgress();
 
         logSpikeStage("worker", "forbidden_terms_repair_start", logCtx, {
           layer_key: layerKey,
@@ -560,6 +667,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         );
 
         markRemainingLayersSkipped(layerKey, layerGeneration.layers);
+        await persistProgress();
 
         await fail(validation.stage, validation.message, layerKey, {
           validation_result: validation.details ?? null,
@@ -575,6 +683,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         status: "ready",
         started_at: layerStartedIso,
         finished_at: layerFinishedIso,
+        completed_at: layerFinishedIso,
         duration_ms: layerDurationMs,
         model,
         prompt_version: SPIKE_PROMPT_VERSION,
@@ -598,6 +707,13 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       );
 
       layerReports.push(layer);
+      await persistProgress();
+
+      if (db && reportId && (await isGenerationCancelRequested(db, reportId))) {
+        layerGeneration.cancel_requested = true;
+        await finishCancelled(layerKey);
+        return;
+      }
     }
 
     if (!layerGeneration || !modelPolicy) return;

@@ -1,3 +1,8 @@
+import {
+  buildHdChannelFactsFromChart,
+  collectUnknownChannelKeys,
+} from "./hdChannelFacts";
+
 /**
  * HD Career Reading Layers v1 contract (Stage 4.10-A).
  *
@@ -402,11 +407,20 @@ export function buildCareerReadingLayerInputsV1(
     },
   };
 
+  const channel_facts = buildHdChannelFactsFromChart({
+    channelsShort,
+    channelsLong,
+    circuitries: chart.circuitries,
+  });
+  const unknown_channel_keys = collectUnknownChannelKeys({ channelsShort, channelsLong });
+
   const talent_channels: Record<string, unknown> = {
     channelsShort,
     channelsLong,
     circuitries: normalizeCircuitries(chart.circuitries),
     channels_count: channelsShort.length,
+    channel_facts,
+    ...(unknown_channel_keys.length > 0 ? { unknown_channel_keys } : {}),
   };
   const channelObjects = pickOptionalArray(chart, "channelObjects");
   if (channelObjects) talent_channels.channelObjects = channelObjects;

@@ -27,7 +27,9 @@ const COMMON_SYSTEM_RULES = `Ты генерируешь один HD Career Read
 
 Base:
 - пиши простым HR-языком;
-- не используй технический HD-язык (Human Design, ворота, каналы, центры, Type, Strategy, Authority, Profile, Generator, Projector и т.д.);
+- не используй канцелярит и шаблоны: «форм-фактор», «соблюдение формального процесса вовлечения», «кандидат демонстрирует», «данный слой», «источники мотивации активируют», roles, progress/progres, 成果, «насыпочные хотелки», «технические поля»;
+- пиши про: как человек входит в задачу, где полезен, как проверять, как работать руководителю, где риск;
+- не используй технический HD-язык в Base (Human Design, ворота, каналы, центры, Type, Strategy, Authority, Profile, Generator, Projector и т.д.);
 - не принимай решение о найме;
 - не используй проценты соответствия, fit_score, «подходит на N%», «брать/не брать»;
 - каждый риск связывай с проверкой (what_to_check);
@@ -35,9 +37,11 @@ Base:
 - если данных не хватает, снижай confidence в pro/evidence.
 
 Pro:
-- обязательно укажи classical_sources с классическими HD-названиями;
-- сохрани названия планет, активаций, каналов, ворот, центров;
-- объясни connection_logic: как технические данные карты связаны с HR-выводом.
+- не придумывай названия книг, авторов, внешних источников, raw_path и фиктивные classical_sources;
+- classical_sources должны ссылаться только на элементы карты из layer_input (Type, Strategy, Authority, Profile, Channel, Gate, Center, Personality/Design Sun/Earth и т.д.);
+- connection_logic — связное HD-объяснение на русском: как элементы карты из layer_input связаны с HR-выводом (не шаблон «основано на source fields»);
+- сохрани названия планет, активаций, каналов, ворот, центров в Pro;
+- technical_title и human_check — по делу, без заглушек.
 
 Summary:
 - summary_for_synthesis: короткий, пригодный для следующего API-запроса (синтез блоков);
@@ -57,14 +61,17 @@ Pro: Design Sun, Design Earth, gate.line, planet name, activation side = Design.
   talent_channels: `Слой: устойчивые связки талантов по каналам.
 
 ОБЯЗАТЕЛЬНО:
-1. Сначала определи количество каналов из layer_input.channelsShort / channelsLong.
-2. Для каждого найденного канала создай отдельный CareerReadingChannelTalentV1 в special_payload.channel_talents.
-3. Не ограничивайся общим выводом по всем каналам.
-4. Если каналов 0 — status not_applicable или ready с честным empty-state в base (без выдуманных каналов):
-   «Устойчивые связки талантов по каналам не выделены. Тогда рабочие способности читаются через главные активации, центры и повторяющиеся темы.»
-5. Base не пишет «канал 11-56»; Pro хранит Channel, Channel key, Channel name, Gates in channel, Centers, Circuit.
+1. layer_input.channel_facts — source of truth для channel_key, gates, centers, classical_name, circuit.
+2. Не меняй channel_key, gates, centers, classical_name, circuit из channel_facts.
+3. Не добавляй в channel_talents[].centers центры, которых нет в channel_facts для этого канала.
+4. centers в channel_talents = только два центра, которые соединяет ЭТОТ канал (из channel_facts), а не все definedCenters/openCenters кандидата.
+5. Сначала определи количество каналов из channel_facts (или channelsShort/channelsLong).
+6. Для каждого канала — отдельная карточка в special_payload.channel_talents.
+7. Если channel_facts пуст — не выдумывай каналы; status not_applicable или честный empty-state в base.
+8. Base не пишет «канал 11-56»; интерпретация (title, summary, risk, tips, what_to_check) — твоя HR-часть.
 
-Для каждого канала: channel_key, classical_name, gates, centers, circuit, title, summary, where_useful, how_it_appears_at_work, risk, management_tip, what_to_check, evidence.`,
+Для каждого канала заполни интерпретацию: title, summary, where_useful, how_it_appears_at_work, risk, management_tip, what_to_check, evidence.
+Технические поля канала копируй из channel_facts.`,
   repeated_themes: `Слой: усиленные рабочие мотивы.
 
 ОБЯЗАТЕЛЬНО:

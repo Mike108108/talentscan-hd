@@ -6,6 +6,10 @@
 import type { HandlerEvent } from "@netlify/functions";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  enforceDeterministicProSources,
+  enforceTalentChannelFacts,
+} from "../../src/lib/hr/careerReadingDeterministicFacts";
+import {
   CAREER_READING_LAYER_CATALOG_V1,
   CAREER_READING_LAYER_KEYS_V1,
   CAREER_READING_LAYERS_VERSION_V1,
@@ -1125,6 +1129,11 @@ export function normalizeCareerReadingLayerForValidation(args: {
     asRecord(layer.evidence),
   );
 
+  if (args.layerKey === "talent_channels") {
+    enforceTalentChannelFacts(layer, args.layerInput);
+  }
+  enforceDeterministicProSources(layer, args.layerKey, args.layerInput);
+
   const qa = asRecord(layer.qa);
   layer.qa = {
     base_has_forbidden_hd_terms: qa.base_has_forbidden_hd_terms === true,
@@ -1145,6 +1154,10 @@ export function validateCareerReadingLayer(
   const catalog = CAREER_READING_LAYER_CATALOG_V1[layerKey];
   ensureCareerReadingBaseDefaults(layer, layerKey);
   ensureCareerReadingSummaryDefaults(layer, layerKey);
+  if (layerKey === "talent_channels" && layerInput != null) {
+    enforceTalentChannelFacts(layer, layerInput);
+  }
+  enforceDeterministicProSources(layer, layerKey, layerInput);
   ensureCareerReadingBaseArrayDefaults(layer, layerKey);
 
   if (asString(layer.layer_key) !== layerKey) {
@@ -1173,6 +1186,19 @@ export function validateCareerReadingLayer(
   const classicalSources = Array.isArray(pro.classical_sources) ? pro.classical_sources : [];
   if (classicalSources.length === 0) {
     return { ok: false, stage: "validate_layer", message: "pro.classical_sources must be non-empty" };
+  }
+  for (const source of classicalSources) {
+    const rec = asRecord(source);
+    if (!asString(rec.raw_path)) {
+      return { ok: false, stage: "validate_layer", message: "pro.classical_sources raw_path is required" };
+    }
+    if (!asString(rec.source_label) || !asString(rec.value_summary)) {
+      return {
+        ok: false,
+        stage: "validate_layer",
+        message: "pro.classical_sources must have source_label and value_summary",
+      };
+    }
   }
   if (!asString(pro.connection_logic)) {
     return { ok: false, stage: "validate_layer", message: "pro.connection_logic is required" };

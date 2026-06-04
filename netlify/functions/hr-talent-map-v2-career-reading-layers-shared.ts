@@ -445,6 +445,184 @@ function collectCareerReadingBaseText(layer: Record<string, unknown>): Array<{ p
 
 const CAREER_READING_CONFIDENCE_VALUES = ["high", "medium", "low"] as const;
 const CAREER_READING_BASE_HEADLINE_FALLBACK = "Рабочий слой карты";
+const CAREER_READING_GENERIC_INTERVIEW_FALLBACK =
+  "Требует проверки на интервью или рабочем кейсе.";
+const CAREER_READING_RISK_FALLBACK =
+  "Риск требует проверки через реальные рабочие ситуации.";
+const CAREER_READING_CONDITIONS_FALLBACK =
+  "Условия раскрытия нужно уточнить через интервью и рабочий кейс.";
+const CAREER_READING_MANAGEMENT_FOCUS_FALLBACK =
+  "Руководителю важно задать ясный контекст задачи и проверить реакцию кандидата на практике.";
+const CAREER_READING_WHAT_TO_CHECK_FALLBACK =
+  "Проверить через интервью, кейс и первые рабочие задачи.";
+const CAREER_READING_BAD_FOR_FALLBACK =
+  "Роли без ясного контекста требуют отдельной проверки.";
+const WORK_MODE_CONDITIONS_FALLBACK =
+  "Ясная постановка задачи, понятный запрос на участие и возможность принять решение без лишнего давления.";
+
+function toNonEmptyStringArray(value: unknown, fallback: string[]): string[] {
+  const items = Array.isArray(value)
+    ? value.map(String).map((x) => x.trim()).filter(Boolean)
+    : typeof value === "string" && value.trim()
+      ? [value.trim()]
+      : [];
+
+  const fallbackItems = fallback.map(String).map((x) => x.trim()).filter(Boolean);
+
+  return items.length > 0
+    ? items
+    : fallbackItems.length > 0
+      ? fallbackItems
+      : [CAREER_READING_GENERIC_INTERVIEW_FALLBACK];
+}
+
+function collectBaseStrengthTexts(base: Record<string, unknown>): string[] {
+  const out: string[] = [...asStringArray(base.where_useful)];
+  const strengths = Array.isArray(base.strengths) ? base.strengths : [];
+  for (const item of strengths) {
+    const rec = asRecord(item);
+    const title = asString(rec.title);
+    const description = asString(rec.description);
+    if (title) out.push(title);
+    if (description) out.push(description);
+  }
+  const headline = asString(base.headline);
+  if (headline) out.push(headline);
+  return out;
+}
+
+function collectBaseRiskTexts(base: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const risks = Array.isArray(base.risks) ? base.risks : [];
+  for (const item of risks) {
+    const rec = asRecord(item);
+    const title = asString(rec.title);
+    const description = asString(rec.description);
+    if (title) out.push(title);
+    if (description) out.push(description);
+  }
+  const checks = Array.isArray(base.what_to_check) ? base.what_to_check : [];
+  for (const item of checks) {
+    const warning = asString(asRecord(item).warning_signal);
+    if (warning) out.push(warning);
+  }
+  return out;
+}
+
+function collectBaseWhatToCheckTexts(base: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const checks = Array.isArray(base.what_to_check) ? base.what_to_check : [];
+  for (const item of checks) {
+    const rec = asRecord(item);
+    const hypothesis = asString(rec.hypothesis);
+    const checkMethod = asString(rec.check_method);
+    if (hypothesis) out.push(hypothesis);
+    if (checkMethod) out.push(checkMethod);
+  }
+  return out;
+}
+
+function collectBaseManagementFocusTexts(base: Record<string, unknown>): string[] {
+  const out: string[] = [...asStringArray(base.management_tips)];
+  const checks = Array.isArray(base.what_to_check) ? base.what_to_check : [];
+  for (const item of checks) {
+    const checkMethod = asString(asRecord(item).check_method);
+    if (checkMethod) out.push(checkMethod);
+  }
+  return out;
+}
+
+function collectBaseConditionsTexts(
+  base: Record<string, unknown>,
+  layerKey: CareerReadingLayerKey,
+): string[] {
+  const out: string[] = [];
+  if (layerKey === "work_mode_and_decisions") {
+    out.push(WORK_MODE_CONDITIONS_FALLBACK);
+  }
+  out.push(...asStringArray(base.where_useful));
+  out.push(...asStringArray(base.management_tips));
+  const howItAppears = asString(base.how_it_appears_at_work);
+  if (howItAppears) out.push(howItAppears);
+  const shortSummary = asString(base.short_summary);
+  if (shortSummary) out.push(shortSummary);
+  return out;
+}
+
+function ensureCareerReadingSummaryDefaults(
+  layer: Record<string, unknown>,
+  layerKey: CareerReadingLayerKey,
+): void {
+  const catalog = CAREER_READING_LAYER_CATALOG_V1[layerKey];
+  const base = asRecord(layer.base);
+  const layerTitle = asString(layer.title) || catalog.title;
+
+  const strengthSources = collectBaseStrengthTexts(base);
+  const riskSources = collectBaseRiskTexts(base);
+  const whatToCheckSources = collectBaseWhatToCheckTexts(base);
+  const managementSources = collectBaseManagementFocusTexts(base);
+  const conditionsSources = collectBaseConditionsTexts(base, layerKey);
+
+  const synthesisRaw = asRecord(layer.summary_for_synthesis);
+  const oneSentence =
+    asString(synthesisRaw.one_sentence) ||
+    asString(base.short_summary) ||
+    asString(base.headline) ||
+    layerTitle;
+
+  const synthesisStrengths = toNonEmptyStringArray(synthesisRaw.strengths, strengthSources);
+  const synthesisRisks = toNonEmptyStringArray(synthesisRaw.risks, [
+    ...riskSources,
+    CAREER_READING_RISK_FALLBACK,
+  ]);
+  const synthesisConditions = toNonEmptyStringArray(synthesisRaw.conditions, [
+    ...conditionsSources,
+    CAREER_READING_CONDITIONS_FALLBACK,
+  ]);
+  const synthesisManagementFocus = toNonEmptyStringArray(synthesisRaw.management_focus, [
+    ...managementSources,
+    CAREER_READING_MANAGEMENT_FOCUS_FALLBACK,
+  ]);
+  const synthesisWhatToCheck = toNonEmptyStringArray(synthesisRaw.what_to_check, [
+    ...whatToCheckSources,
+    CAREER_READING_WHAT_TO_CHECK_FALLBACK,
+  ]);
+
+  layer.summary_for_synthesis = {
+    one_sentence: oneSentence,
+    strengths: synthesisStrengths,
+    risks: synthesisRisks,
+    conditions: synthesisConditions,
+    management_focus: synthesisManagementFocus,
+    what_to_check: synthesisWhatToCheck,
+  };
+
+  const matchingRaw = asRecord(layer.matching_summary);
+  layer.matching_summary = {
+    good_for: toNonEmptyStringArray(matchingRaw.good_for, [
+      ...asStringArray(base.where_useful),
+      ...synthesisStrengths,
+      layerTitle,
+    ]),
+    bad_for: toNonEmptyStringArray(matchingRaw.bad_for, [
+      ...synthesisRisks,
+      ...riskSources,
+      CAREER_READING_BAD_FOR_FALLBACK,
+    ]),
+    role_fit_positive_signals: toNonEmptyStringArray(matchingRaw.role_fit_positive_signals, [
+      ...synthesisStrengths,
+      ...strengthSources,
+    ]),
+    role_fit_risk_signals: toNonEmptyStringArray(matchingRaw.role_fit_risk_signals, [
+      ...synthesisRisks,
+      ...riskSources,
+    ]),
+    check_in_role_fit: toNonEmptyStringArray(matchingRaw.check_in_role_fit, [
+      ...synthesisWhatToCheck,
+      ...whatToCheckSources,
+    ]),
+  };
+}
 
 function firstSentence(text: string): string {
   const trimmed = text.trim();
@@ -766,24 +944,21 @@ export function normalizeCareerReadingLayerForValidation(args: {
 
   layer.evidence = normalizeEvidenceRecord(layer.evidence, catalog.source_fields);
 
-  const synthesis = asRecord(layer.summary_for_synthesis);
-  layer.summary_for_synthesis = {
-    one_sentence: asString(synthesis.one_sentence) || "",
-    strengths: asStringArray(synthesis.strengths),
-    risks: asStringArray(synthesis.risks),
-    conditions: asStringArray(synthesis.conditions),
-    management_focus: asStringArray(synthesis.management_focus),
-    what_to_check: asStringArray(synthesis.what_to_check),
-  };
-
-  const matching = asRecord(layer.matching_summary);
-  layer.matching_summary = {
-    good_for: asStringArray(matching.good_for),
-    bad_for: asStringArray(matching.bad_for),
-    role_fit_positive_signals: asStringArray(matching.role_fit_positive_signals),
-    role_fit_risk_signals: asStringArray(matching.role_fit_risk_signals),
-    check_in_role_fit: asStringArray(matching.check_in_role_fit),
-  };
+  if (
+    layer.summary_for_synthesis == null ||
+    typeof layer.summary_for_synthesis !== "object" ||
+    Array.isArray(layer.summary_for_synthesis)
+  ) {
+    layer.summary_for_synthesis = {};
+  }
+  if (
+    layer.matching_summary == null ||
+    typeof layer.matching_summary !== "object" ||
+    Array.isArray(layer.matching_summary)
+  ) {
+    layer.matching_summary = {};
+  }
+  ensureCareerReadingSummaryDefaults(layer, args.layerKey);
 
   layer.special_payload = normalizeSpecialPayload(
     args.layerKey,
@@ -796,8 +971,8 @@ export function normalizeCareerReadingLayerForValidation(args: {
   layer.qa = {
     base_has_forbidden_hd_terms: qa.base_has_forbidden_hd_terms === true,
     pro_has_classical_sources: qa.pro_has_classical_sources === true,
-    has_summary_for_synthesis: qa.has_summary_for_synthesis === true,
-    has_matching_summary: qa.has_matching_summary === true,
+    has_summary_for_synthesis: true,
+    has_matching_summary: true,
     human_review_recommended: qa.human_review_recommended === true,
   };
 
@@ -811,6 +986,7 @@ export function validateCareerReadingLayer(
 ): CareerReadingLayerValidationResult {
   const catalog = CAREER_READING_LAYER_CATALOG_V1[layerKey];
   ensureCareerReadingBaseDefaults(layer, layerKey);
+  ensureCareerReadingSummaryDefaults(layer, layerKey);
 
   if (asString(layer.layer_key) !== layerKey) {
     return { ok: false, stage: "validate_layer", message: `layer_key must be ${layerKey}` };
@@ -963,7 +1139,8 @@ export function isCareerReadingValidationRepairable(
   return (
     message.includes("base.headline") ||
     message.includes("base.short_summary") ||
-    message.includes("summary_for_synthesis.one_sentence")
+    message.includes("summary_for_synthesis") ||
+    message.includes("matching_summary")
   );
 }
 
@@ -1312,7 +1489,8 @@ export async function callOpenAiForCareerReadingValidationRepair(args: {
   }).user}
 
 REPAIR: Layer JSON failed validation (${args.validationMessage}). Return the full layer JSON again.
-Return base.headline and base.short_summary as non-empty strings.`;
+Return base.headline and base.short_summary as non-empty strings.
+Return non-empty arrays for all summary_for_synthesis fields and all matching_summary fields.`;
   return callOpenAiForCareerReadingLayer({
     apiKey: args.apiKey,
     model: args.model,

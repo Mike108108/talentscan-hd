@@ -39,8 +39,9 @@ Base:
 Pro:
 - не придумывай названия книг, авторов, внешних источников, raw_path и фиктивные classical_sources;
 - classical_sources должны ссылаться только на элементы карты из layer_input (Type, Strategy, Authority, Profile, Channel, Gate, Center, Personality/Design Sun/Earth и т.д.);
-- connection_logic — связное HD-объяснение на русском: как элементы карты из layer_input связаны с HR-выводом (не шаблон «основано на source fields»);
-- сохрани названия планет, активаций, каналов, ворот, центров в Pro;
+- в Pro используй русские HD-названия в source_label (Тип: Проектор, Стратегия: ждать приглашения, Канал 11-56 — Curiosity, Солнце Личности 18.1);
+- value_summary может содержать canonical API values; source_label и connection_logic — на русском;
+- connection_logic — экспертное HD-объяснение на русском (классическая механика Дизайна Человека), не шаблон «основано на source fields»;
 - technical_title и human_check — по делу, без заглушек.
 
 Summary:

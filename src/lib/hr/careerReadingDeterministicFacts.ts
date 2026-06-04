@@ -5,6 +5,14 @@
 
 import type { CareerReadingLayerKeyV1 } from "./careerReadingLayersV1";
 import {
+  buildDeterministicProConnectionLogic,
+  formatActivationForPro,
+  formatChannelProLabel,
+  isWeakProConnectionLogic,
+  replaceHdTermForBase,
+  translateHdTermForPro,
+} from "./hdTermLabels";
+import {
   buildHdChannelFactsFromChart,
   collectUnknownChannelKeys,
   normalizeChannelKey,
@@ -96,45 +104,48 @@ export function buildDeterministicClassicalSourcesForLayer(
 
   switch (layerKey) {
     case "work_mode_and_decisions": {
-      const fields: Array<[string, string, string]> = [
-        ["type", "Type", "layer_input.type"],
-        ["strategy", "Strategy", "layer_input.strategy"],
-        ["authority", "Authority", "layer_input.authority"],
-        ["signature", "Signature", "layer_input.signature"],
-        ["notSelfTheme", "Not-Self Theme", "layer_input.notSelfTheme"],
+      const fields: Array<[string, string, string, string]> = [
+        ["type", "type", "Тип", "normalized_chart_data.type"],
+        ["strategy", "strategy", "Стратегия", "normalized_chart_data.strategy"],
+        ["authority", "authority", "Авторитет", "normalized_chart_data.authority"],
+        ["signature", "signature", "Подпись", "normalized_chart_data.signature"],
+        ["notSelfTheme", "notSelfTheme", "Тема не-я", "normalized_chart_data.notSelfTheme"],
       ];
-      for (const [key, label, path] of fields) {
+      for (const [key, sourceKey, labelRu, path] of fields) {
         const value = chartValue(input, key);
         if (value === "—") continue;
+        const translated = translateHdTermForPro(value);
         sources.push(
           makeClassicalSource({
-            source_key: key,
-            source_label: label,
+            source_key: sourceKey,
+            source_label: `${labelRu}: ${translated}`,
             raw_path: path,
-            value_summary: value,
+            value_summary: translated,
           }),
         );
       }
       break;
     }
     case "profile_work_style": {
-      if (asString(input.profile)) {
+      const profile = chartValue(input, "profile");
+      if (profile !== "—") {
         sources.push(
           makeClassicalSource({
             source_key: "profile",
-            source_label: "Profile",
-            raw_path: "layer_input.profile",
-            value_summary: chartValue(input, "profile"),
+            source_label: `Профиль: ${profile}`,
+            raw_path: "normalized_chart_data.profile",
+            value_summary: profile,
           }),
         );
       }
-      if (asString(input.definition)) {
+      const definition = chartValue(input, "definition");
+      if (definition !== "—") {
         sources.push(
           makeClassicalSource({
             source_key: "definition",
-            source_label: "Definition",
-            raw_path: "layer_input.definition",
-            value_summary: chartValue(input, "definition"),
+            source_label: `Определение: ${definition}`,
+            raw_path: "normalized_chart_data.definition",
+            value_summary: definition,
           }),
         );
       }
@@ -143,7 +154,7 @@ export function buildDeterministicClassicalSourcesForLayer(
         sources.push(
           makeClassicalSource({
             source_key: "personality.sun",
-            source_label: "Personality Sun",
+            source_label: formatActivationForPro("personality", "sun", pSun),
             raw_path: "layer_input.activations.personality.sun",
             value_summary: pSun,
           }),
@@ -154,7 +165,7 @@ export function buildDeterministicClassicalSourcesForLayer(
         sources.push(
           makeClassicalSource({
             source_key: "design.sun",
-            source_label: "Design Sun",
+            source_label: formatActivationForPro("design", "sun", dSun),
             raw_path: "layer_input.activations.design.sun",
             value_summary: dSun,
           }),
@@ -169,7 +180,7 @@ export function buildDeterministicClassicalSourcesForLayer(
         sources.push(
           makeClassicalSource({
             source_key: "personality.sun",
-            source_label: `Personality Sun ${pSun}`,
+            source_label: formatActivationForPro("personality", "sun", pSun),
             raw_path: "layer_input.activations.personality.sun",
             value_summary: pSun,
           }),
@@ -179,7 +190,7 @@ export function buildDeterministicClassicalSourcesForLayer(
         sources.push(
           makeClassicalSource({
             source_key: "personality.earth",
-            source_label: `Personality Earth ${pEarth}`,
+            source_label: formatActivationForPro("personality", "earth", pEarth),
             raw_path: "layer_input.activations.personality.earth",
             value_summary: pEarth,
           }),
@@ -194,7 +205,7 @@ export function buildDeterministicClassicalSourcesForLayer(
         sources.push(
           makeClassicalSource({
             source_key: "design.sun",
-            source_label: `Design Sun ${dSun}`,
+            source_label: formatActivationForPro("design", "sun", dSun),
             raw_path: "layer_input.activations.design.sun",
             value_summary: dSun,
           }),
@@ -204,7 +215,7 @@ export function buildDeterministicClassicalSourcesForLayer(
         sources.push(
           makeClassicalSource({
             source_key: "design.earth",
-            source_label: `Design Earth ${dEarth}`,
+            source_label: formatActivationForPro("design", "earth", dEarth),
             raw_path: "layer_input.activations.design.earth",
             value_summary: dEarth,
           }),
@@ -215,16 +226,13 @@ export function buildDeterministicClassicalSourcesForLayer(
     case "talent_channels": {
       const facts = readChannelFactsFromInput(input);
       for (const fact of facts) {
-        const labelParts = [
-          `Channel ${fact.channel_key}`,
-          fact.classical_name ? `— ${fact.classical_name}` : "",
-        ].join(" ");
+        const formatted = formatChannelProLabel(fact);
         sources.push(
           makeClassicalSource({
             source_key: `channel.${fact.channel_key}`,
-            source_label: labelParts.trim(),
-            raw_path: "layer_input.channel_facts",
-            value_summary: `Gates ${fact.gates[0]}–${fact.gates[1]}, Centers ${fact.centers[0]}–${fact.centers[1]}`,
+            source_label: formatted.source_label,
+            raw_path: "normalized_chart_data.channelsLong",
+            value_summary: formatted.value_summary,
           }),
         );
       }
@@ -242,12 +250,12 @@ export function buildDeterministicClassicalSourcesForLayer(
         sources.push(
           makeClassicalSource({
             source_key: `gate.${gate}`,
-            source_label: `Gate ${gate}`,
+            source_label: `Ворота ${gate}`,
             raw_path: "layer_input.repeated_gate_candidates",
             value_summary:
               gateSources.length > 0
-                ? `Sources: ${gateSources.join(", ")}`
-                : `Gate ${gate} in gatesBoth`,
+                ? `Источники: ${gateSources.join(", ")}`
+                : `Ворота ${gate} (gatesBoth)`,
             confidence: gateSources.length >= 2 ? "high" : "medium",
           }),
         );
@@ -257,9 +265,9 @@ export function buildDeterministicClassicalSourcesForLayer(
           sources.push(
             makeClassicalSource({
               source_key: `gate.${gate}`,
-              source_label: `Gate ${gate}`,
+              source_label: `Ворота ${gate}`,
               raw_path: "layer_input.gatesBoth",
-              value_summary: `Gate ${gate} (both sides)`,
+              value_summary: `Ворота ${gate} (обе стороны)`,
               confidence: "medium",
             }),
           );
@@ -269,22 +277,24 @@ export function buildDeterministicClassicalSourcesForLayer(
     }
     case "centers_stability_and_sensitivity": {
       for (const center of asStringArray(input.definedCenters ?? input.defined_centers)) {
+        const centerRu = translateHdTermForPro(center);
         sources.push(
           makeClassicalSource({
             source_key: `center.${center}.defined`,
-            source_label: `Defined Center — ${center}`,
+            source_label: `Определённый центр — ${centerRu}`,
             raw_path: "layer_input.definedCenters",
-            value_summary: `${center} (defined)`,
+            value_summary: `${centerRu} (определён)`,
           }),
         );
       }
       for (const center of asStringArray(input.openCenters ?? input.open_centers)) {
+        const centerRu = translateHdTermForPro(center);
         sources.push(
           makeClassicalSource({
             source_key: `center.${center}.open`,
-            source_label: `Open Center — ${center}`,
+            source_label: `Открытый центр — ${centerRu}`,
             raw_path: "layer_input.openCenters",
-            value_summary: `${center} (open / sensitive)`,
+            value_summary: `${centerRu} (открытый / чувствительный)`,
             confidence: "medium",
           }),
         );
@@ -292,22 +302,23 @@ export function buildDeterministicClassicalSourcesForLayer(
       break;
     }
     case "environment_focus_and_motivation": {
-      const fields: Array<[string, string]> = [
-        ["environment", "Environment"],
-        ["motivation", "Motivation"],
-        ["transference", "Transference"],
-        ["perspective", "Perspective"],
-        ["cognition", "Cognition"],
-        ["determination", "Determination"],
+      const fields: Array<[string, string, string]> = [
+        ["environment", "Среда", "normalized_chart_data.environment"],
+        ["motivation", "Мотивация", "normalized_chart_data.motivation"],
+        ["transference", "Трансференция", "normalized_chart_data.transference"],
+        ["perspective", "Перспектива", "normalized_chart_data.perspective"],
+        ["cognition", "Познание", "normalized_chart_data.cognition"],
+        ["determination", "Определение (Determination)", "normalized_chart_data.determination"],
       ];
-      for (const [key, label] of fields) {
+      for (const [key, labelRu, path] of fields) {
         const value = chartValue(input, key);
         if (value === "—") continue;
+        const translated = translateHdTermForPro(value);
         sources.push(
           makeClassicalSource({
             source_key: key,
-            source_label: label,
-            raw_path: `layer_input.${key}`,
+            source_label: `${labelRu}: ${translated}`,
+            raw_path: path,
             value_summary: value,
           }),
         );
@@ -317,7 +328,7 @@ export function buildDeterministicClassicalSourcesForLayer(
         sources.push(
           makeClassicalSource({
             source_key: "variables",
-            source_label: "Variables",
+            source_label: "Переменные (Variables)",
             raw_path: "layer_input.variables",
             value_summary: JSON.stringify(variables),
             confidence: "medium",
@@ -491,14 +502,85 @@ export function enforceDeterministicProSources(
 
   if (deterministic.length > 0) {
     pro.classical_sources = deterministic;
-    layer.pro = pro;
-    return;
+  } else {
+    const existing = Array.isArray(pro.classical_sources) ? pro.classical_sources : [];
+    pro.classical_sources = existing.filter((item) => !isFakeClassicalSource(item));
   }
 
-  const existing = Array.isArray(pro.classical_sources) ? pro.classical_sources : [];
-  const filtered = existing.filter((item) => !isFakeClassicalSource(item));
-  if (filtered.length !== existing.length) {
-    pro.classical_sources = filtered;
-    layer.pro = pro;
+  const connectionLogic = buildDeterministicProConnectionLogic(layerKey, layerInput);
+  if (connectionLogic && isWeakProConnectionLogic(asString(pro.connection_logic))) {
+    pro.connection_logic = connectionLogic;
   }
+
+  layer.pro = pro;
+}
+
+function sanitizeBaseText(value: unknown): string {
+  const text = asString(value);
+  if (!text) return text;
+  return replaceHdTermForBase(text);
+}
+
+/** Strip/replace EN+RU HD terms in Base; Pro is not modified. */
+export function sanitizeCareerReadingBaseHdLanguage(layer: Record<string, unknown>): void {
+  const base = asRecord(layer.base);
+
+  for (const key of [
+    "headline",
+    "short_summary",
+    "detailed_explanation",
+    "how_it_appears_at_work",
+  ]) {
+    if (base[key] != null) base[key] = sanitizeBaseText(base[key]);
+  }
+
+  base.where_useful = asStringArray(base.where_useful).map((item) => sanitizeBaseText(item));
+  base.management_tips = asStringArray(base.management_tips).map((item) => sanitizeBaseText(item));
+
+  const strengths = Array.isArray(base.strengths) ? base.strengths : [];
+  base.strengths = strengths.map((item) => {
+    const rec = asRecord(item);
+    return {
+      ...rec,
+      title: sanitizeBaseText(rec.title),
+      description: sanitizeBaseText(rec.description),
+    };
+  });
+
+  const risks = Array.isArray(base.risks) ? base.risks : [];
+  base.risks = risks.map((item) => {
+    const rec = asRecord(item);
+    return {
+      ...rec,
+      title: sanitizeBaseText(rec.title),
+      description: sanitizeBaseText(rec.description),
+      how_it_may_show_up: rec.how_it_may_show_up == null ? null : sanitizeBaseText(rec.how_it_may_show_up),
+      mitigation: rec.mitigation == null ? null : sanitizeBaseText(rec.mitigation),
+    };
+  });
+
+  const checks = Array.isArray(base.what_to_check) ? base.what_to_check : [];
+  base.what_to_check = checks.map((item) => {
+    const rec = asRecord(item);
+    return {
+      ...rec,
+      hypothesis: sanitizeBaseText(rec.hypothesis),
+      check_method: sanitizeBaseText(rec.check_method),
+      good_signal: sanitizeBaseText(rec.good_signal),
+      warning_signal: sanitizeBaseText(rec.warning_signal),
+    };
+  });
+
+  const sections = Array.isArray(base.sections) ? base.sections : [];
+  base.sections = sections.map((item) => {
+    const rec = asRecord(item);
+    return {
+      ...rec,
+      title: sanitizeBaseText(rec.title),
+      body: rec.body == null ? null : sanitizeBaseText(rec.body),
+      items: asStringArray(rec.items).map((entry) => sanitizeBaseText(entry)),
+    };
+  });
+
+  layer.base = base;
 }

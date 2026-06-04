@@ -8,6 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   enforceDeterministicProSources,
   enforceTalentChannelFacts,
+  sanitizeCareerReadingBaseHdLanguage,
 } from "../../src/lib/hr/careerReadingDeterministicFacts";
 import {
   CAREER_READING_LAYER_CATALOG_V1,
@@ -443,6 +444,33 @@ function collectCareerReadingBaseText(layer: Record<string, unknown>): Array<{ p
       const text = asString(rec[key]);
       if (text) fields.push({ path: `base.risks[${i}].${key}`, text });
     }
+  });
+  const strengths = Array.isArray(base.strengths) ? base.strengths : [];
+  strengths.forEach((point, i) => {
+    const rec = asRecord(point);
+    for (const key of ["title", "description"]) {
+      const text = asString(rec[key]);
+      if (text) fields.push({ path: `base.strengths[${i}].${key}`, text });
+    }
+  });
+  const checks = Array.isArray(base.what_to_check) ? base.what_to_check : [];
+  checks.forEach((check, i) => {
+    const rec = asRecord(check);
+    for (const key of ["hypothesis", "check_method", "good_signal", "warning_signal"]) {
+      const text = asString(rec[key]);
+      if (text) fields.push({ path: `base.what_to_check[${i}].${key}`, text });
+    }
+  });
+  const sections = Array.isArray(base.sections) ? base.sections : [];
+  sections.forEach((section, i) => {
+    const rec = asRecord(section);
+    const title = asString(rec.title);
+    if (title) fields.push({ path: `base.sections[${i}].title`, text: title });
+    const body = asString(rec.body);
+    if (body) fields.push({ path: `base.sections[${i}].body`, text: body });
+    asStringArray(rec.items).forEach((text, j) => {
+      if (text) fields.push({ path: `base.sections[${i}].items[${j}]`, text });
+    });
   });
   return fields;
 }
@@ -1133,6 +1161,7 @@ export function normalizeCareerReadingLayerForValidation(args: {
     enforceTalentChannelFacts(layer, args.layerInput);
   }
   enforceDeterministicProSources(layer, args.layerKey, args.layerInput);
+  sanitizeCareerReadingBaseHdLanguage(layer);
 
   const qa = asRecord(layer.qa);
   layer.qa = {
@@ -1158,6 +1187,7 @@ export function validateCareerReadingLayer(
     enforceTalentChannelFacts(layer, layerInput);
   }
   enforceDeterministicProSources(layer, layerKey, layerInput);
+  sanitizeCareerReadingBaseHdLanguage(layer);
   ensureCareerReadingBaseArrayDefaults(layer, layerKey);
 
   if (asString(layer.layer_key) !== layerKey) {

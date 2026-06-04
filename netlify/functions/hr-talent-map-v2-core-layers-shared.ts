@@ -128,7 +128,16 @@ export const CORE_LAYERS_ORDER = [
   "amplified_themes",
   "conscious_axis",
   "background_axis",
+  "communication_style",
+  "values_and_culture",
+  "growth_tension",
+  "responsibility_and_rules",
+  "work_environment_and_recovery",
+  "motivation_and_focus",
+  "team_contribution_type",
 ] as const;
+
+export const RUNTIME_CORE_LAYER_COUNT = CORE_LAYERS_ORDER.length;
 
 export type CoreLayerKey = (typeof CORE_LAYERS_ORDER)[number];
 
@@ -149,13 +158,22 @@ export const CANDIDATE_LAYER_TO_VACANCY_LAYER_MAP: Record<
   amplified_themes: ["repeated_role_themes", "key_challenges"],
   conscious_axis: ["main_role_value", "primary_contribution"],
   background_axis: ["hidden_role_demands", "long_term_role_pattern"],
+  communication_style: ["communication_requirements", "stakeholder_updates"],
+  values_and_culture: ["culture", "team_norms", "collaboration_model"],
+  growth_tension: ["pressure_level", "feedback_intensity", "role_stressors"],
+  responsibility_and_rules: ["manager_context", "compliance_expectations", "autonomy_model"],
+  work_environment_and_recovery: ["environment", "work_mode", "recovery_expectations"],
+  motivation_and_focus: ["role_energy", "priorities_clarity", "focus_requirements"],
+  team_contribution_type: ["culture", "responsibilities", "team_dynamics"],
 };
 
 export type CoreLayerGroup =
   | "energy_and_decision"
   | "core"
   | "centers_channels_gates"
-  | "main_activations";
+  | "main_activations"
+  | "planetary_activations"
+  | "environment_and_motivation";
 
 export type CoreLayerDef = {
   layer_key: CoreLayerKey;
@@ -350,6 +368,126 @@ export const CORE_LAYER_DEFS: Record<CoreLayerKey, CoreLayerDef> = {
       "channels_short",
     ],
   },
+  communication_style: {
+    layer_key: "communication_style",
+    hr_title: "Коммуникация и объяснение",
+    group: "planetary_activations",
+    ui_priority: 140,
+    sourceValueKeys: [
+      "personality_mercury",
+      "design_mercury",
+      "channels_long",
+      "channels_short",
+      "gates_both",
+      "gate_sources_summary",
+      "talent_links_summary",
+      "work_signature_summary",
+      "decision_style_summary",
+      "profile",
+    ],
+  },
+  values_and_culture: {
+    layer_key: "values_and_culture",
+    hr_title: "Ценности и культура взаимодействия",
+    group: "planetary_activations",
+    ui_priority: 150,
+    sourceValueKeys: [
+      "personality_venus",
+      "design_venus",
+      "profile",
+      "work_signature_summary",
+      "inner_coherence_summary",
+      "open_centers",
+      "channels_long",
+      "channels_short",
+      "communication_style_summary",
+    ],
+  },
+  growth_tension: {
+    layer_key: "growth_tension",
+    hr_title: "Напряжение и рост",
+    group: "planetary_activations",
+    ui_priority: 160,
+    sourceValueKeys: [
+      "personality_mars",
+      "design_mars",
+      "open_centers",
+      "not_self_theme",
+      "amplified_themes_summary",
+      "main_work_axis_summary",
+      "transference",
+      "distraction",
+    ],
+  },
+  responsibility_and_rules: {
+    layer_key: "responsibility_and_rules",
+    hr_title: "Ответственность, правила и зрелость",
+    group: "planetary_activations",
+    ui_priority: 170,
+    sourceValueKeys: [
+      "personality_jupiter",
+      "design_jupiter",
+      "personality_saturn",
+      "design_saturn",
+      "work_signature_summary",
+      "decision_style_summary",
+      "inner_coherence_summary",
+      "defined_centers",
+      "growth_tension_summary",
+    ],
+  },
+  work_environment_and_recovery: {
+    layer_key: "work_environment_and_recovery",
+    hr_title: "Рабочая среда и восстановление",
+    group: "environment_and_motivation",
+    ui_priority: 180,
+    sourceValueKeys: [
+      "environment",
+      "determination",
+      "cognition",
+      "variables_summary",
+      "defined_centers",
+      "open_centers",
+      "inner_coherence_summary",
+      "decision_style_summary",
+      "work_format_summary",
+    ],
+  },
+  motivation_and_focus: {
+    layer_key: "motivation_and_focus",
+    hr_title: "Мотивация и фокус",
+    group: "environment_and_motivation",
+    ui_priority: 190,
+    sourceValueKeys: [
+      "motivation",
+      "transference",
+      "perspective",
+      "distraction",
+      "personality_moon",
+      "design_moon",
+      "work_format_summary",
+      "task_entry_summary",
+      "decision_style_summary",
+      "open_centers",
+    ],
+  },
+  team_contribution_type: {
+    layer_key: "team_contribution_type",
+    hr_title: "Тип вклада в команду",
+    group: "environment_and_motivation",
+    ui_priority: 200,
+    sourceValueKeys: [
+      "circuitries",
+      "channels_long",
+      "channels_short",
+      "talent_links_summary",
+      "communication_style_summary",
+      "values_and_culture_summary",
+      "work_signature_summary",
+      "defined_centers",
+      "main_work_axis_summary",
+    ],
+  },
 };
 
 const UUID_RE =
@@ -501,6 +639,14 @@ export type LayerProgressItem = {
   error?: string | Record<string, unknown> | null;
 };
 
+export type GenerationCancellationMeta = {
+  requested?: boolean;
+  requested_at?: string | null;
+  requested_by?: string | null;
+  status?: "requested" | "cancelled" | null;
+  cancelled_at?: string | null;
+};
+
 export type LayerGenerationState = {
   status: "generating" | "ready" | "error";
   started_at: string;
@@ -511,6 +657,10 @@ export type LayerGenerationState = {
   total_count?: number;
   current_layer_key?: CoreLayerKey | null;
   current_layer_title?: string | null;
+  cancel_requested?: boolean;
+  cancel_requested_at?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
   mode: "sequential";
   run_mode: CoreLayersRunMode;
   selected_model: string;
@@ -789,6 +939,103 @@ function getActivationPlanet(
   return value || null;
 }
 
+function buildActivationSideForCompact(
+  normalizedChart: Record<string, unknown>,
+  side: "personality" | "design",
+): Record<string, string | null> {
+  const planets = [
+    "sun",
+    "earth",
+    "moon",
+    "mercury",
+    "venus",
+    "mars",
+    "jupiter",
+    "saturn",
+    "uranus",
+    "neptune",
+    "pluto",
+    "northNode",
+    "southNode",
+  ];
+  const out: Record<string, string | null> = {};
+  for (const planet of planets) {
+    out[planet] = getActivationPlanet(normalizedChart, side, planet);
+  }
+  return out;
+}
+
+function formatVariablesSummary(variables: unknown): string | null {
+  if (variables == null) return null;
+  if (typeof variables === "string") {
+    const trimmed = variables.trim();
+    return trimmed || null;
+  }
+  if (typeof variables !== "object" || Array.isArray(variables)) return null;
+  const rec = variables as Record<string, unknown>;
+  const parts = Object.entries(rec)
+    .map(([key, value]) => {
+      const text = asString(value);
+      return text ? `${key}: ${text}` : "";
+    })
+    .filter(Boolean)
+    .slice(0, 8);
+  return parts.length > 0 ? parts.join("; ") : null;
+}
+
+function enrichChartWithPriorLayerSummaries(
+  chart: Record<string, unknown>,
+  priorLayerReports: Record<string, unknown>[],
+): Record<string, unknown> {
+  const enriched = { ...chart };
+  for (const report of priorLayerReports) {
+    const layerKey = asString(report.layer_key);
+    if (!layerKey) continue;
+    const base = asRecord(report.base);
+    const summary =
+      asString(base.short_summary) || asString(base.detailed_explanation) || null;
+    enriched[`${layerKey}_summary`] = summary;
+  }
+
+  const consciousSummary = asString(enriched.conscious_axis_summary);
+  const backgroundSummary = asString(enriched.background_axis_summary);
+  if (consciousSummary || backgroundSummary) {
+    enriched.main_work_axis_summary = [consciousSummary, backgroundSummary]
+      .filter(Boolean)
+      .join(" · ");
+  }
+
+  const pointSummary = asString(enriched.point_talents_summary);
+  const amplifiedSummary = asString(enriched.amplified_themes_summary);
+  if (pointSummary || amplifiedSummary) {
+    enriched.point_talents_and_themes_summary = [pointSummary, amplifiedSummary]
+      .filter(Boolean)
+      .join(" · ");
+  }
+
+  return enriched;
+}
+
+function buildPriorLayersCompactContext(
+  priorLayerReports: Record<string, unknown>[],
+): Array<{ layer_key: string; hr_title: string; short_summary: string | null }> {
+  return priorLayerReports
+    .map((report) => {
+      const layerKey = asString(report.layer_key);
+      if (!layerKey) return null;
+      const base = asRecord(report.base);
+      return {
+        layer_key: layerKey,
+        hr_title: asString(report.hr_title) || layerKey,
+        short_summary:
+          asString(base.short_summary) || asString(base.detailed_explanation) || null,
+      };
+    })
+    .filter((item): item is { layer_key: string; hr_title: string; short_summary: string | null } =>
+      item != null,
+    );
+}
+
 function normalizeCircuitries(value: unknown): string | null {
   if (typeof value === "string" && value.trim()) return value.trim();
   if (Array.isArray(value)) {
@@ -847,22 +1094,34 @@ function buildChartFieldsForCompactInput(
     personality_earth: getActivationPlanet(normalizedChart, "personality", "earth"),
     design_sun: getActivationPlanet(normalizedChart, "design", "sun"),
     design_earth: getActivationPlanet(normalizedChart, "design", "earth"),
+    personality_mercury: getActivationPlanet(normalizedChart, "personality", "mercury"),
+    design_mercury: getActivationPlanet(normalizedChart, "design", "mercury"),
+    personality_venus: getActivationPlanet(normalizedChart, "personality", "venus"),
+    design_venus: getActivationPlanet(normalizedChart, "design", "venus"),
+    personality_mars: getActivationPlanet(normalizedChart, "personality", "mars"),
+    design_mars: getActivationPlanet(normalizedChart, "design", "mars"),
+    personality_jupiter: getActivationPlanet(normalizedChart, "personality", "jupiter"),
+    design_jupiter: getActivationPlanet(normalizedChart, "design", "jupiter"),
+    personality_saturn: getActivationPlanet(normalizedChart, "personality", "saturn"),
+    design_saturn: getActivationPlanet(normalizedChart, "design", "saturn"),
+    personality_moon: getActivationPlanet(normalizedChart, "personality", "moon"),
+    design_moon: getActivationPlanet(normalizedChart, "design", "moon"),
     incarnation_cross: asString(normalizedChart.incarnationCross) || null,
     circuitries: normalizeCircuitries(normalizedChart.circuitries),
     signature: normalizedChart.signature ?? null,
     notSelfTheme: normalizedChart.notSelfTheme ?? null,
+    not_self_theme: normalizedChart.notSelfTheme ?? null,
     environment: normalizedChart.environment ?? null,
     motivation: normalizedChart.motivation ?? null,
     transference: normalizedChart.transference ?? null,
+    perspective: normalizedChart.perspective ?? null,
+    distraction: normalizedChart.distraction ?? null,
+    cognition: normalizedChart.cognition ?? null,
+    determination: normalizedChart.determination ?? null,
+    variables_summary: formatVariablesSummary(normalizedChart.variables),
     activations: {
-      personality: {
-        sun: getActivationPlanet(normalizedChart, "personality", "sun"),
-        earth: getActivationPlanet(normalizedChart, "personality", "earth"),
-      },
-      design: {
-        sun: getActivationPlanet(normalizedChart, "design", "sun"),
-        earth: getActivationPlanet(normalizedChart, "design", "earth"),
-      },
+      personality: buildActivationSideForCompact(normalizedChart, "personality"),
+      design: buildActivationSideForCompact(normalizedChart, "design"),
     },
     canRenderBodygraph: normalizedChart.canRenderBodygraph === true,
     data_quality: dataQuality,
@@ -964,7 +1223,13 @@ export function buildCoreLayersCompactInput(args: {
   candidate: Record<string, unknown>;
   company: Record<string, unknown>;
   normalizedChart: Record<string, unknown>;
+  priorLayerReports?: Record<string, unknown>[];
 }): Record<string, unknown> {
+  const priorLayerReports = args.priorLayerReports ?? [];
+  const chartBase = buildChartFieldsForCompactInput(args.normalizedChart, args.candidate);
+  const chart = enrichChartWithPriorLayerSummaries(chartBase, priorLayerReports);
+  const priorLayers = buildPriorLayersCompactContext(priorLayerReports);
+
   return {
     layer_key: args.layerKey,
     candidate: {
@@ -975,7 +1240,8 @@ export function buildCoreLayersCompactInput(args: {
       name: asString(args.company.name) || null,
       industry: asString(args.company.industry) || null,
     },
-    chart: buildChartFieldsForCompactInput(args.normalizedChart, args.candidate),
+    chart,
+    ...(priorLayers.length > 0 ? { prior_layers: priorLayers } : {}),
   };
 }
 
@@ -1602,6 +1868,91 @@ Base НЕ должен использовать: Дизайн, Солнце Ди
 Формулируй как наблюдаемую рабочую гипотезу:
 «со стороны может быть заметно», «в рабочих ситуациях может проявляться»,
 «это стоит проверить через наблюдение и кейс».`;
+    case "communication_style":
+      return `=== Слой communication_style (Коммуникация и объяснение) ===
+HR-фокус:
+- Как человек доносит мысль, объясняет, формулирует, держит коммуникацию?
+- Как аргументирует, продаёт идею, ведёт диалог?
+- Где это помогает в работе, а где может создавать риск?
+- Как проверить на интервью или в кейсе?
+
+Основные источники: personality_mercury, design_mercury, channels, gates summaries.
+Поддерживающие: prior_layers (talent_links, work_signature, decision_style), profile.
+
+Используй prior_layers и *_summary как контекст уже сгенерированных слоёв, но не копируй их дословно.
+Base — только HR-язык, без технических терминов карты.`;
+    case "values_and_culture":
+      return `=== Слой values_and_culture (Ценности и культура взаимодействия) ===
+HR-фокус:
+- Что человеку важно в рабочей культуре, качестве отношений, правилах уважения?
+- Какой стиль команды и этики взаимодействия ему ближе?
+- Где возможны ценностные конфликты или риски?
+- Как проверить на интервью?
+
+Основные источники: personality_venus, design_venus, profile, work_signature_summary.
+Поддерживающие: inner_coherence_summary, open_centers, communication_style_summary, channels.
+
+Base — HR-язык о культуре и отношениях, без технических терминов.`;
+    case "growth_tension":
+      return `=== Слой growth_tension (Напряжение и рост) ===
+HR-фокус:
+- Где человек может торопиться, защищаться, спорить, незрело реагировать?
+- Что может быть зоной роста через напряжение?
+- Как руководителю поддерживать зрелое проявление?
+- Как проверить на интервью/кейсе?
+
+Основные источники: personality_mars, design_mars, open_centers, not_self_theme.
+Поддерживающие: amplified_themes_summary, main_work_axis_summary, transference, distraction.
+
+Не делай категоричных выводов. Формулируй как гипотезу для проверки.`;
+    case "responsibility_and_rules":
+      return `=== Слой responsibility_and_rules (Ответственность, правила и зрелость) ===
+HR-фокус:
+- Как человек относится к правилам, рамкам, ответственности, ограничениям?
+- Как держит долгосрочные договорённости и зрелую обратную связь?
+- Где возможны риски с дисциплиной или, наоборот, чрезмерной жёсткостью?
+- Как проверить?
+
+Основные источники: personality_jupiter, design_jupiter, personality_saturn, design_saturn.
+Поддерживающие: work_signature_summary, decision_style_summary, inner_coherence_summary, growth_tension_summary.
+
+Base — HR-язык о зрелости и правилах, без технических терминов.`;
+    case "work_environment_and_recovery":
+      return `=== Слой work_environment_and_recovery (Рабочая среда и восстановление) ===
+HR-фокус:
+- В каких условиях человек раскрывается?
+- Как ему лучше восстанавливаться, какой режим снижает перегруз?
+- Что перегружает?
+- Как проверить?
+
+Основные источники: environment, determination, cognition, variables_summary.
+Поддерживающие: defined_centers, open_centers, inner_coherence_summary, work_format_summary.
+
+ВАЖНО: без медицинских/диетических советов. Только рабочая среда и режим.`;
+    case "motivation_and_focus":
+      return `=== Слой motivation_and_focus (Мотивация и фокус) ===
+HR-фокус:
+- Что включает человека, что удерживает внимание?
+- Что сбивает фокус?
+- Как меняется мотивация под давлением?
+- Как проверить?
+
+Основные источники: motivation, transference, perspective, distraction, moon activations.
+Поддерживающие: work_format_summary, task_entry_summary, decision_style_summary, open_centers.
+
+Base — HR-язык о мотивации и фокусе, без технических терминов.`;
+    case "team_contribution_type":
+      return `=== Слой team_contribution_type (Тип вклада в команду) ===
+HR-фокус:
+- Какой вклад человек приносит в команду (индивидуальный, системный, коммуникационный, поддерживающий и т.д.)?
+- Где это особенно полезно?
+- Где может быть риск несовпадения с ожиданиями команды?
+- Как проверить?
+
+Основные источники: circuitries, channels, talent_links_summary, communication_style_summary, values_and_culture_summary.
+Поддерживающие: work_signature_summary, main_work_axis_summary, defined_centers.
+
+Base — HR-язык о командном вкладе, без технических терминов.`;
     default:
       return "";
   }
@@ -2173,6 +2524,34 @@ const SOURCE_KEY_LABELS: Record<string, string> = {
   environment: "Среда",
   motivation: "Мотивация",
   transference: "Трансференция",
+  perspective: "Перспектива",
+  distraction: "Отвлечение",
+  cognition: "Когниция",
+  determination: "Determination",
+  variables_summary: "Variables",
+  personality_mercury: "Mercury личности",
+  design_mercury: "Mercury дизайна",
+  personality_venus: "Venus личности",
+  design_venus: "Venus дизайна",
+  personality_mars: "Mars личности",
+  design_mars: "Mars дизайна",
+  personality_jupiter: "Jupiter личности",
+  design_jupiter: "Jupiter дизайна",
+  personality_saturn: "Saturn личности",
+  design_saturn: "Saturn дизайна",
+  personality_moon: "Moon личности",
+  design_moon: "Moon дизайна",
+  talent_links_summary: "Краткий вывод talent_links",
+  work_signature_summary: "Краткий вывод work_signature",
+  decision_style_summary: "Краткий вывод decision_style",
+  inner_coherence_summary: "Краткий вывод inner_coherence",
+  communication_style_summary: "Краткий вывод communication_style",
+  values_and_culture_summary: "Краткий вывод values_and_culture",
+  growth_tension_summary: "Краткий вывод growth_tension",
+  main_work_axis_summary: "Краткий вывод main_work_axis",
+  amplified_themes_summary: "Краткий вывод amplified_themes",
+  work_format_summary: "Краткий вывод work_format",
+  task_entry_summary: "Краткий вывод task_entry",
 };
 
 const SOURCE_VALUE_ARRAY_KEYS = new Set([
@@ -2578,6 +2957,118 @@ const MATCHING_SUMMARY_LAYER_DEFAULTS: Record<CoreLayerKey, MatchingSummaryDefau
     what_to_check_in_role_fit: [
       "заметен ли паттерн в рабочих ситуациях роли",
       "как команда реагирует на естественный стиль кандидата",
+    ],
+  },
+  communication_style: {
+    summary: "Слой описывает, как кандидат объясняет, аргументирует и ведёт рабочую коммуникацию.",
+    strong_match_when_role_requires: [
+      "роли с регулярной коммуникацией и объяснением решений",
+      "контекст, где важно доносить смысл разным аудиториям",
+    ],
+    risk_when_role_requires: [
+      "роль с минимальной коммуникацией при высоких ожиданиях презентации",
+      "среда, где стиль объяснения кандидата постоянно обрывается",
+    ],
+    needs_from_role: ["понятные каналы коммуникации", "время на объяснение и синхронизацию"],
+    what_to_check_in_role_fit: [
+      "как кандидат объясняет сложное простым языком",
+      "как ведёт диалог при возражениях",
+    ],
+  },
+  values_and_culture: {
+    summary: "Слой описывает ценности и ожидания к рабочей культуре и взаимодействию.",
+    strong_match_when_role_requires: [
+      "культура с уважением к договорённостям и прозрачным правилам",
+      "командный стиль, совпадающий с ценностными ориентирами кандидата",
+    ],
+    risk_when_role_requires: [
+      "культура с жёстким давлением и неформальными правилами",
+      "среда, где ценности команды противоречат стилю кандидата",
+    ],
+    needs_from_role: ["ясные командные нормы", "уважение к границам и договорённостям"],
+    what_to_check_in_role_fit: [
+      "что для кандидата важно в культуре команды",
+      "как реагирует на конфликт ценностей",
+    ],
+  },
+  growth_tension: {
+    summary: "Слой описывает зоны напряжения и потенциала роста кандидата.",
+    strong_match_when_role_requires: [
+      "роли с поддержкой зрелой обратной связи",
+      "среда, где можно расти через напряжение без постоянного давления",
+    ],
+    risk_when_role_requires: [
+      "высокое давление без поддержки и времени на адаптацию",
+      "роль, где типичные триггеры кандидата постоянно активны",
+    ],
+    needs_from_role: ["конструктивная обратная связь", "рамки для зрелого проявления"],
+    what_to_check_in_role_fit: [
+      "как кандидат реагирует на напряжение и критику",
+      "что помогает ему расти, а что блокирует",
+    ],
+  },
+  responsibility_and_rules: {
+    summary: "Слой описывает отношение кандидата к правилам, ответственности и зрелости.",
+    strong_match_when_role_requires: [
+      "роли с понятными правилами и зонами ответственности",
+      "контекст, где важна зрелая обратная связь и дисциплина договорённостей",
+    ],
+    risk_when_role_requires: [
+      "хаотичные правила и постоянные исключения без объяснений",
+      "роль с размытой ответственностью и постоянными «серыми зонами»",
+    ],
+    needs_from_role: ["ясные правила", "прозрачная ответственность", "зрелая обратная связь"],
+    what_to_check_in_role_fit: [
+      "как кандидат держит договорённости и рамки",
+      "как реагирует на ограничения и правила",
+    ],
+  },
+  work_environment_and_recovery: {
+    summary: "Слой описывает подходящую рабочую среду и режим восстановления кандидата.",
+    strong_match_when_role_requires: [
+      "среда с подходящим темпом и форматом работы",
+      "условия, где кандидат может устойчиво восстанавливаться",
+    ],
+    risk_when_role_requires: [
+      "среда с постоянным перегрузом и отсутствием восстановления",
+      "режим, который системно конфликтует с рабочим ритмом кандидата",
+    ],
+    needs_from_role: ["подходящий темп", "возможность восстановления", "понятный режим работы"],
+    what_to_check_in_role_fit: [
+      "какая среда помогает кандидату работать устойчиво",
+      "что его перегружает",
+    ],
+  },
+  motivation_and_focus: {
+    summary: "Слой описывает мотивацию, фокус и реакцию кандидата на давление.",
+    strong_match_when_role_requires: [
+      "роли с понятными приоритетами и смыслом задач",
+      "контекст, где мотивация кандидата совпадает с целями роли",
+    ],
+    risk_when_role_requires: [
+      "постоянная смена приоритетов без объяснения смысла",
+      "роль, где основные триггеры отвлечения кандидата постоянно активны",
+    ],
+    needs_from_role: ["ясные приоритеты", "смысл задач", "защита фокусного времени"],
+    what_to_check_in_role_fit: [
+      "что включает кандидата в работе",
+      "что сбивает фокус под давлением",
+    ],
+  },
+  team_contribution_type: {
+    summary: "Слой описывает тип вклада кандидата в командную работу.",
+    strong_match_when_role_requires: [
+      "командные роли, где тип вклада кандидата усиливает общий результат",
+      "среда, где его стиль взаимодействия востребован",
+    ],
+    risk_when_role_requires: [
+      "роль с ожиданиями другого типа командного вклада",
+      "команда, где стиль кандидата не находит применения",
+    ],
+    needs_from_role: ["понятная роль в команде", "пространство для естественного вклада"],
+    what_to_check_in_role_fit: [
+      "какой вклад кандидат приносит в команду",
+      "как взаимодействует с разными ролями",
     ],
   },
 };
@@ -3381,7 +3872,7 @@ export function computeCostSummary(args: {
     estimatedTotalCostUsd > BUDGET_12_LAYERS_WARN_USD
   ) {
     budgetWarnings.push(
-      `estimated_total_cost_usd ${estimatedTotalCostUsd} exceeds ${BUDGET_12_LAYERS_WARN_USD} for 12 layers`,
+      `estimated_total_cost_usd ${estimatedTotalCostUsd} exceeds ${BUDGET_12_LAYERS_WARN_USD} for ${CORE_LAYERS_ORDER.length} runtime layers`,
     );
   }
 
@@ -3612,20 +4103,67 @@ export function buildLayersProgressArray(
 export function buildPartialCoreLayersContentJson(args: {
   layerGeneration: LayerGenerationState;
   layerReports: Record<string, unknown>[];
+  cancellation?: GenerationCancellationMeta;
 }): Record<string, unknown> {
   syncLayerGenerationProgress(args.layerGeneration);
+  const generationMeta: Record<string, unknown> = {
+    prompt_version: SPIKE_PROMPT_VERSION,
+    schema_version: V2_SCHEMA_VERSION,
+    generation_mode: GENERATION_MODE,
+    content_contract_version: CONTENT_CONTRACT_VERSION,
+    source_analysis_packet_version: SOURCE_ANALYSIS_PACKET_VERSION,
+    layer_generation: args.layerGeneration,
+  };
+  if (args.cancellation && Object.keys(args.cancellation).length > 0) {
+    generationMeta.cancellation = args.cancellation;
+  }
   return {
     schema_version: V2_SCHEMA_VERSION,
     report_type: SPIKE_REPORT_TYPE,
     layer_reports: args.layerReports,
-    generation_meta: {
-      prompt_version: SPIKE_PROMPT_VERSION,
-      schema_version: V2_SCHEMA_VERSION,
-      generation_mode: GENERATION_MODE,
-      content_contract_version: CONTENT_CONTRACT_VERSION,
-      source_analysis_packet_version: SOURCE_ANALYSIS_PACKET_VERSION,
-      layer_generation: args.layerGeneration,
-    },
+    generation_meta: generationMeta,
+  };
+}
+
+export function preserveCancellationInContentJson(
+  existingContentJson: Record<string, unknown>,
+  nextContentJson: Record<string, unknown>,
+): Record<string, unknown> {
+  const existingMeta = asRecord(existingContentJson.generation_meta);
+  const existingCancellation = asRecord(existingMeta.cancellation);
+  const existingLayerGeneration = asRecord(existingMeta.layer_generation);
+
+  const nextMeta = asRecord(nextContentJson.generation_meta);
+  const nextLayerGeneration = asRecord(nextMeta.layer_generation);
+
+  const cancelRequested =
+    existingLayerGeneration.cancel_requested === true ||
+    existingCancellation.requested === true;
+
+  if (cancelRequested) {
+    nextLayerGeneration.cancel_requested = true;
+    nextLayerGeneration.cancel_requested_at =
+      asString(existingLayerGeneration.cancel_requested_at) ||
+      asString(existingCancellation.requested_at) ||
+      null;
+    nextLayerGeneration.cancelled_by =
+      asString(existingLayerGeneration.cancelled_by) ||
+      asString(existingCancellation.requested_by) ||
+      null;
+  }
+
+  if (Object.keys(existingCancellation).length > 0) {
+    nextMeta.cancellation = {
+      ...existingCancellation,
+      ...asRecord(nextMeta.cancellation),
+    };
+  }
+
+  nextMeta.layer_generation = nextLayerGeneration;
+
+  return {
+    ...nextContentJson,
+    generation_meta: nextMeta,
   };
 }
 
@@ -3635,9 +4173,24 @@ export async function saveLayerGenerationProgress(
   args: {
     layerGeneration: LayerGenerationState;
     layerReports: Record<string, unknown>[];
+    cancellation?: GenerationCancellationMeta;
   },
 ): Promise<void> {
-  const contentJson = buildPartialCoreLayersContentJson(args);
+  let contentJson = buildPartialCoreLayersContentJson(args);
+
+  const { data: existingRow } = await db
+    .from("hr_reports")
+    .select("content_json")
+    .eq("id", reportId)
+    .maybeSingle();
+
+  if (existingRow?.content_json && typeof existingRow.content_json === "object") {
+    contentJson = preserveCancellationInContentJson(
+      asRecord(existingRow.content_json),
+      contentJson,
+    );
+  }
+
   const { error } = await db
     .from("hr_reports")
     .update({
@@ -3653,6 +4206,36 @@ export async function saveLayerGenerationProgress(
       message: error.message,
     });
   }
+}
+
+export function serializeGenerationCancelledError(): string {
+  return JSON.stringify({
+    kind: "generation_cancelled_by_user",
+    stage: "cancellation",
+    message: "Генерация отменена пользователем.",
+  });
+}
+
+export async function isGenerationCancelRequested(
+  db: SupabaseClient,
+  reportId: string,
+): Promise<boolean> {
+  const { data: report, error } = await db
+    .from("hr_reports")
+    .select("content_json")
+    .eq("id", reportId)
+    .maybeSingle();
+
+  if (error || !report) return false;
+
+  const contentJson = asRecord(report.content_json);
+  const generationMeta = asRecord(contentJson.generation_meta);
+  const layerGeneration = asRecord(generationMeta.layer_generation);
+  const cancellation = asRecord(generationMeta.cancellation);
+
+  return (
+    layerGeneration.cancel_requested === true || cancellation.requested === true
+  );
 }
 
 export function initLayerGenerationState(
@@ -3673,7 +4256,6 @@ export function initLayerGenerationState(
   const state: LayerGenerationState = {
     status: "generating",
     started_at: pipelineStartedAt,
-    updated_at: pipelineStartedAt,
     finished_at: null,
     duration_ms: 0,
     mode: "sequential",

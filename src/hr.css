@@ -2371,6 +2371,12 @@
   gap: 1.25rem;
 }
 
+.hr-tm-product-catalog-badge {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--hr-muted, #64748b);
+}
+
 .hr-layer-catalog-group-title {
   margin: 0 0 8px;
   font-size: 0.82rem;
@@ -2547,6 +2553,37 @@
 
 .hr-tm-core-layers-progress {
   max-width: 640px;
+}
+
+.hr-tm-progress-header {
+  display: grid;
+  gap: 4px;
+}
+
+.hr-tm-progress-header-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hr-tm-progress-header-main .hr-tm-empty-title {
+  margin: 0;
+}
+
+.hr-tm-progress-header-actions {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .hr-tm-progress-header-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hr-tm-progress-header-actions .hr-btn {
+    width: 100%;
+  }
 }
 
 .hr-tm-overall-progress {

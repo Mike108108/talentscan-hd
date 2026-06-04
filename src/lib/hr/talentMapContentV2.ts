@@ -10,6 +10,21 @@ export {
   PRODUCT_LAYER_CATALOG_VERSION,
 } from "./talentMapLayerArchitecture";
 
+/** Product layer adapter v0.2 (runtime 12 → product 16 + system). */
+export {
+  PRODUCT_LAYER_ADAPTER_VERSION,
+  adaptRuntimeLayersToProductLayersV02,
+} from "./productLayerAdapter";
+
+export type {
+  ProductLayerAdapterInputV02,
+  ProductLayerAdapterMetaV02,
+  ProductLayerAdapterResultV02,
+  ProductLayerReportV02,
+  ProductLayerSourceRuntimePartV02,
+  ProductLayerStatusV02,
+} from "./productLayerAdapter";
+
 const V2_SCHEMA = "hr_person_talent_map_v2";
 const REPORT_TYPE = "hr_person_talent_map";
 const CORE_LAYERS_SPIKE_REPORT_TYPE = "hr_person_talent_map_core_layers_spike";
@@ -139,4 +154,10 @@ export function parseTalentMapV2(root: unknown): HrPersonTalentMapV2 | null {
   const parsed = parseContentRoot(root);
   if (!parsed || !isTalentMapV2(parsed)) return null;
   return parsed;
+}
+
+/** Whether content_json is v2-shaped and has a layer_reports array (may be empty). */
+export function hasTalentMapV2LayerReports(root: unknown): boolean {
+  const parsed = parseTalentMapV2(root);
+  return parsed != null && Array.isArray(parsed.layer_reports);
 }

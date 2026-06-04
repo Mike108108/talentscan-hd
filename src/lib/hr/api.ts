@@ -31,7 +31,7 @@ export type CoreLayersStartResponse = {
   model_policy: Record<string, unknown> | null;
 };
 
-export type CoreLayerProgressItem = {
+export type CoreLayersLayerProgressItem = {
   layer_key: string;
   hr_title: string;
   status: string;
@@ -40,7 +40,18 @@ export type CoreLayerProgressItem = {
   completed_at: string | null;
   attempts: number;
   repair_attempts: number;
-  error?: unknown;
+  error?: string | Record<string, unknown> | null;
+};
+
+/** Alias kept for types re-export compatibility after main merge. */
+export type CoreLayerProgressItem = CoreLayersLayerProgressItem;
+
+export type CoreLayersCancellationMeta = {
+  requested?: boolean;
+  requested_at?: string | null;
+  requested_by?: string | null;
+  status?: "requested" | "cancelled" | null;
+  cancelled_at?: string | null;
 };
 
 export type CoreLayersStatusResponse = {
@@ -65,13 +76,47 @@ export type CoreLayersStatusResponse = {
   error_layer_keys: string[];
   skipped_layer_keys: string[];
   layer_generation: Record<string, unknown> | null;
-  ready_count: number;
-  total_count: number;
-  current_layer_key: string | null;
-  current_layer_title: string | null;
-  layers_progress: CoreLayerProgressItem[];
   attempts_total?: number;
+  ready_count?: number;
+  total_count?: number;
+  progress_percent?: number;
+  current_layer_key?: string | null;
+  current_layer_title?: string | null;
+  layers_progress?: CoreLayersLayerProgressItem[];
+  cancel_requested?: boolean;
+  cancelled?: boolean;
+  cancellation?: CoreLayersCancellationMeta | null;
 };
+
+export type CoreLayersCancelResponse = {
+  success: boolean;
+  report_id: string;
+  report_status: string;
+  cancel_requested: boolean;
+  cancellation: CoreLayersCancellationMeta | null;
+};
+
+export const DEFAULT_RUNTIME_CORE_LAYER_COUNT = 19;
+
+export function isCoreLayersGenerationCancelled(
+  status: Pick<
+    CoreLayersStatusResponse,
+    "generation_error" | "cancellation" | "cancelled"
+  > | null | undefined,
+): boolean {
+  if (!status) return false;
+  if (status.cancelled === true) return true;
+  if (status.cancellation?.status === "cancelled") return true;
+  const err = status.generation_error;
+  if (typeof err === "string") {
+    return err.includes("generation_cancelled_by_user");
+  }
+  if (err && typeof err === "object") {
+    const kind = (err as Record<string, unknown>).kind;
+    return kind === "generation_cancelled_by_user";
+  }
+  return false;
+}
 
 function isReadyReportForType(report: HrReport, reportType: HrReportType): boolean {
   if (reportType === HR_CORE_LAYERS_SPIKE_REPORT_TYPE) {
@@ -737,7 +782,8 @@ export async function startCandidateCoreLayersReport(
     throw new Error(asString(parsed.error) || `Ошибка запуска послойной карты (${resp.status})`);
   }
 
-  const reportId = asString(parsed.report_id);
+  const reportId =
+    asString(parsed.report_id) || asString(parsed.reportId) || asString(parsed.id);
   if (!reportId) {
     throw new Error("Пустой ответ: report_id не возвращён");
   }
@@ -789,41 +835,65 @@ export async function fetchCoreLayersStatus(
     throw new Error(asString(parsed.error) || `Ошибка статуса послойной карты (${resp.status})`);
   }
 
-  const readyLayerKeys = Array.isArray(parsed.ready_layer_keys)
-    ? parsed.ready_layer_keys.map((k) => asString(k)).filter(Boolean)
-    : [];
-
   const layerGeneration =
     parsed.layer_generation && typeof parsed.layer_generation === "object"
       ? (parsed.layer_generation as Record<string, unknown>)
       : null;
-  const layersProgressRaw = Array.isArray(parsed.layers_progress)
-    ? parsed.layers_progress
-    : [];
-  const layersProgress: CoreLayerProgressItem[] = [];
-  for (const item of layersProgressRaw) {
-    if (!item || typeof item !== "object") continue;
-    const row = item as Record<string, unknown>;
-    const layerKey = asString(row.layer_key);
-    if (!layerKey) continue;
-    layersProgress.push({
-      layer_key: layerKey,
-      hr_title: asString(row.hr_title),
-      status: asString(row.status) || "pending",
-      progress_percent:
-        typeof row.progress_percent === "number" ? row.progress_percent : null,
-      started_at: asString(row.started_at) || null,
-      completed_at: asString(row.completed_at) || null,
-      attempts: typeof row.attempts === "number" ? row.attempts : 0,
-      repair_attempts:
-        typeof row.repair_attempts === "number" ? row.repair_attempts : 0,
-      error: row.error ?? null,
-    });
-  }
   const summary =
     layerGeneration?.summary && typeof layerGeneration.summary === "object"
       ? (layerGeneration.summary as Record<string, unknown>)
       : null;
+  const cancellationRaw =
+    parsed.cancellation && typeof parsed.cancellation === "object"
+      ? (parsed.cancellation as Record<string, unknown>)
+      : null;
+  const layersProgressRaw = Array.isArray(parsed.layers_progress)
+    ? parsed.layers_progress
+    : [];
+
+  const layersProgress: CoreLayersLayerProgressItem[] = layersProgressRaw
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    .map((item) => ({
+      layer_key: asString(item.layer_key),
+      hr_title: asString(item.hr_title),
+      status: asString(item.status, "pending"),
+      progress_percent:
+        typeof item.progress_percent === "number" ? item.progress_percent : null,
+      started_at: asString(item.started_at) || null,
+      completed_at: asString(item.completed_at) || null,
+      attempts: typeof item.attempts === "number" ? item.attempts : 0,
+      repair_attempts:
+        typeof item.repair_attempts === "number" ? item.repair_attempts : 0,
+      error:
+        typeof item.error === "string" ||
+        (item.error && typeof item.error === "object")
+          ? (item.error as string | Record<string, unknown>)
+          : null,
+    }));
+
+  const readyCountFromProgress = layersProgress.filter(
+    (item) => item.status === "ready",
+  ).length;
+  const totalCount =
+    typeof parsed.total_count === "number"
+      ? parsed.total_count
+      : layersProgress.length > 0
+        ? layersProgress.length
+        : DEFAULT_RUNTIME_CORE_LAYER_COUNT;
+  const readyCount =
+    typeof parsed.ready_count === "number"
+      ? parsed.ready_count
+      : readyCountFromProgress > 0
+        ? readyCountFromProgress
+        : Array.isArray(parsed.ready_layer_keys)
+          ? parsed.ready_layer_keys.length
+          : 0;
+  const progressPercent =
+    typeof parsed.progress_percent === "number" && Number.isFinite(parsed.progress_percent)
+      ? Math.min(100, Math.max(0, parsed.progress_percent))
+      : totalCount > 0
+        ? Math.min(100, Math.max(0, Math.round((readyCount / totalCount) * 100)))
+        : 0;
 
   return {
     report_id: asString(parsed.report_id, reportId),
@@ -861,7 +931,9 @@ export async function fetchCoreLayersStatus(
     generation_error: parsed.generation_error ?? null,
     layer_reports_count:
       typeof parsed.layer_reports_count === "number" ? parsed.layer_reports_count : 0,
-    ready_layer_keys: readyLayerKeys,
+    ready_layer_keys: Array.isArray(parsed.ready_layer_keys)
+      ? parsed.ready_layer_keys.map((k) => asString(k)).filter(Boolean)
+      : [],
     error_layer_keys: Array.isArray(parsed.error_layer_keys)
       ? parsed.error_layer_keys.map((k) => asString(k)).filter(Boolean)
       : [],
@@ -869,29 +941,89 @@ export async function fetchCoreLayersStatus(
       ? parsed.skipped_layer_keys.map((k) => asString(k)).filter(Boolean)
       : [],
     layer_generation: layerGeneration,
-    ready_count:
-      typeof parsed.ready_count === "number"
-        ? parsed.ready_count
-        : typeof layerGeneration?.ready_count === "number"
-          ? (layerGeneration.ready_count as number)
-          : readyLayerKeys.length,
-    total_count:
-      typeof parsed.total_count === "number"
-        ? parsed.total_count
-        : typeof layerGeneration?.total_count === "number"
-          ? (layerGeneration.total_count as number)
-          : 12,
-    current_layer_key:
-      asString(parsed.current_layer_key) ||
-      asString(layerGeneration?.current_layer_key) ||
-      null,
-    current_layer_title:
-      asString(parsed.current_layer_title) ||
-      asString(layerGeneration?.current_layer_title) ||
-      null,
-    layers_progress: layersProgress,
     attempts_total:
       typeof summary?.attempts_total === "number" ? summary.attempts_total : undefined,
+    ready_count: readyCount,
+    total_count: totalCount,
+    progress_percent: progressPercent,
+    current_layer_key: asString(parsed.current_layer_key) || null,
+    current_layer_title: asString(parsed.current_layer_title) || null,
+    layers_progress: layersProgress,
+    cancel_requested: parsed.cancel_requested === true,
+    cancelled: parsed.cancelled === true,
+    cancellation: cancellationRaw
+      ? {
+          requested: cancellationRaw.requested === true,
+          requested_at: asString(cancellationRaw.requested_at) || null,
+          requested_by: asString(cancellationRaw.requested_by) || null,
+          status:
+            cancellationRaw.status === "requested" ||
+            cancellationRaw.status === "cancelled"
+              ? cancellationRaw.status
+              : null,
+          cancelled_at: asString(cancellationRaw.cancelled_at) || null,
+        }
+      : null,
+  };
+}
+
+export async function cancelHrTalentMapCoreLayersGeneration(
+  reportId: string,
+): Promise<CoreLayersCancelResponse> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Требуется вход");
+
+  const resp = await fetch("/.netlify/functions/hr-talent-map-v2-core-layers-cancel", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ report_id: reportId }),
+  });
+
+  const rawBody = await resp.text();
+  let parsed: Record<string, unknown> = {};
+  if (rawBody) {
+    try {
+      parsed = JSON.parse(rawBody) as Record<string, unknown>;
+    } catch {
+      throw new Error(`Сервер вернул не-JSON ответ (${resp.status}).`);
+    }
+  }
+
+  if (!resp.ok) {
+    throw new Error(asString(parsed.error) || `Ошибка отмены генерации (${resp.status})`);
+  }
+
+  const ok = parsed.ok === true || parsed.success === true;
+  if (!ok) {
+    throw new Error(asString(parsed.error) || "Сервер не подтвердил отмену генерации.");
+  }
+
+  const cancellationRaw =
+    parsed.cancellation && typeof parsed.cancellation === "object"
+      ? (parsed.cancellation as Record<string, unknown>)
+      : null;
+
+  return {
+    success: true,
+    report_id: asString(parsed.report_id, reportId),
+    report_status: asString(parsed.report_status, "generating"),
+    cancel_requested: parsed.cancel_requested === true,
+    cancellation: cancellationRaw
+      ? {
+          requested: cancellationRaw.requested === true,
+          requested_at: asString(cancellationRaw.requested_at) || null,
+          requested_by: asString(cancellationRaw.requested_by) || null,
+          status:
+            cancellationRaw.status === "requested" ||
+            cancellationRaw.status === "cancelled"
+              ? cancellationRaw.status
+              : null,
+          cancelled_at: asString(cancellationRaw.cancelled_at) || null,
+        }
+      : null,
   };
 }
 

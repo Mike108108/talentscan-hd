@@ -59,6 +59,43 @@ Summary:
 - summary_for_synthesis: короткий, пригодный для следующего API-запроса (синтез блоков);
 - matching_summary: короткий, пригодный для будущего role-fit (без вердикта о найме).
 
+Компактность (strict JSON — лимиты по полям, не общий объём):
+- пиши содержательно, но компактно;
+- не растягивай поля ради объёма;
+- не повторяй одну мысль в разных полях;
+- headline = короткий точный заголовок;
+- short_summary = быстрая HR-выжимка;
+- detailed_explanation = основной смысл слоя;
+- how_it_appears_at_work = наблюдаемое рабочее поведение;
+- where_useful = где применять;
+- strengths / risks / management_tips / what_to_check — каждое поле со своей функцией;
+- Pro = экспертная HD-логика на русском, без длинной лекции.
+
+Не копируй headline в short_summary.
+Не копируй short_summary в detailed_explanation.
+Не повторяй одинаковый пункт в strengths, where_useful и management_tips.
+Если мысль уже в Base, в summary_for_synthesis дай короткую выжимку, а не повтор.
+
+Field length budget:
+- base.headline: до 90 символов.
+- base.short_summary: 250–450 символов, 2–3 предложения.
+- base.detailed_explanation: 600–900 символов, 4–6 предложений, без повтора short_summary.
+- base.how_it_appears_at_work: 300–500 символов, только наблюдаемое поведение.
+- base.where_useful: 3–5 пунктов, каждый до 90 символов.
+- base.strengths: 2–4 пункта; title до 70; description до 180.
+- base.risks: 1–3 пункта; title до 70; description до 220; how_it_may_show_up до 180; mitigation до 220.
+- base.management_tips: 2–4 пункта, каждый до 140 символов.
+- base.what_to_check: 1–3 проверки; hypothesis/check_method до 180; good_signal/warning_signal до 140.
+- base.sections: 0–3 секции; title до 70; body до 260; items 2–4 пункта.
+- pro.connection_logic: 700–1200 символов, связь элементов карты с HR-выводом, не лекция.
+- pro.limitations: 0–3 пункта.
+- summary_for_synthesis.one_sentence: до 220 символов.
+- summary_for_synthesis arrays: 2–4 пункта, каждый до 140 символов.
+- matching_summary arrays: 2–4 пункта, каждый до 140 символов.
+- special_payload.channel_talents: summary до 220; how_it_appears_at_work до 260; risk/management_tip до 180; where_useful 2–4 пункта.
+- special_payload.center_zones: work_meaning до 220; potential_strength/risk_under_pressure/management_tip до 180.
+- special_payload.repeated_gate_themes: summary до 220; talent_potential/risk_pattern до 180.
+
 Верни один JSON-объект CareerReadingLayerReportV1 без markdown.`;
 
 const LAYER_SPECIFIC_RULES: Record<CareerReadingLayerKeyV1, string> = {

@@ -436,6 +436,8 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       syncCareerReadingLayerGenerationProgress(layerGeneration);
       await persistProgress();
 
+      let layerMaxOutputTokens = modelPolicy.maxOutputTokens;
+
       const compactInput = buildCareerReadingCompactInput({
         layerKey,
         candidate: candidate as Record<string, unknown>,
@@ -460,6 +462,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           maxOutputTokens: modelPolicy.maxOutputTokens,
           modelPolicy,
         });
+        layerMaxOutputTokens = openAiCallResult.max_output_tokens_used;
         layer = openAiCallResult.layer;
         httpStatus = openAiCallResult.httpStatus;
         openAiAttempts = openAiCallResult.attempts;
@@ -537,7 +540,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
                 model,
                 layerKey,
                 compactInput,
-                maxOutputTokens: modelPolicy.maxOutputTokens,
+                maxOutputTokens: layerMaxOutputTokens,
                 modelPolicy,
                 offendingMatches: validation.offending_matches ?? [],
               })
@@ -546,7 +549,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
                 model,
                 layerKey,
                 compactInput,
-                maxOutputTokens: modelPolicy.maxOutputTokens,
+                maxOutputTokens: layerMaxOutputTokens,
                 modelPolicy,
                 validationMessage: validation.message,
               });
@@ -616,7 +619,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         duration_ms: layerDurationMs,
         model,
         prompt_version: PROMPT_VERSION,
-        max_output_tokens: modelPolicy.maxOutputTokens,
+        max_output_tokens: layerMaxOutputTokens,
         attempts: openAiAttempts,
         repair_attempts: repairAttempts,
         usage: mergedUsage,

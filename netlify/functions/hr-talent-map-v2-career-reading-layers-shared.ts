@@ -12,6 +12,10 @@ import {
   sanitizeCareerReadingBaseHdLanguage,
 } from "../../src/lib/hr/careerReadingDeterministicFacts";
 import {
+  dedupeCareerReadingLayerListFields,
+  trimCareerReadingLayerTextLengths,
+} from "../../src/lib/hr/careerReadingLayerTextBudgets";
+import {
   CAREER_READING_LAYER_CATALOG_V1,
   CAREER_READING_LAYER_KEYS_V1,
   CAREER_READING_LAYERS_VERSION_V1,
@@ -42,7 +46,6 @@ import {
   mergeOpenAiUsageSnapshots,
   parseCompanyCandidateIds,
   requireUuid,
-  resolveCoreLayerOutputTokenPolicy,
   resolveOpenAiApiKey,
   resolveSupabaseConfig,
   scanForbiddenHdTermsInTextFields,
@@ -106,16 +109,22 @@ const CAREER_READING_PROMPT_CACHE_KEY =
   "hr_person_talent_map_v3_career_reading_layers_v1";
 const CAREER_READING_PROMPT_CACHE_RETENTION = "24h" as const;
 
-/** Career reading layers v1 quality tuning (Stage 4.10-B.5). */
+export const CAREER_READING_DEFAULT_MAX_OUTPUT_TOKENS = 8000;
+export const CAREER_READING_FALLBACK_MAX_OUTPUT_TOKENS = 12000;
+
+/** Career reading layers v1: medium tuning + output budget (Stage 4.10-B.5 / B.6). */
 export function resolveCareerReadingLayersModelPolicy(): CoreLayersModelPolicy {
-  const outputTokenPolicy = resolveCoreLayerOutputTokenPolicy();
+  const outputTokenPolicy = {
+    smoke: CAREER_READING_DEFAULT_MAX_OUTPUT_TOKENS,
+    layer: CAREER_READING_DEFAULT_MAX_OUTPUT_TOKENS,
+  };
   return {
     runMode: "layer",
     selectedModel: CAREER_READING_LAYER_MODEL,
     smokeModel: CAREER_READING_SMOKE_MODEL,
     layerModel: CAREER_READING_LAYER_MODEL,
     reasoningModel: CAREER_READING_REASONING_MODEL,
-    maxOutputTokens: outputTokenPolicy.layer,
+    maxOutputTokens: CAREER_READING_DEFAULT_MAX_OUTPUT_TOKENS,
     outputTokenPolicy,
     reasoningEffort: CAREER_READING_REASONING_EFFORT,
     verbosity: CAREER_READING_VERBOSITY,
@@ -123,6 +132,29 @@ export function resolveCareerReadingLayersModelPolicy(): CoreLayersModelPolicy {
     promptCacheRetention: CAREER_READING_PROMPT_CACHE_RETENTION,
     tuningWarnings: [],
   };
+}
+
+export function getCareerReadingMaxOutputTokensFallback(): number {
+  return CAREER_READING_FALLBACK_MAX_OUTPUT_TOKENS;
+}
+
+export function buildCareerReadingModelPolicySnapshot(modelPolicy: CoreLayersModelPolicy) {
+  const base = buildModelPolicySnapshot(modelPolicy);
+  return {
+    ...base,
+    max_output_tokens: {
+      smoke: modelPolicy.outputTokenPolicy.smoke,
+      layer: modelPolicy.outputTokenPolicy.layer,
+      selected: modelPolicy.maxOutputTokens,
+      fallback: CAREER_READING_FALLBACK_MAX_OUTPUT_TOKENS,
+    },
+  };
+}
+
+function isIncompleteDueToMaxOutputTokens(err: CareerReadingOpenAiError): boolean {
+  if (err.message !== "openai_response_incomplete") return false;
+  const details = asRecord(err.incompleteDetails);
+  return asString(details.reason) === "max_output_tokens";
 }
 
 /** Alias for endpoints that historically used SPIKE_REPORT_TYPE. */
@@ -152,7 +184,12 @@ export type CareerReadingLayerGenerationState = {
   run_mode: "smoke" | "layer";
   selected_model: string;
   max_output_tokens: number;
-  output_token_policy: { smoke: number; layer: number };
+  output_token_policy: {
+    smoke: number;
+    layer: number;
+    fallback: number;
+    selected: number;
+  };
   model_policy: {
     smoke: string;
     layer: string;
@@ -177,7 +214,7 @@ export type CareerReadingLayerValidationResult =
     };
 
 const OUTPUT_TEXT_TAIL_MAX = 500;
-const RETRY_COMPACT_HINT = `Return valid JSON only. No markdown. Keep arrays concise. HR language in base only.`;
+const RETRY_COMPACT_HINT = `Return valid JSON only. No markdown. Respect field length budgets. Keep arrays concise (max items per schema). No repeated ideas across fields. HR language in base only.`;
 
 function strictObjectSchema(properties: Record<string, unknown>) {
   return {
@@ -271,6 +308,10 @@ const statusEnum = {
 const nullableString = { type: ["string", "null"] };
 const stringArraySchema = { type: "array", items: { type: "string" } };
 
+function stringArraySchemaMax(maxItems: number) {
+  return { type: "array", items: { type: "string" }, maxItems };
+}
+
 const checkSchema = strictObjectSchema({
   hypothesis: { type: "string" },
   check_method: { type: "string" },
@@ -329,11 +370,11 @@ const channelTalentSchema = strictObjectSchema({
   circuit: nullableString,
   title: { type: "string" },
   summary: { type: "string" },
-  where_useful: stringArraySchema,
+  where_useful: stringArraySchemaMax(4),
   how_it_appears_at_work: { type: "string" },
   risk: { type: "string" },
   management_tip: { type: "string" },
-  what_to_check: { type: "array", items: checkSchema },
+  what_to_check: { type: "array", items: checkSchema, maxItems: 2 },
   evidence: evidenceSchema,
 });
 
@@ -373,7 +414,11 @@ function buildSpecialPayloadSchema(layerKey: CareerReadingLayerKey) {
   }
   if (layerKey === "repeated_themes") {
     return strictObjectSchema({
-      repeated_gate_themes: { type: "array", items: repeatedGateThemeSchema },
+      repeated_gate_themes: {
+        type: "array",
+        items: repeatedGateThemeSchema,
+        maxItems: 8,
+      },
     });
   }
   return strictEmptyObjectSchema();
@@ -392,12 +437,12 @@ export function buildCareerReadingLayerSchema(layerKey: CareerReadingLayerKey) {
       short_summary: { type: "string" },
       detailed_explanation: { type: "string" },
       how_it_appears_at_work: { type: "string" },
-      where_useful: stringArraySchema,
-      strengths: { type: "array", items: pointSchema },
-      risks: { type: "array", items: riskSchema },
-      management_tips: stringArraySchema,
-      what_to_check: { type: "array", items: checkSchema },
-      sections: { type: "array", items: sectionSchema },
+      where_useful: stringArraySchemaMax(5),
+      strengths: { type: "array", items: pointSchema, maxItems: 4 },
+      risks: { type: "array", items: riskSchema, maxItems: 3 },
+      management_tips: stringArraySchemaMax(4),
+      what_to_check: { type: "array", items: checkSchema, maxItems: 3 },
+      sections: { type: "array", items: sectionSchema, maxItems: 3 },
     }),
     pro: strictObjectSchema({
       technical_title: nullableString,
@@ -405,24 +450,24 @@ export function buildCareerReadingLayerSchema(layerKey: CareerReadingLayerKey) {
       source_values: strictEmptyObjectSchema(),
       connection_logic: { type: "string" },
       confidence: confidenceEnum,
-      limitations: stringArraySchema,
+      limitations: stringArraySchemaMax(3),
       human_check: nullableString,
     }),
     evidence: evidenceSchema,
     summary_for_synthesis: strictObjectSchema({
       one_sentence: { type: "string" },
-      strengths: stringArraySchema,
-      risks: stringArraySchema,
-      conditions: stringArraySchema,
-      management_focus: stringArraySchema,
-      what_to_check: stringArraySchema,
+      strengths: stringArraySchemaMax(4),
+      risks: stringArraySchemaMax(4),
+      conditions: stringArraySchemaMax(4),
+      management_focus: stringArraySchemaMax(4),
+      what_to_check: stringArraySchemaMax(4),
     }),
     matching_summary: strictObjectSchema({
-      good_for: stringArraySchema,
-      bad_for: stringArraySchema,
-      role_fit_positive_signals: stringArraySchema,
-      role_fit_risk_signals: stringArraySchema,
-      check_in_role_fit: stringArraySchema,
+      good_for: stringArraySchemaMax(4),
+      bad_for: stringArraySchemaMax(4),
+      role_fit_positive_signals: stringArraySchemaMax(4),
+      role_fit_risk_signals: stringArraySchemaMax(4),
+      check_in_role_fit: stringArraySchemaMax(4),
     }),
     special_payload: buildSpecialPayloadSchema(layerKey),
     qa: strictObjectSchema({
@@ -1278,6 +1323,8 @@ export function normalizeCareerReadingLayerForValidation(args: {
   }
   enforceDeterministicProSources(layer, args.layerKey, args.layerInput);
   sanitizeCareerReadingBaseHdLanguage(layer);
+  trimCareerReadingLayerTextLengths(layer);
+  dedupeCareerReadingLayerListFields(layer);
   finalizeCareerReadingLayerQa(layer);
 
   return layer;
@@ -1296,6 +1343,8 @@ export function validateCareerReadingLayer(
   }
   enforceDeterministicProSources(layer, layerKey, layerInput);
   sanitizeCareerReadingBaseHdLanguage(layer);
+  trimCareerReadingLayerTextLengths(layer);
+  dedupeCareerReadingLayerListFields(layer);
   ensureCareerReadingBaseArrayDefaults(layer, layerKey);
 
   if (asString(layer.layer_key) !== layerKey) {
@@ -1742,19 +1791,51 @@ function compactInputCandidateSnapshot(compactInput: Record<string, unknown>): u
 export async function callOpenAiForCareerReadingLayerWithRetry(
   args: Parameters<typeof callOpenAiForCareerReadingLayer>[0],
 ): Promise<
-  Awaited<ReturnType<typeof callOpenAiForCareerReadingLayer>> & { attempts: number }
+  Awaited<ReturnType<typeof callOpenAiForCareerReadingLayer>> & {
+    attempts: number;
+    max_output_tokens_used: number;
+  }
 > {
   let last: CareerReadingOpenAiError | null = null;
+  let maxOutputTokens = args.maxOutputTokens;
+  let compactRetry = false;
+  let tokenBudgetFallback = false;
+
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const result = await callOpenAiForCareerReadingLayer({
         ...args,
-        compactRetry: attempt === 2,
+        maxOutputTokens,
+        compactRetry,
       });
-      return { ...result, attempts: attempt };
+      const tuning = { ...result.request_tuning };
+      if (tokenBudgetFallback) {
+        tuning.fallback_used = true;
+        tuning.fallbacks = [
+          ...(Array.isArray(tuning.fallbacks) ? tuning.fallbacks : []),
+          "max_output_tokens_12000",
+        ];
+      }
+      return {
+        ...result,
+        request_tuning: tuning,
+        request_tuning_fallback: result.request_tuning_fallback || tokenBudgetFallback,
+        request_tuning_fallback_reason: tokenBudgetFallback
+          ? "max_output_tokens"
+          : result.request_tuning_fallback_reason,
+        attempts: attempt,
+        max_output_tokens_used: maxOutputTokens,
+      };
     } catch (err) {
       if (err instanceof CareerReadingOpenAiError && err.retryable && attempt < 2) {
         last = err;
+        if (isIncompleteDueToMaxOutputTokens(err)) {
+          maxOutputTokens = getCareerReadingMaxOutputTokensFallback();
+          tokenBudgetFallback = true;
+          compactRetry = true;
+          continue;
+        }
+        compactRetry = true;
         continue;
       }
       if (err instanceof CareerReadingOpenAiError && err.retryable) {
@@ -1966,6 +2047,8 @@ export function initCareerReadingLayerGenerationState(
     output_token_policy: {
       smoke: modelPolicy.outputTokenPolicy.smoke,
       layer: modelPolicy.outputTokenPolicy.layer,
+      fallback: CAREER_READING_FALLBACK_MAX_OUTPUT_TOKENS,
+      selected: modelPolicy.maxOutputTokens,
     },
     model_policy: {
       smoke: modelPolicy.smokeModel,
@@ -2227,7 +2310,7 @@ export function buildCareerReadingContentJson(args: {
   const dataQuality = buildMinimalDataQuality(args.candidate, args.normalizedChart);
   const layerGenerationSummary = asRecord(asRecord(args.layerGeneration).summary);
   const usageSummary = asRecord(layerGenerationSummary.usage_summary);
-  const modelPolicySnapshot = buildModelPolicySnapshot(args.modelPolicy);
+  const modelPolicySnapshot = buildCareerReadingModelPolicySnapshot(args.modelPolicy);
 
   return {
     schema_version: SCHEMA_VERSION,

@@ -43,6 +43,9 @@ export type CoreLayersLayerProgressItem = {
   error?: string | Record<string, unknown> | null;
 };
 
+/** Alias kept for types re-export compatibility after main merge. */
+export type CoreLayerProgressItem = CoreLayersLayerProgressItem;
+
 export type CoreLayersCancellationMeta = {
   requested?: boolean;
   requested_at?: string | null;

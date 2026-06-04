@@ -20,8 +20,10 @@ import {
   logSpikeStage,
   parseCompanyCandidateIds,
   buildModelPolicySnapshot,
+  initLayerGenerationState,
   resolveCoreLayersModelPolicy,
   resolveSupabaseConfig,
+  saveLayerGenerationProgress,
   saveReportError,
   serializeGenerationError,
   asString,
@@ -256,6 +258,17 @@ export const handler: Handler = async (
     }
 
     logCtx.reportId = reportId;
+
+    const pipelineStartedAt = new Date().toISOString();
+    const initialLayerGeneration = initLayerGenerationState(
+      pipelineStartedAt,
+      modelPolicy,
+    );
+    await saveLayerGenerationProgress(db, reportId, {
+      layerGeneration: initialLayerGeneration,
+      layerReports: [],
+    });
+
     logSpikeStage("start", "trigger_background_worker", logCtx);
 
     const origin = getFunctionOrigin(event);

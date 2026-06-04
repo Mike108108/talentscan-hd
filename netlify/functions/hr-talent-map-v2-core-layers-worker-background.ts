@@ -3,6 +3,7 @@
  */
 
 import type { BackgroundHandler, HandlerEvent } from "@netlify/functions";
+import { applyCareerReadingDeterministicHdFallbacks } from "../../src/lib/hr/careerReadingDeterministicFacts";
 import {
   CAREER_READING_LAYERS_ORDER,
   PROMPT_VERSION,
@@ -29,7 +30,7 @@ import {
   normalizeCareerReadingLayerForValidation,
   requireUuid,
   inferGenerationErrorKind,
-  resolveCoreLayersModelPolicy,
+  resolveCareerReadingLayersModelPolicy,
   resolveOpenAiApiKey,
   resolveSupabaseConfig,
   saveCareerReadingLayerGenerationProgress,
@@ -321,7 +322,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
     db = createSupabaseClient(supabaseUrl, supabaseAnonKey, token);
 
     try {
-      modelPolicy = resolveCoreLayersModelPolicy();
+      modelPolicy = resolveCareerReadingLayersModelPolicy();
       logCtx.model = modelPolicy.selectedModel;
       layerGeneration = initCareerReadingLayerGenerationState(pipelineStartedAt, modelPolicy);
     } catch (err) {
@@ -561,6 +562,16 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         } catch {
           // keep failed validation
         }
+      }
+
+      if (!validation.ok && isForbiddenBaseTermsValidation(validation)) {
+        applyCareerReadingDeterministicHdFallbacks(
+          layer,
+          layerKey,
+          (validation.offending_matches ?? []).map((match) => match.path),
+        );
+        layer = normalizeCareerReadingLayerForValidation({ layer, layerKey, layerInput });
+        validation = validateCareerReadingLayer(layer, layerKey, layerInput);
       }
 
       if (!validation.ok) {

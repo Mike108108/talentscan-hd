@@ -6,6 +6,7 @@
 import type { HandlerEvent } from "@netlify/functions";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  applyCareerReadingDeterministicHdFallbacks,
   enforceDeterministicProSources,
   enforceTalentChannelFacts,
   sanitizeCareerReadingBaseHdLanguage,
@@ -41,13 +42,14 @@ import {
   mergeOpenAiUsageSnapshots,
   parseCompanyCandidateIds,
   requireUuid,
-  resolveCoreLayersModelPolicy,
+  resolveCoreLayerOutputTokenPolicy,
   resolveOpenAiApiKey,
   resolveSupabaseConfig,
+  scanForbiddenHdTermsInTextFields,
   scanLayerBaseFitHireLanguage,
-  scanLayerBaseForbiddenHdTerms,
   scanLayerMatchingSummaryFitHireLanguage,
   serializeGenerationError,
+  type BaseTextField,
   type CoreLayersModelPolicy,
   type GenerationCancellationMeta,
   type LayerGenerationSummary,
@@ -69,7 +71,6 @@ export {
   logSpikeStage,
   parseCompanyCandidateIds,
   requireUuid,
-  resolveCoreLayersModelPolicy,
   resolveOpenAiApiKey,
   resolveSupabaseConfig,
   buildMinimalDataQuality,
@@ -95,6 +96,34 @@ export const PROMPT_VERSION = "hr_person_talent_map_v3_career_reading_layers_0_1
 export const GENERATION_MODE = "career_reading_layers_v1" as const;
 export const SOURCE_ANALYSIS_PACKET_VERSION = "analysis_packet_v1_1" as const;
 export const CONTENT_CONTRACT_VERSION = "3.0.0" as const;
+
+const CAREER_READING_SMOKE_MODEL = "gpt-5-nano";
+const CAREER_READING_LAYER_MODEL = "gpt-5-nano";
+const CAREER_READING_REASONING_MODEL = "gpt-5-nano";
+const CAREER_READING_REASONING_EFFORT = "medium";
+const CAREER_READING_VERBOSITY = "medium";
+const CAREER_READING_PROMPT_CACHE_KEY =
+  "hr_person_talent_map_v3_career_reading_layers_v1";
+const CAREER_READING_PROMPT_CACHE_RETENTION = "24h" as const;
+
+/** Career reading layers v1 quality tuning (Stage 4.10-B.5). */
+export function resolveCareerReadingLayersModelPolicy(): CoreLayersModelPolicy {
+  const outputTokenPolicy = resolveCoreLayerOutputTokenPolicy();
+  return {
+    runMode: "layer",
+    selectedModel: CAREER_READING_LAYER_MODEL,
+    smokeModel: CAREER_READING_SMOKE_MODEL,
+    layerModel: CAREER_READING_LAYER_MODEL,
+    reasoningModel: CAREER_READING_REASONING_MODEL,
+    maxOutputTokens: outputTokenPolicy.layer,
+    outputTokenPolicy,
+    reasoningEffort: CAREER_READING_REASONING_EFFORT,
+    verbosity: CAREER_READING_VERBOSITY,
+    promptCacheKey: CAREER_READING_PROMPT_CACHE_KEY,
+    promptCacheRetention: CAREER_READING_PROMPT_CACHE_RETENTION,
+    tuningWarnings: [],
+  };
+}
 
 /** Alias for endpoints that historically used SPIKE_REPORT_TYPE. */
 export const SPIKE_REPORT_TYPE = REPORT_TYPE;
@@ -473,6 +502,93 @@ function collectCareerReadingBaseText(layer: Record<string, unknown>): Array<{ p
     });
   });
   return fields;
+}
+
+function collectCareerReadingClientFacingTextFields(
+  layer: Record<string, unknown>,
+): BaseTextField[] {
+  const fields = collectCareerReadingBaseText(layer);
+
+  const synthesis = asRecord(layer.summary_for_synthesis);
+  const oneSentence = asString(synthesis.one_sentence);
+  if (oneSentence) fields.push({ path: "summary_for_synthesis.one_sentence", text: oneSentence });
+  for (const key of ["strengths", "risks", "conditions", "management_focus", "what_to_check"]) {
+    asStringArray(synthesis[key]).forEach((text, i) => {
+      if (text) fields.push({ path: `summary_for_synthesis.${key}[${i}]`, text });
+    });
+  }
+
+  const matching = asRecord(layer.matching_summary);
+  for (const key of [
+    "good_for",
+    "bad_for",
+    "role_fit_positive_signals",
+    "role_fit_risk_signals",
+    "check_in_role_fit",
+  ]) {
+    asStringArray(matching[key]).forEach((text, i) => {
+      if (text) fields.push({ path: `matching_summary.${key}[${i}]`, text });
+    });
+  }
+
+  const special = asRecord(layer.special_payload);
+  const channelTalents = Array.isArray(special.channel_talents) ? special.channel_talents : [];
+  channelTalents.forEach((item, i) => {
+    const rec = asRecord(item);
+    for (const key of ["title", "summary", "risk", "management_tip", "what_to_check"]) {
+      const text = asString(rec[key]);
+      if (text) fields.push({ path: `special_payload.channel_talents[${i}].${key}`, text });
+    }
+  });
+
+  const centerZones = Array.isArray(special.center_zones) ? special.center_zones : [];
+  centerZones.forEach((item, i) => {
+    const rec = asRecord(item);
+    for (const key of [
+      "title",
+      "work_meaning",
+      "potential_strength",
+      "risk_under_pressure",
+      "management_tip",
+    ]) {
+      const text = asString(rec[key]);
+      if (text) fields.push({ path: `special_payload.center_zones[${i}].${key}`, text });
+    }
+  });
+
+  const repeatedThemes = Array.isArray(special.repeated_gate_themes)
+    ? special.repeated_gate_themes
+    : [];
+  repeatedThemes.forEach((item, i) => {
+    const rec = asRecord(item);
+    for (const key of ["title", "summary", "talent_potential", "risk_pattern"]) {
+      const text = asString(rec[key]);
+      if (text) fields.push({ path: `special_payload.repeated_gate_themes[${i}].${key}`, text });
+    }
+  });
+
+  return fields;
+}
+
+export function scanCareerReadingClientFacingForbiddenHdTerms(
+  layer: Record<string, unknown>,
+): OffendingMatch[] {
+  return scanForbiddenHdTermsInTextFields(collectCareerReadingClientFacingTextFields(layer));
+}
+
+function finalizeCareerReadingLayerQa(layer: Record<string, unknown>): void {
+  const forbiddenMatches = scanCareerReadingClientFacingForbiddenHdTerms(layer);
+  const pro = asRecord(layer.pro);
+  const classicalSources = Array.isArray(pro.classical_sources) ? pro.classical_sources : [];
+  const qa = asRecord(layer.qa);
+  layer.qa = {
+    base_has_forbidden_hd_terms: forbiddenMatches.length > 0,
+    pro_has_classical_sources: classicalSources.length > 0,
+    has_summary_for_synthesis: true,
+    has_matching_summary: true,
+    human_review_recommended:
+      qa.human_review_recommended === true || forbiddenMatches.length > 0,
+  };
 }
 
 const CAREER_READING_CONFIDENCE_VALUES = ["high", "medium", "low"] as const;
@@ -1162,15 +1278,7 @@ export function normalizeCareerReadingLayerForValidation(args: {
   }
   enforceDeterministicProSources(layer, args.layerKey, args.layerInput);
   sanitizeCareerReadingBaseHdLanguage(layer);
-
-  const qa = asRecord(layer.qa);
-  layer.qa = {
-    base_has_forbidden_hd_terms: qa.base_has_forbidden_hd_terms === true,
-    pro_has_classical_sources: qa.pro_has_classical_sources === true,
-    has_summary_for_synthesis: true,
-    has_matching_summary: true,
-    human_review_recommended: qa.human_review_recommended === true,
-  };
+  finalizeCareerReadingLayerQa(layer);
 
   return layer;
 }
@@ -1307,22 +1415,13 @@ export function validateCareerReadingLayer(
     }
   }
 
-  const hdMatches = scanLayerBaseForbiddenHdTerms({
-    base: layer.base,
-    matching_summary: { summary: asStringArray(asRecord(layer.matching_summary).good_for).join(" ") },
-  } as Record<string, unknown>);
-  const careerHdMatches = collectCareerReadingBaseText(layer).flatMap((field) => {
-    const forbidden = scanLayerBaseForbiddenHdTerms({
-      base: { short_summary: field.text },
-    } as Record<string, unknown>);
-    return forbidden.map((m) => ({ ...m, path: field.path }));
-  });
-  if (careerHdMatches.length > 0 || hdMatches.length > 0) {
+  const careerHdMatches = scanCareerReadingClientFacingForbiddenHdTerms(layer);
+  if (careerHdMatches.length > 0) {
     return {
       ok: false,
       stage: "forbidden_base_terms",
       message: "base_forbidden_technical_terms",
-      offending_matches: [...careerHdMatches, ...hdMatches],
+      offending_matches: careerHdMatches,
     };
   }
 
@@ -1685,7 +1784,10 @@ export async function callOpenAiForCareerReadingForbiddenTermsRepair(args: {
     layer_input: args.compactInput.layer_input,
   }).user}
 
-REPAIR: Base contains forbidden technical HD terms (${terms}). Rewrite base fields in plain HR language only. Keep pro/classical_sources unchanged in meaning. Return full JSON again.`;
+REPAIR: Base/summary_for_synthesis/matching_summary contain forbidden technical HD terms (${terms}).
+Rewrite only Base and other client-facing fields (summary_for_synthesis, matching_summary, human-readable special_payload fields).
+Do not use HD technical terms in Base. Use HR/work/hiring language.
+Do not modify pro, source_values, evidence, or classical_sources meaning. Return full JSON again.`;
   return callOpenAiForCareerReadingLayer({
     ...args,
     inputOverride: repairPrompt,

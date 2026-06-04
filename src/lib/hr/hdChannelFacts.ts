@@ -191,11 +191,6 @@ export function buildHdChannelFactsFromChart(input: {
 }): HdChannelFact[] {
   const channelsShort = asStringArray(input.channelsShort);
   const channelsLong = asStringArray(input.channelsLong);
-  const circuitText =
-    typeof input.circuitries === "string"
-      ? asString(input.circuitries)
-      : asStringArray(input.circuitries).join(", ") || null;
-
   const facts: HdChannelFact[] = [];
 
   for (const channelKey of collectOrderedChannelKeys(channelsShort, channelsLong)) {
@@ -204,7 +199,7 @@ export function buildHdChannelFactsFromChart(input: {
     facts.push({
       ...base,
       classical_name: parseClassicalNameFromChannelsLong(channelsLong, channelKey),
-      circuit: circuitText,
+      circuit: null,
     });
   }
 

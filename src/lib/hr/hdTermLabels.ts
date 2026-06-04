@@ -98,27 +98,9 @@ export const HD_TERM_BASE_REPLACEMENTS: Record<string, string> = {
   Манифестор: "формат инициативного включения",
   Reflector: "формат работы через внешнюю среду",
   Рефлектор: "формат работы через внешнюю среду",
-  Strategy: "способ входа в задачу",
-  strategy: "способ входа в задачу",
-  стратегия: "способ входа в задачу",
-  стратегии: "способ входа в задачу",
-  Authority: "способ проверки решения",
-  authority: "способ проверки решения",
-  авторитет: "способ проверки решения",
-  Profile: "рабочий почерк",
-  profile: "рабочий почерк",
-  профиль: "рабочий почерк",
-  Channel: "связка талантов",
-  channel: "связка талантов",
-  канал: "связка талантов",
-  каналы: "связки талантов",
-  Gate: "рабочая тема",
-  gate: "рабочая тема",
-  ворота: "рабочая тема",
-  Center: "рабочая зона",
-  center: "рабочая зона",
-  центр: "рабочая зона",
-  центры: "рабочие зоны",
+  "Splenic Authority":
+    "быстрое внутреннее распознавание корректности момента",
+  "селезёночный авторитет": "быстрое внутреннее распознавание корректности момента",
   Splenic: "быстрое внутреннее распознавание риска и корректности момента",
   Sacral: "устойчивая рабочая энергия",
   Сакрал: "устойчивая рабочая энергия",
@@ -151,6 +133,21 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** Unicode letter/number word boundary — do not replace HD terms inside other words. */
+export function replaceStandaloneTerm(
+  input: string,
+  term: string,
+  replacement: string,
+): string {
+  if (!term.trim()) return input;
+  const escaped = escapeRegExp(term);
+  const pattern = new RegExp(
+    `(^|[^\\p{L}\\p{N}_])(${escaped})(?=$|[^\\p{L}\\p{N}_])`,
+    "giu",
+  );
+  return input.replace(pattern, `$1${replacement}`);
+}
+
 function lookupRuLabel(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -170,14 +167,13 @@ export function translateHdTermForPro(value: unknown): string {
   return lookupRuLabel(text) ?? text;
 }
 
-/** Replace HD terms with HR wording for Base fields. */
+/** Replace standalone HD terms/phrases with HR wording for Base/client fields. */
 export function replaceHdTermForBase(text: string): string {
   if (!text.trim()) return text;
 
   let result = text;
   for (const [term, replacement] of BASE_REPLACEMENT_ENTRIES) {
-    const pattern = new RegExp(escapeRegExp(term), "giu");
-    result = result.replace(pattern, replacement);
+    result = replaceStandaloneTerm(result, term, replacement);
   }
   return result.replace(/\s{2,}/g, " ").trim();
 }

@@ -521,7 +521,49 @@ function sanitizeBaseText(value: unknown): string {
   return replaceHdTermForBase(text);
 }
 
-/** Strip/replace EN+RU HD terms in Base; Pro is not modified. */
+function sanitizeSpecialPayloadHumanFields(special: Record<string, unknown>): void {
+  const channelTalents = Array.isArray(special.channel_talents) ? special.channel_talents : [];
+  special.channel_talents = channelTalents.map((item) => {
+    const rec = asRecord(item);
+    return {
+      ...rec,
+      title: sanitizeBaseText(rec.title),
+      summary: sanitizeBaseText(rec.summary),
+      risk: sanitizeBaseText(rec.risk),
+      management_tip: sanitizeBaseText(rec.management_tip),
+      what_to_check: sanitizeBaseText(rec.what_to_check),
+    };
+  });
+
+  const centerZones = Array.isArray(special.center_zones) ? special.center_zones : [];
+  special.center_zones = centerZones.map((item) => {
+    const rec = asRecord(item);
+    return {
+      ...rec,
+      title: sanitizeBaseText(rec.title),
+      work_meaning: sanitizeBaseText(rec.work_meaning),
+      potential_strength: sanitizeBaseText(rec.potential_strength),
+      risk_under_pressure: sanitizeBaseText(rec.risk_under_pressure),
+      management_tip: sanitizeBaseText(rec.management_tip),
+    };
+  });
+
+  const repeatedThemes = Array.isArray(special.repeated_gate_themes)
+    ? special.repeated_gate_themes
+    : [];
+  special.repeated_gate_themes = repeatedThemes.map((item) => {
+    const rec = asRecord(item);
+    return {
+      ...rec,
+      title: sanitizeBaseText(rec.title),
+      summary: sanitizeBaseText(rec.summary),
+      talent_potential: sanitizeBaseText(rec.talent_potential),
+      risk_pattern: sanitizeBaseText(rec.risk_pattern),
+    };
+  });
+}
+
+/** Safe standalone HD term replacement for client-facing fields only (not Pro/evidence). */
 export function sanitizeCareerReadingBaseHdLanguage(layer: Record<string, unknown>): void {
   const base = asRecord(layer.base);
 
@@ -583,4 +625,262 @@ export function sanitizeCareerReadingBaseHdLanguage(layer: Record<string, unknow
   });
 
   layer.base = base;
+
+  const synthesis = asRecord(layer.summary_for_synthesis);
+  if (synthesis.one_sentence != null) {
+    synthesis.one_sentence = sanitizeBaseText(synthesis.one_sentence);
+  }
+  for (const key of ["strengths", "risks", "conditions", "management_focus", "what_to_check"]) {
+    synthesis[key] = asStringArray(synthesis[key]).map((item) => sanitizeBaseText(item));
+  }
+  layer.summary_for_synthesis = synthesis;
+
+  const matching = asRecord(layer.matching_summary);
+  for (const key of [
+    "good_for",
+    "bad_for",
+    "role_fit_positive_signals",
+    "role_fit_risk_signals",
+    "check_in_role_fit",
+  ]) {
+    matching[key] = asStringArray(matching[key]).map((item) => sanitizeBaseText(item));
+  }
+  layer.matching_summary = matching;
+
+  const special = asRecord(layer.special_payload);
+  sanitizeSpecialPayloadHumanFields(special);
+  layer.special_payload = special;
+}
+
+type CareerReadingHdFieldFallbacks = {
+  short_summary: string;
+  detailed_explanation: string;
+  how_it_appears_at_work: string;
+  synthesis_one_sentence: string;
+};
+
+const GENERIC_CAREER_READING_HD_FALLBACKS: CareerReadingHdFieldFallbacks = {
+  short_summary:
+    "Кандидат лучше раскрывается в задачах, где его вклад явно нужен, роль понятна, а решение можно проверить через рабочий контекст и согласованные ожидания.",
+  detailed_explanation:
+    "Кандидат лучше входит в задачу, когда его вклад явно запрошен, роль понятна, а ожидания согласованы заранее. В работе важно дать контекст, критерии результата и пространство для точной оценки ситуации. Если задача приходит хаотично или без понятной роли, может появляться задержка старта и лишнее напряжение.",
+  how_it_appears_at_work:
+    "На практике это проявляется через запрос ясности по роли, темпу и критериям результата перед активным включением в задачу.",
+  synthesis_one_sentence:
+    "Кандидат эффективнее входит в работу через ясный запрос, понятную роль и согласованные ожидания по результату.",
+};
+
+const CAREER_READING_HD_FIELD_FALLBACKS: Partial<
+  Record<CareerReadingLayerKeyV1, CareerReadingHdFieldFallbacks>
+> = {
+  work_mode_and_decisions: {
+    short_summary:
+      "Кандидат лучше раскрывается в задачах, где его вклад явно нужен, роль понятна, а решение можно проверить через внутреннюю ясность и рабочий контекст.",
+    detailed_explanation:
+      "Кандидат лучше входит в задачу, когда его вклад явно запрошен, роль понятна, а ожидания согласованы заранее. В работе важно дать ему контекст, критерии результата и пространство для точной оценки ситуации. Если задача приходит хаотично или без понятной роли, может появляться задержка старта и лишнее напряжение.",
+    how_it_appears_at_work:
+      "На практике кандидат точнее включается, когда заранее понятны роль, запрос на участие и критерии результата.",
+    synthesis_one_sentence:
+      "Кандидат эффективнее входит в работу через ясный запрос, понятную роль и согласованные ожидания по результату.",
+  },
+};
+
+function clientFieldGroupKey(path: string): string {
+  const withoutIndex = path.replace(/\[\d+\]/g, "[]");
+  if (withoutIndex.startsWith("base.risks")) return "base.risks";
+  if (withoutIndex.startsWith("base.strengths")) return "base.strengths";
+  if (withoutIndex.startsWith("base.what_to_check")) return "base.what_to_check";
+  if (withoutIndex.startsWith("base.sections")) return "base.sections";
+  if (withoutIndex.startsWith("base.where_useful")) return "base.where_useful";
+  if (withoutIndex.startsWith("base.management_tips")) return "base.management_tips";
+  if (withoutIndex.startsWith("special_payload.channel_talents")) {
+    return "special_payload.channel_talents";
+  }
+  if (withoutIndex.startsWith("special_payload.center_zones")) return "special_payload.center_zones";
+  if (withoutIndex.startsWith("special_payload.repeated_gate_themes")) {
+    return "special_payload.repeated_gate_themes";
+  }
+  if (withoutIndex.startsWith("summary_for_synthesis.")) {
+    const field = path.split(".")[1]?.replace(/\[\d+\]/, "") ?? path;
+    return `summary_for_synthesis.${field}`;
+  }
+  if (withoutIndex.startsWith("matching_summary.")) {
+    const field = path.split(".")[1]?.replace(/\[\d+\]/, "") ?? path;
+    return `matching_summary.${field}`;
+  }
+  const parts = path.split(".");
+  return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : path;
+}
+
+/** Replace whole client-facing fields with deterministic HR text (no word surgery). */
+export function applyCareerReadingDeterministicHdFallbacks(
+  layer: Record<string, unknown>,
+  layerKey: CareerReadingLayerKeyV1,
+  offendingPaths: string[],
+): void {
+  const fallbacks = CAREER_READING_HD_FIELD_FALLBACKS[layerKey] ?? GENERIC_CAREER_READING_HD_FALLBACKS;
+  const groups = new Set(offendingPaths.map(clientFieldGroupKey));
+  const base = asRecord(layer.base);
+  const synthesis = asRecord(layer.summary_for_synthesis);
+  const matching = asRecord(layer.matching_summary);
+  const special = asRecord(layer.special_payload);
+
+  for (const group of groups) {
+    switch (group) {
+      case "base.headline":
+      case "base.short_summary":
+        base.short_summary = fallbacks.short_summary;
+        base.headline = fallbacks.short_summary.split(/[.!?…]/u)[0]?.trim() || fallbacks.short_summary;
+        break;
+      case "base.detailed_explanation":
+        base.detailed_explanation = fallbacks.detailed_explanation;
+        break;
+      case "base.how_it_appears_at_work":
+        base.how_it_appears_at_work = fallbacks.how_it_appears_at_work;
+        break;
+      case "base.where_useful":
+        base.where_useful = [
+          "Роли и задачи, где вклад кандидата можно проверить через ясный запрос, роль и критерии результата.",
+        ];
+        break;
+      case "base.management_tips":
+        base.management_tips = [
+          "Заранее согласовать роль, ожидания и критерии результата; давать контекст до старта задачи.",
+        ];
+        break;
+      case "base.strengths":
+        base.strengths = [
+          {
+            title: "Точное включение в задачу",
+            description: fallbacks.short_summary,
+            source_layer_keys: [layerKey],
+          },
+        ];
+        break;
+      case "base.risks":
+        base.risks = [
+          {
+            title: "Риск некорректного входа",
+            description:
+              "Если роль и запрос на участие неясны, кандидат может дольше входить в задачу или испытывать лишнее напряжение.",
+            how_it_may_show_up: "Задержка старта, уточняющие вопросы без перехода к действию.",
+            mitigation: "Проверить через кейс: как кандидат действует при ясном запросе и критериях.",
+          },
+        ];
+        break;
+      case "base.what_to_check":
+        base.what_to_check = [
+          {
+            hypothesis: "Проверить, как кандидат включается при ясной роли и запросе.",
+            check_method: "Дать короткий кейс с понятной ролью и критериями результата.",
+            good_signal: "Кандидат уточняет контекст и предлагает конкретный следующий шаг.",
+            warning_signal: "Ответ остаётся общим или без связи с задачей.",
+          },
+        ];
+        break;
+      case "summary_for_synthesis.one_sentence":
+        synthesis.one_sentence = fallbacks.synthesis_one_sentence;
+        break;
+      case "summary_for_synthesis.strengths":
+        synthesis.strengths = [fallbacks.short_summary];
+        break;
+      case "summary_for_synthesis.risks":
+        synthesis.risks = [
+          "Риск задержки старта, если роль и запрос на участие не согласованы заранее.",
+        ];
+        break;
+      case "summary_for_synthesis.conditions":
+        synthesis.conditions = [
+          "Ясная постановка задачи, понятный запрос на участие и согласованные ожидания по результату.",
+        ];
+        break;
+      case "summary_for_synthesis.management_focus":
+        synthesis.management_focus = [
+          "Согласовать роль и критерии результата до старта; проверять реакцию на практическом кейсе.",
+        ];
+        break;
+      case "summary_for_synthesis.what_to_check":
+        synthesis.what_to_check = [
+          "Проверить через интервью и короткий рабочий кейс с ясной ролью и критериями.",
+        ];
+        break;
+      case "matching_summary.good_for":
+        matching.good_for = [fallbacks.short_summary];
+        break;
+      case "matching_summary.bad_for":
+        matching.bad_for = ["Роли без ясного контекста, роли и критериев результата."];
+        break;
+      case "matching_summary.role_fit_positive_signals":
+        matching.role_fit_positive_signals = [fallbacks.short_summary];
+        break;
+      case "matching_summary.role_fit_risk_signals":
+        matching.role_fit_risk_signals = [
+          "Задержка включения при неясной роли или хаотичном входе в задачу.",
+        ];
+        break;
+      case "matching_summary.check_in_role_fit":
+        matching.check_in_role_fit = [
+          "Проверить на интервью: как кандидат входит в задачу при ясном запросе и ожиданиях.",
+        ];
+        break;
+      case "special_payload.channel_talents":
+        special.channel_talents = Array.isArray(special.channel_talents)
+          ? special.channel_talents.map((item) => {
+              const rec = asRecord(item);
+              return {
+                ...rec,
+                title: "Устойчивая связка талантов",
+                summary:
+                  "У кандидата есть устойчивая связка таланта, которую важно проверить через рабочий кейс и критерии результата.",
+                risk: "Риск проявляется, если связка используется вне подходящего контекста задачи.",
+                management_tip: "Дать ясный контекст и проверить вклад на практическом кейсе.",
+                what_to_check: "Проверить через кейс, где эта связка даёт измеримый результат.",
+              };
+            })
+          : special.channel_talents;
+        break;
+      case "special_payload.center_zones":
+        special.center_zones = Array.isArray(special.center_zones)
+          ? special.center_zones.map((item) => {
+              const rec = asRecord(item);
+              return {
+                ...rec,
+                title: "Рабочая зона",
+                work_meaning:
+                  "Зона влияет на то, как кандидат держит темп, фокус и реакцию на нагрузку в задаче.",
+                potential_strength:
+                  "При подходящих условиях даёт устойчивую опору для результата.",
+                risk_under_pressure:
+                  "Под давлением может усиливаться чувствительность к хаотичному контексту.",
+                management_tip: "Согласовать ожидания, темп и критерии результата заранее.",
+              };
+            })
+          : special.center_zones;
+        break;
+      case "special_payload.repeated_gate_themes":
+        special.repeated_gate_themes = Array.isArray(special.repeated_gate_themes)
+          ? special.repeated_gate_themes.map((item) => {
+              const rec = asRecord(item);
+              return {
+                ...rec,
+                title: "Повторяющаяся рабочая тема",
+                summary:
+                  "Одна из повторяющихся рабочих тем связана с устойчивым мотивом, который стоит проверить через кейс.",
+                talent_potential:
+                  "Может усиливать результат, когда тема совпадает с задачей и контекстом роли.",
+                risk_pattern:
+                  "Может создавать напряжение, если тема навязана средой без связи с задачей.",
+              };
+            })
+          : special.repeated_gate_themes;
+        break;
+      default:
+        break;
+    }
+  }
+
+  layer.base = base;
+  layer.summary_for_synthesis = synthesis;
+  layer.matching_summary = matching;
+  layer.special_payload = special;
 }

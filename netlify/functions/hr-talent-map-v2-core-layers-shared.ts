@@ -2134,8 +2134,6 @@ function hasDisallowedHtml(text: string): boolean {
   return /<[a-z!/]/i.test(stripped);
 }
 
-type BaseTextField = { path: string; text: string };
-
 const FIT_HIRE_FORBIDDEN_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
   { label: "fit_score", pattern: /\bfit_score\b/i },
   { label: "candidate fit score", pattern: /\bcandidate fit score\b/i },
@@ -2252,6 +2250,8 @@ function makeSnippet(text: string, matchIndex: number, maxLen = 180): string {
   return `${prefix}${text.slice(start, end)}${suffix}`;
 }
 
+export type BaseTextField = { path: string; text: string };
+
 function collectLayerBaseTextFields(layer: Record<string, unknown>): BaseTextField[] {
   const base = asRecord(layer.base);
   const fields: BaseTextField[] = [];
@@ -2363,10 +2363,7 @@ export function scanLayerMatchingSummaryFitHireLanguage(
   );
 }
 
-export function scanLayerBaseForbiddenHdTerms(
-  layer: Record<string, unknown>,
-): OffendingMatch[] {
-  const fields = collectLayerBaseTextFields(layer);
+export function scanForbiddenHdTermsInTextFields(fields: BaseTextField[]): OffendingMatch[] {
   const matches = scanPatternInBaseFields(fields, BASE_FORBIDDEN_HD_PATTERNS);
 
   for (const field of fields) {
@@ -2380,6 +2377,12 @@ export function scanLayerBaseForbiddenHdTerms(
   }
 
   return matches;
+}
+
+export function scanLayerBaseForbiddenHdTerms(
+  layer: Record<string, unknown>,
+): OffendingMatch[] {
+  return scanForbiddenHdTermsInTextFields(collectLayerBaseTextFields(layer));
 }
 
 export function extractResponsesOutputText(data: Record<string, unknown>): string {

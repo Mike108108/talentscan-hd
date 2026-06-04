@@ -22,7 +22,7 @@ import {
   loadActiveCandidateChart,
   logSpikeStage,
   parseCompanyCandidateIds,
-  resolveCoreLayersModelPolicy,
+  resolveCareerReadingLayersModelPolicy,
   resolveSupabaseConfig,
   saveCareerReadingLayerGenerationProgress,
   saveReportError,
@@ -44,7 +44,7 @@ export const handler: Handler = async (
 
     let modelPolicy;
     try {
-      modelPolicy = resolveCoreLayersModelPolicy();
+      modelPolicy = resolveCareerReadingLayersModelPolicy();
     } catch (err) {
       if (err instanceof SpikeConfigError) {
         return jsonResponse(500, { error: err.message, source: "config" });

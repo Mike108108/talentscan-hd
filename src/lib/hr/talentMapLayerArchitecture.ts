@@ -1,8 +1,8 @@
 /**
- * Talent Map layer architecture v0.2 (Stage 4.7).
+ * Talent Map layer architecture v0.2 (Stage 4.7+).
  *
- * Spec-only module: catalogs and static mappings for the future product map.
- * Does NOT drive production generation (12-layer core-layers runtime unchanged).
+ * Catalogs and static mappings: 19-step runtime → 16 product narrative layers + data_quality
+ * → 6 synthesis blocks. Used by Product Layer Adapter v0.2 and synthesis_blocks v0.1.
  *
  * @see README_LAYER_ARCHITECTURE_V0_2.md
  */
@@ -79,7 +79,7 @@ export type ProductLayerDefV02 = {
   source_signals: readonly string[];
   layer_role: ProductLayerRoleV02;
   runtime_status: ProductLayerRuntimeStatusV02;
-  /** Runtime layer keys absorbed when moving from 12-layer spike to v0.2 product map. */
+  /** Runtime layer keys absorbed when merging multiple runtime layers into one product layer. */
   absorbs_runtime_layers?: readonly RuntimeCoreLayerKey[];
   /** Legacy methodology layer keys (pre-v0.2 catalog) folded into this product layer. */
   absorbs_legacy_layer_keys?: readonly LegacyEvidenceLayerKey[];
@@ -420,7 +420,7 @@ export const AI_NARRATIVE_PRODUCT_LAYER_KEYS_V0_2 = PRODUCT_LAYER_KEYS_V0_2.filt
 );
 
 /**
- * Current 12-layer runtime key → v0.2 product layer key.
+ * Runtime core layer key (19-step generation) → v0.2 product layer key.
  * Many-to-one merges are resolved on the product side via absorbs_runtime_layers.
  */
 export const RUNTIME_CORE_LAYER_TO_PRODUCT_LAYER_V02: Record<

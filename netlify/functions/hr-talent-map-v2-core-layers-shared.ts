@@ -6,6 +6,15 @@
 import { createHash } from "crypto";
 import type { HandlerEvent } from "@netlify/functions";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  adaptRuntimeLayersToProductLayersV02,
+  PRODUCT_LAYER_ADAPTER_VERSION,
+} from "../../src/lib/hr/productLayerAdapter";
+import {
+  buildSynthesisBlocksFromProductLayersV01,
+  hasAllSynthesisBlocksHaveSourcesV01,
+  SYNTHESIS_BLOCKS_VERSION_V0_1,
+} from "../../src/lib/hr/synthesisBlocksV01";
 import { V2_SCHEMA_VERSION } from "./hr-talent-map-v2-limited";
 
 export const SPIKE_REPORT_TYPE = "hr_person_talent_map_core_layers_spike";
@@ -13,7 +22,7 @@ export const SPIKE_PROMPT_VERSION =
   "hr_person_talent_map_v2_core_layers_background_0_4";
 export const GENERATION_MODE = "layered_background_core_layers_spike";
 export const SOURCE_ANALYSIS_PACKET_VERSION = "analysis_packet_v1_1";
-export const CONTENT_CONTRACT_VERSION = "2.1.0";
+export const CONTENT_CONTRACT_VERSION = "2.2.0";
 
 const DEFAULT_SMOKE_MAX_OUTPUT_TOKENS = 3500;
 const DEFAULT_LAYER_MAX_OUTPUT_TOKENS = 4500;
@@ -4371,6 +4380,20 @@ export function buildCoreLayersContentJson(args: {
     tuning_policy: tuningPolicyWithCost,
   };
 
+  const productLayerAdapterResult = adaptRuntimeLayersToProductLayersV02({
+    layer_reports: args.layerReports,
+    data_quality: dataQuality,
+  });
+
+  const synthesisBlocks = buildSynthesisBlocksFromProductLayersV01({
+    product_layers: productLayerAdapterResult.product_layers,
+    adapter_meta: productLayerAdapterResult.adapter_meta,
+    data_quality: dataQuality,
+  });
+
+  const allSynthesisBlocksHaveSources =
+    hasAllSynthesisBlocksHaveSourcesV01(synthesisBlocks);
+
   return {
     schema_version: V2_SCHEMA_VERSION,
     report_type: SPIKE_REPORT_TYPE,
@@ -4395,6 +4418,9 @@ export function buildCoreLayersContentJson(args: {
       usage_summary: Object.keys(usageSummary).length > 0 ? usageSummary : undefined,
       source_analysis_packet_version: SOURCE_ANALYSIS_PACKET_VERSION,
       content_contract_version: CONTENT_CONTRACT_VERSION,
+      product_layer_adapter_version: PRODUCT_LAYER_ADAPTER_VERSION,
+      synthesis_blocks_version: SYNTHESIS_BLOCKS_VERSION_V0_1,
+      synthesis_generation_mode: "deterministic_from_product_layers",
       background_spike: true,
       layer_generation: args.layerGeneration,
     },
@@ -4415,7 +4441,7 @@ export function buildCoreLayersContentJson(args: {
     },
     data_quality: dataQuality,
     layer_reports: args.layerReports,
-    synthesis_blocks: {},
+    synthesis_blocks: synthesisBlocks,
     derived_action_sources: {
       interview: {
         status: "not_generated",
@@ -4450,14 +4476,14 @@ export function buildCoreLayersContentJson(args: {
       forbidden_base_terms_checked: true,
       fit_score_removed: true,
       html_sanitized: true,
-      all_synthesis_blocks_have_sources: false,
+      all_synthesis_blocks_have_sources: allSynthesisBlocksHaveSources,
       all_ready_layers_have_evidence: args.overallStatus === "ready",
       human_review_recommended: true,
       background_spike: true,
       disclaimers: [
-        "Background spike: двенадцать AI-слоёв work_format, task_entry, decision_style, work_signature, inner_coherence, stable_zones, sensitive_zones, talent_links, point_talents, amplified_themes, conscious_axis, background_axis через Responses API (sequential).",
-        "Не является полной картой талантов кандидата.",
-        "Synthesis blocks не генерировались на этом этапе.",
+        "Background generation: 19 runtime AI-слоёв через Responses API sequential: 12 source/core layers + 7 product narrative layers.",
+        "Synthesis blocks v0.1 собраны детерминированно из product layers; отдельные AI synthesis prompts ещё не запускались.",
+        "Это общая карта кандидата, а не оценка под конкретную вакансию; role-fit не генерировался.",
       ],
     },
   };

@@ -1147,6 +1147,10 @@ function TalentMapWorkspace({
   const layerReportsCount = Array.isArray(contentRoot.layer_reports)
     ? contentRoot.layer_reports.length
     : sortedLayers.length;
+  const hasSynthesisBlocks =
+    contentRoot.synthesis_blocks != null &&
+    typeof contentRoot.synthesis_blocks === "object" &&
+    Object.keys(contentRoot.synthesis_blocks as object).length > 0;
   const spikeReadyCount =
     typeof layerSummary?.ready === "number" ? layerSummary.ready : layerReportsCount;
   const spikeTotal =
@@ -1193,11 +1197,15 @@ function TalentMapWorkspace({
 
         {isCoreLayersSpike ? (
           <div className="hr-tm-spike-banner" role="status">
-            <p className="hr-tm-spike-banner-title">Product layers v0.2 · послойная карта</p>
+            <p className="hr-tm-spike-banner-title">
+              {hasSynthesisBlocks
+                ? "Synthesis blocks v0.1 · Product layers v0.2"
+                : "Product layers v0.2 · послойная карта"}
+            </p>
             <p className="hr-tm-spike-banner-text">
-              Synthesis-блоки ещё не собраны, поэтому верхние блоки могут быть неполными. Основной
-              результат сейчас — раздел «Слои карты» с продуктовой структурой v0.2 (16 слоёв +
-              надёжность данных).
+              {hasSynthesisBlocks
+                ? "Верхние блоки карты собраны из продуктовых слоёв v0.2. Это deterministic synthesis без отдельного AI synthesis prompt; подробная evidence-логика остаётся в слоях карты."
+                : "Synthesis-блоки ещё не собраны, поэтому верхние блоки могут быть неполными. Основной результат сейчас — раздел «Слои карты» с продуктовой структурой v0.2 (16 слоёв + надёжность данных)."}
             </p>
             <div className="hr-tm-spike-meta-grid">
               <span>run_mode: {getText(generationMeta.run_mode) || "—"}</span>

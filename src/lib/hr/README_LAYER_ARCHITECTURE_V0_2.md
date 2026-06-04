@@ -1,60 +1,42 @@
-# Talent Map — Layer Architecture v0.2 (Stage 4.7)
-
-Spec-only document. Production **12-layer core-layers** generation is unchanged (see `netlify/functions/hr-talent-map-v2-core-layers-shared.ts` → `CORE_LAYERS_ORDER`).
+# Talent Map — Layer Architecture v0.2
 
 Canonical constants: [`talentMapLayerArchitecture.ts`](./talentMapLayerArchitecture.ts).
+
+Production pipeline: `netlify/functions/hr-talent-map-v2-core-layers-shared.ts` → `CORE_LAYERS_ORDER` (19 runtime layers).
 
 ## Principle
 
 | Layer | Role |
 | --- | --- |
 | **34 legacy methodology layers** + `chart_passport` | Internal **evidence / source signal** catalog (`EVIDENCE_SIGNAL_CATALOG_V0_2`) |
-| **16 AI narrative product layers** | HR-facing `layer_reports` target (`PRODUCT_LAYER_CATALOG_V0_2`) |
-| **`data_quality`** | System QA / evidence layer — not a full AI narrative layer by default |
-| **6 synthesis blocks** | Shown first in HR UI; assembled from product layers |
+| **16 AI narrative product layers** | HR-facing product view (`PRODUCT_LAYER_CATALOG_V0_2`), adapted from runtime via Product Layer Adapter v0.2 |
+| **`data_quality`** | System QA / evidence layer |
+| **6 synthesis blocks** | Top HR UI sections; deterministic v0.1 from product layers (`synthesisBlocksV01.ts`) |
 | **Role-fit (future)** | Compare `matching_summary` ↔ vacancy `requirement_summary`, not full layer prose |
+
+## Runtime generation (19 steps)
+
+12 source/core layers + 7 product narrative layers:
+
+`work_format`, `task_entry`, `decision_style`, `work_signature`, `inner_coherence`, `stable_zones`, `sensitive_zones`, `talent_links`, `point_talents`, `amplified_themes`, `conscious_axis`, `background_axis`, `communication_style`, `values_and_culture`, `growth_tension`, `responsibility_and_rules`, `work_environment_and_recovery`, `motivation_and_focus`, `team_contribution_type`.
+
+Constant: `RUNTIME_CORE_LAYER_KEYS`.
 
 ## Product layers (16 + system)
 
-1. `work_format` — Рабочий формат  
-2. `task_entry` — Вход в задачи  
-3. `decision_style` — Принятие решений  
-4. `work_signature` — Рабочий почерк  
-5. `inner_coherence` — Внутренняя связность  
-6. `stability_and_risk_zones` — Устойчивость и зоны перегруза *(merges runtime `stable_zones` + `sensitive_zones`)*  
-7. `talent_links` — Связки талантов  
-8. `point_talents_and_strong_themes` — Точечные таланты и усиленные темы *(merges `point_talents` + `amplified_themes`)*  
-9. `main_work_axis` — Главная рабочая ось *(merges `conscious_axis` + `background_axis`)*  
-10. `communication_style` — Коммуникация и объяснение *(planned)*  
-11. `values_and_culture` — Ценности и культура взаимодействия *(planned)*  
-12. `growth_tension` — Напряжение и рост *(planned)*  
-13. `responsibility_and_rules` — Ответственность, правила и зрелость *(planned; absorbs legacy `principles_and_rules`, `responsibility_maturity`)*  
-14. `work_environment_and_recovery` — Рабочая среда и восстановление *(planned; no medical/dietary advice)*  
-15. `motivation_and_focus` — Мотивация и фокус *(planned)*  
-16. `team_contribution_type` — Тип вклада в команду *(planned)*  
+See `PRODUCT_LAYER_CATALOG_V0_2`. Merged product layers:
 
-**System:** `data_quality` — Надёжность данных.
+- `stability_and_risk_zones` ← `stable_zones` + `sensitive_zones`
+- `point_talents_and_strong_themes` ← `point_talents` + `amplified_themes`
+- `main_work_axis` ← `conscious_axis` + `background_axis`
 
-## Runtime 12 → product v0.2
+Adapter: `adaptRuntimeLayersToProductLayersV02` in [`productLayerAdapter.ts`](./productLayerAdapter.ts).
 
-| Runtime (today) | Product v0.2 |
-| --- | --- |
-| `work_format` | `work_format` |
-| `task_entry` | `task_entry` |
-| `decision_style` | `decision_style` |
-| `work_signature` | `work_signature` |
-| `inner_coherence` | `inner_coherence` |
-| `stable_zones` | `stability_and_risk_zones` |
-| `sensitive_zones` | `stability_and_risk_zones` |
-| `talent_links` | `talent_links` |
-| `point_talents` | `point_talents_and_strong_themes` |
-| `amplified_themes` | `point_talents_and_strong_themes` |
-| `conscious_axis` | `main_work_axis` |
-| `background_axis` | `main_work_axis` |
+## Runtime → product mapping
 
-Mapping constant: `RUNTIME_CORE_LAYER_TO_PRODUCT_LAYER_V02`.
+Constant: `RUNTIME_CORE_LAYER_TO_PRODUCT_LAYER_V02` / `PRODUCT_LAYER_TO_RUNTIME_CORE_LAYERS_V02`.
 
-## Synthesis blocks → layers
+## Synthesis blocks → product layers
 
 | Block | Product layers (+ system) |
 | --- | --- |
@@ -65,30 +47,14 @@ Mapping constant: `RUNTIME_CORE_LAYER_TO_PRODUCT_LAYER_V02`.
 | `risks` | stability_and_risk_zones, growth_tension, responsibility_and_rules, motivation_and_focus, work_environment_and_recovery, **data_quality** |
 | `management` | task_entry, decision_style, work_signature, inner_coherence, stability_and_risk_zones, work_environment_and_recovery, responsibility_and_rules, growth_tension, values_and_culture |
 
-Constant: `SYNTHESIS_BLOCK_LAYERS_V02`.
+Constants: `SYNTHESIS_BLOCK_LAYERS_V02`, `SYNTHESIS_BLOCK_PRODUCT_LAYERS_V02`.
 
-## Future role-fit (vacancy areas → product layers)
+Builder (Stage 4.9-A): `buildSynthesisBlocksFromProductLayersV01` in [`synthesisBlocksV01.ts`](./synthesisBlocksV01.ts) — deterministic, no AI synthesis prompts.
 
-| Vacancy area | Product layers |
-| --- | --- |
-| `vacancy.responsibilities` | talent_links, point_talents_and_strong_themes, main_work_axis |
-| `vacancy.work_format` | work_format, task_entry, decision_style |
-| `vacancy.manager_context` | work_signature, inner_coherence, stability_and_risk_zones, responsibility_and_rules |
-| `vacancy.communication_requirements` | communication_style, values_and_culture |
-| `vacancy.culture` | values_and_culture, team_contribution_type |
-| `vacancy.pressure_level` | stability_and_risk_zones, growth_tension, motivation_and_focus |
-| `vacancy.environment` | work_environment_and_recovery, motivation_and_focus |
-| `vacancy.risk_conditions` | growth_tension, stability_and_risk_zones, responsibility_and_rules |
+## Future role-fit
 
 Constant: `VACANCY_REQUIREMENT_TO_PRODUCT_LAYERS_V02`.
 
 ## Legacy catalog location
 
-The pre-v0.2 **35-entry** UI fallback catalog lives in `src/pages/hr/talentMapPanelContent.tsx` (`LAYER_CATALOG_FALLBACK`). Stage 4.7 does not change that UI catalog or wire v0.2 into generation.
-
-## Stage 4.8+ (out of scope here)
-
-- Generate 7 planned product layers + system `data_quality` narrative/evidence as needed  
-- Merge runtime 12 reports into 9 product layer reports for display  
-- Update synthesis builder to use `SYNTHESIS_BLOCK_LAYERS_V02`  
-- Role-fit using `VACANCY_REQUIREMENT_TO_PRODUCT_LAYERS_V02` + `matching_summary`
+The pre-v0.2 **35-entry** UI fallback catalog lives in `src/pages/hr/talentMapPanelContent.tsx` (`LAYER_CATALOG_FALLBACK`).

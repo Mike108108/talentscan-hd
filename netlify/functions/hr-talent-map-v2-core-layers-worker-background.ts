@@ -14,7 +14,9 @@ import {
   buildCareerReadingContentJson,
   buildPartialCareerReadingContentJson,
   callOpenAiForCareerReadingForbiddenTermsRepair,
+  callOpenAiForCareerReadingValidationRepair,
   callOpenAiForCareerReadingLayerWithRetry,
+  isCareerReadingValidationRepairable,
   CareerReadingOpenAiRetryExhaustedError,
   createSupabaseClient,
   extractBearerToken,
@@ -516,7 +518,11 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       let mergedUsage: OpenAiUsageSnapshot | undefined = openAiCallResult?.usage;
       let repairAttempts = 0;
 
-      if (!validation.ok && isForbiddenBaseTermsValidation(validation)) {
+      if (
+        !validation.ok &&
+        (isForbiddenBaseTermsValidation(validation) ||
+          isCareerReadingValidationRepairable(validation))
+      ) {
         layerGeneration.layers[layerKey] = {
           ...layerGeneration.layers[layerKey],
           status: "repairing",
@@ -524,15 +530,25 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         await persistProgress();
 
         try {
-          const repairResult = await callOpenAiForCareerReadingForbiddenTermsRepair({
-            apiKey,
-            model,
-            layerKey,
-            compactInput,
-            maxOutputTokens: modelPolicy.maxOutputTokens,
-            modelPolicy,
-            offendingMatches: validation.offending_matches ?? [],
-          });
+          const repairResult = isForbiddenBaseTermsValidation(validation)
+            ? await callOpenAiForCareerReadingForbiddenTermsRepair({
+                apiKey,
+                model,
+                layerKey,
+                compactInput,
+                maxOutputTokens: modelPolicy.maxOutputTokens,
+                modelPolicy,
+                offendingMatches: validation.offending_matches ?? [],
+              })
+            : await callOpenAiForCareerReadingValidationRepair({
+                apiKey,
+                model,
+                layerKey,
+                compactInput,
+                maxOutputTokens: modelPolicy.maxOutputTokens,
+                modelPolicy,
+                validationMessage: validation.message,
+              });
           repairAttempts = 1;
           openAiAttempts += 1;
           layer = repairResult.layer;

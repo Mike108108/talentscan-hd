@@ -444,6 +444,51 @@ function collectCareerReadingBaseText(layer: Record<string, unknown>): Array<{ p
 }
 
 const CAREER_READING_CONFIDENCE_VALUES = ["high", "medium", "low"] as const;
+const CAREER_READING_BASE_HEADLINE_FALLBACK = "Рабочий слой карты";
+
+function firstSentence(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  const match = trimmed.match(/^[^.!?…]+[.!?…]?/u);
+  return (match ? match[0] : trimmed.split(/\s+/).slice(0, 12).join(" ")).trim();
+}
+
+function inferChannelKeyFromLong(entry: string): string {
+  const text = asString(entry);
+  if (!text) return "";
+  const beforeColon = text.split(":")[0]?.trim();
+  return beforeColon || text;
+}
+
+function ensureCareerReadingBaseDefaults(
+  layer: Record<string, unknown>,
+  layerKey: CareerReadingLayerKey,
+): void {
+  const catalog = CAREER_READING_LAYER_CATALOG_V1[layerKey];
+  const catalogTitle = catalog.title;
+  const layerTitle = asString(layer.title) || catalogTitle;
+  const base = asRecord(layer.base);
+
+  let shortSummary = asString(base.short_summary);
+  if (!shortSummary) {
+    shortSummary = asString(base.headline) || catalogTitle || layerTitle;
+  }
+
+  let headline = asString(base.headline);
+  if (!headline) {
+    headline =
+      firstSentence(shortSummary) ||
+      catalogTitle ||
+      layerTitle ||
+      CAREER_READING_BASE_HEADLINE_FALLBACK;
+  }
+
+  if (!asString(base.short_summary)) {
+    base.short_summary = shortSummary || headline || catalogTitle;
+  }
+  base.headline = headline;
+  layer.base = base;
+}
 
 function normalizeNullableString(value: unknown): string | null {
   if (value == null) return null;
@@ -537,17 +582,35 @@ function normalizeEvidenceRecord(
   };
 }
 
-function normalizeChannelTalentRecord(value: unknown): Record<string, unknown> {
+function normalizeChannelTalentRecord(
+  value: unknown,
+  opts?: {
+    channelKeyHint?: string;
+    evidenceFallback?: Record<string, unknown>;
+    defaultSourceFields?: string[];
+  },
+): Record<string, unknown> {
   const rec = asRecord(value);
-  const evidence = asRecord(rec.evidence);
+  const channelKey = asString(rec.channel_key) || opts?.channelKeyHint || "";
+  const classicalName = normalizeNullableString(rec.classical_name);
+  const evidenceRaw = asRecord(rec.evidence);
+  const hasEvidence =
+    asStringArray(evidenceRaw.source_fields).length > 0 ||
+    (Array.isArray(evidenceRaw.source_chart_elements) &&
+      evidenceRaw.source_chart_elements.length > 0);
+  const defaultSourceFields = opts?.defaultSourceFields ?? [];
   return {
-    channel_key: asString(rec.channel_key) || "",
-    classical_name: normalizeNullableString(rec.classical_name),
+    channel_key: channelKey,
+    classical_name: classicalName,
     gates: asStringArray(rec.gates),
     centers: asStringArray(rec.centers),
     circuit: normalizeNullableString(rec.circuit),
-    title: asString(rec.title) || "",
-    summary: asString(rec.summary) || "",
+    title:
+      asString(rec.title) ||
+      classicalName ||
+      channelKey ||
+      "Связка талантов",
+    summary: asString(rec.summary) || "Требует ручной проверки после генерации.",
     where_useful: asStringArray(rec.where_useful),
     how_it_appears_at_work: asString(rec.how_it_appears_at_work) || "",
     risk: asString(rec.risk) || "",
@@ -555,7 +618,10 @@ function normalizeChannelTalentRecord(value: unknown): Record<string, unknown> {
     what_to_check: (Array.isArray(rec.what_to_check) ? rec.what_to_check : []).map(
       normalizeCheckRecord,
     ),
-    evidence: normalizeEvidenceRecord(evidence, []),
+    evidence: normalizeEvidenceRecord(
+      hasEvidence ? rec.evidence : opts?.evidenceFallback,
+      defaultSourceFields,
+    ),
   };
 }
 
@@ -594,19 +660,35 @@ function normalizeRepeatedGateThemeRecord(value: unknown): Record<string, unknow
 function normalizeSpecialPayload(
   layerKey: CareerReadingLayerKey,
   value: unknown,
+  layerInput?: unknown,
+  layerEvidenceFallback?: Record<string, unknown>,
 ): Record<string, unknown> {
   const special = asRecord(value);
   if (layerKey === "talent_channels") {
+    const input = layerInput != null ? asRecord(layerInput) : {};
+    const channelsShort = asStringArray(input.channelsShort);
+    const channelsLong = asStringArray(input.channelsLong);
+    const defaultSourceFields = [...CAREER_READING_LAYER_CATALOG_V1.talent_channels.source_fields];
     const channelTalents = (Array.isArray(special.channel_talents)
       ? special.channel_talents
       : []
-    ).map(normalizeChannelTalentRecord);
+    ).map((item, index) =>
+      normalizeChannelTalentRecord(item, {
+        channelKeyHint:
+          channelsShort[index] || inferChannelKeyFromLong(channelsLong[index] ?? ""),
+        evidenceFallback: layerEvidenceFallback,
+        defaultSourceFields,
+      }),
+    );
+    const expectedCount = channelsShort.length || channelsLong.length;
     return {
       channel_talents: channelTalents,
       channels_count:
         typeof special.channels_count === "number"
           ? special.channels_count
-          : channelTalents.length,
+          : expectedCount > 0
+            ? expectedCount
+            : channelTalents.length,
     };
   }
   if (layerKey === "centers_stability_and_sensitivity") {
@@ -641,7 +723,10 @@ export function normalizeCareerReadingLayerForValidation(args: {
   const sourceFacts = asRecord(layer.source_facts);
   layer.source_facts = { ...sourceFacts };
 
-  const base = asRecord(layer.base);
+  const base =
+    layer.base != null && typeof layer.base === "object" && !Array.isArray(layer.base)
+      ? asRecord(layer.base)
+      : {};
   layer.base = {
     headline: asString(base.headline) || "",
     short_summary: asString(base.short_summary) || "",
@@ -656,6 +741,7 @@ export function normalizeCareerReadingLayerForValidation(args: {
     ),
     sections: (Array.isArray(base.sections) ? base.sections : []).map(normalizeSectionRecord),
   };
+  ensureCareerReadingBaseDefaults(layer, args.layerKey);
 
   const pro = asRecord(layer.pro);
   layer.pro = {
@@ -699,7 +785,12 @@ export function normalizeCareerReadingLayerForValidation(args: {
     check_in_role_fit: asStringArray(matching.check_in_role_fit),
   };
 
-  layer.special_payload = normalizeSpecialPayload(args.layerKey, layer.special_payload);
+  layer.special_payload = normalizeSpecialPayload(
+    args.layerKey,
+    layer.special_payload,
+    args.layerInput,
+    asRecord(layer.evidence),
+  );
 
   const qa = asRecord(layer.qa);
   layer.qa = {
@@ -719,6 +810,7 @@ export function validateCareerReadingLayer(
   layerInput?: unknown,
 ): CareerReadingLayerValidationResult {
   const catalog = CAREER_READING_LAYER_CATALOG_V1[layerKey];
+  ensureCareerReadingBaseDefaults(layer, layerKey);
 
   if (asString(layer.layer_key) !== layerKey) {
     return { ok: false, stage: "validate_layer", message: `layer_key must be ${layerKey}` };
@@ -861,6 +953,18 @@ export function validateCareerReadingLayer(
 
 export function isForbiddenBaseTermsValidation(result: CareerReadingLayerValidationResult): boolean {
   return !result.ok && result.stage === "forbidden_base_terms";
+}
+
+export function isCareerReadingValidationRepairable(
+  result: CareerReadingLayerValidationResult,
+): boolean {
+  if (result.ok || result.stage !== "validate_layer") return false;
+  const message = result.message;
+  return (
+    message.includes("base.headline") ||
+    message.includes("base.short_summary") ||
+    message.includes("summary_for_synthesis.one_sentence")
+  );
 }
 
 class CareerReadingOpenAiError extends Error {
@@ -1187,6 +1291,35 @@ export async function callOpenAiForCareerReadingForbiddenTermsRepair(args: {
 REPAIR: Base contains forbidden technical HD terms (${terms}). Rewrite base fields in plain HR language only. Keep pro/classical_sources unchanged in meaning. Return full JSON again.`;
   return callOpenAiForCareerReadingLayer({
     ...args,
+    inputOverride: repairPrompt,
+  });
+}
+
+export async function callOpenAiForCareerReadingValidationRepair(args: {
+  apiKey: string;
+  model: string;
+  layerKey: CareerReadingLayerKey;
+  compactInput: Record<string, unknown>;
+  maxOutputTokens: number;
+  modelPolicy?: CoreLayersModelPolicy | null;
+  validationMessage: string;
+}): Promise<Awaited<ReturnType<typeof callOpenAiForCareerReadingLayer>>> {
+  const repairPrompt = `${buildCareerReadingLayerPromptV1({
+    layer_key: args.layerKey,
+    candidate_snapshot: compactInputCandidateSnapshot(args.compactInput),
+    normalized_chart_data: args.compactInput.normalized_chart_data,
+    layer_input: args.compactInput.layer_input,
+  }).user}
+
+REPAIR: Layer JSON failed validation (${args.validationMessage}). Return the full layer JSON again.
+Return base.headline and base.short_summary as non-empty strings.`;
+  return callOpenAiForCareerReadingLayer({
+    apiKey: args.apiKey,
+    model: args.model,
+    layerKey: args.layerKey,
+    compactInput: args.compactInput,
+    maxOutputTokens: args.maxOutputTokens,
+    modelPolicy: args.modelPolicy,
     inputOverride: repairPrompt,
   });
 }

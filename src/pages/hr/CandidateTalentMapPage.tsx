@@ -58,6 +58,9 @@ import {
   VerificationPlanBlock,
 } from "./talentMapPanelContent";
 import type { OnboardingPhase } from "../../lib/hr/talentMapUiHelpers";
+import { getV2SynthesisBlocks } from "../../lib/hr/talentMapContentV2";
+import type { HrTalentMapSynthesisBlocksV2 } from "../../lib/hr/types";
+import { DownloadReportButton, TalentMapDashboard } from "./talentMapDashboard";
 import "../../hr.css";
 
 type SectionId =
@@ -83,7 +86,7 @@ const NAV_SECTIONS_V12: Array<{ id: SectionId; label: string; hint?: string }> =
   { id: "work_env", label: "Рабочая среда" },
   { id: "risks", label: "Риски" },
   { id: "management", label: "Управление" },
-  { id: "layers", label: "Слои карты", hint: "HR-расшифровка по слоям" },
+  { id: "layers", label: "Послойная расшифровка", hint: "Источники выводов по слоям" },
 ];
 
 const CORE_LAYER_POLL_INTERVAL_MS = 2500;
@@ -662,12 +665,12 @@ function TalentMapWorkspace({
   const updatedLabel = formatReportDate(
     aiReport.generated_at ?? aiReport.updated_at,
   );
-  const vacancyLabel =
-    vacancies.length === 1
-      ? vacancies[0].title
-      : vacancies.length > 1
-        ? `${vacancies.length} вакансии`
-        : candidate.vacancy_title || "не привязана";
+  const vacancyLinked = vacancies.length > 0 || Boolean(candidate.vacancy_title?.trim());
+  const vacancyLabel = vacancies.length === 1
+    ? vacancies[0].title
+    : vacancies.length > 1
+      ? `${vacancies.length} вакансии`
+      : candidate.vacancy_title?.trim() || "не привязана — общая карта кандидата";
 
   const checkHint =
     lists.interviews.length > 0
@@ -1147,10 +1150,13 @@ function TalentMapWorkspace({
   const layerReportsCount = Array.isArray(contentRoot.layer_reports)
     ? contentRoot.layer_reports.length
     : sortedLayers.length;
+  const synthesisBlocksRaw = getV2SynthesisBlocks(rawAiContent);
   const hasSynthesisBlocks =
-    contentRoot.synthesis_blocks != null &&
-    typeof contentRoot.synthesis_blocks === "object" &&
-    Object.keys(contentRoot.synthesis_blocks as object).length > 0;
+    synthesisBlocksRaw != null && Object.keys(synthesisBlocksRaw).length > 0;
+  const synthesisBlocks: HrTalentMapSynthesisBlocksV2 | null = hasSynthesisBlocks
+    ? synthesisBlocksRaw
+    : null;
+  const useDashboardLayout = Boolean(isV12 && hasSynthesisBlocks);
   const spikeReadyCount =
     typeof layerSummary?.ready === "number" ? layerSummary.ready : layerReportsCount;
   const spikeTotal =
@@ -1175,20 +1181,23 @@ function TalentMapWorkspace({
           <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
             ← К кандидату
           </Link>
-          {!isFixturePreview ? (
-            <button
-              type="button"
-              className="hr-btn hr-btn--ghost"
-              disabled={generating}
-              onClick={onRegenerate}
-            >
-              {generating
-                ? "Генерируем послойную карту…"
-                : isCoreLayersSpike
-                  ? "Перегенерировать послойную карту"
-                  : "Создать послойную карту v2"}
-            </button>
-          ) : null}
+          <div className="hr-tm-header-actions">
+            <DownloadReportButton />
+            {!isFixturePreview ? (
+              <button
+                type="button"
+                className="hr-btn hr-btn--ghost"
+                disabled={generating}
+                onClick={onRegenerate}
+              >
+                {generating
+                  ? "Генерируем послойную карту…"
+                  : isCoreLayersSpike
+                    ? "Перегенерировать"
+                    : "Создать послойную карту v2"}
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {isFixturePreview ? (
@@ -1205,7 +1214,7 @@ function TalentMapWorkspace({
             <p className="hr-tm-spike-banner-text">
               {hasSynthesisBlocks
                 ? "Верхние блоки карты собраны из продуктовых слоёв v0.2. Это deterministic synthesis без отдельного AI synthesis prompt; подробная evidence-логика остаётся в слоях карты."
-                : "Synthesis-блоки ещё не собраны, поэтому верхние блоки могут быть неполными. Основной результат сейчас — раздел «Слои карты» с продуктовой структурой v0.2 (16 слоёв + надёжность данных)."}
+                : "Synthesis-блоки ещё не собраны, поэтому верхние блоки могут быть неполными. Основной результат сейчас — раздел «Послойная расшифровка» с продуктовой структурой v0.2 (16 слоёв + надёжность данных)."}
             </p>
             <div className="hr-tm-spike-meta-grid">
               <span>run_mode: {getText(generationMeta.run_mode) || "—"}</span>
@@ -1259,47 +1268,68 @@ function TalentMapWorkspace({
         <p className="hr-tm-meta-line">
           <span className="hr-status hr-status--ok">Разбор готов</span>
           {updatedLabel ? <span>· обновлено {updatedLabel}</span> : null}
-          <span>· вакансия {vacancyLabel}</span>
+          <span>· {vacancyLinked ? `вакансия ${vacancyLabel}` : vacancyLabel}</span>
         </p>
-
-        <div className="hr-tm-conclusion">
-          <h3 className="hr-tm-conclusion-title">Главный HR-вывод</h3>
-          <p className="hr-tm-conclusion-text">{mainConclusion}</p>
-          <p className="hr-tm-conclusion-next">
-            <span className="hr-tm-conclusion-next-label">Следующий шаг:</span> {nextStep}
+        {!vacancyLinked ? (
+          <p className="hr-tm-hero-disclaimer">
+            Общая карта кандидата. Не является оценкой под конкретную вакансию.
           </p>
-          {showDataQualityWarn ? (
-            <p className="hr-tm-conclusion-warn">
-              Данных пока мало — выводы предварительные. Добавьте контекст вакансии и перегенерируйте
-              карту.
-            </p>
-          ) : null}
-        </div>
-
-        <div className="hr-tm-stat-row">
-          <StatPill
-            label="Точность данных"
-            value={confidenceLabel}
-            onClick={() => setSection("data")}
-          />
-          <StatPill
-            label="Лучший формат"
-            value={bestWorkFormat ?? "—"}
-            onClick={() => setSection(formatSection)}
-          />
-          <StatPill
-            label="Главный риск"
-            value={mainRisk ?? "—"}
-            onClick={() => setSection("risks")}
-          />
-          <StatPill
-            label="Что проверить"
-            value={checkHint}
-            onClick={() => setSection(checkSection)}
-          />
-        </div>
+        ) : null}
+        {useDashboardLayout ? null : (
+          <>
+            <div className="hr-tm-conclusion">
+              <h3 className="hr-tm-conclusion-title">Главный HR-вывод</h3>
+              <p className="hr-tm-conclusion-text">{mainConclusion}</p>
+              <p className="hr-tm-conclusion-next">
+                <span className="hr-tm-conclusion-next-label">Следующий шаг:</span> {nextStep}
+              </p>
+              {showDataQualityWarn ? (
+                <p className="hr-tm-conclusion-warn">
+                  Данных пока мало — выводы предварительные. Добавьте контекст вакансии и
+                  перегенерируйте карту.
+                </p>
+              ) : null}
+            </div>
+            <div className="hr-tm-stat-row">
+              <StatPill
+                label="Точность данных"
+                value={confidenceLabel}
+                onClick={() => setSection("data")}
+              />
+              <StatPill
+                label="Лучший формат"
+                value={bestWorkFormat ?? "—"}
+                onClick={() => setSection(formatSection)}
+              />
+              <StatPill
+                label="Главный риск"
+                value={mainRisk ?? "—"}
+                onClick={() => setSection("risks")}
+              />
+              <StatPill
+                label="Что проверить"
+                value={checkHint}
+                onClick={() => setSection(checkSection)}
+              />
+            </div>
+          </>
+        )}
+        {useDashboardLayout && showDataQualityWarn ? (
+          <p className="hr-tm-hero-disclaimer hr-tm-hero-disclaimer--warn">
+            Данных пока мало — выводы предварительные. Добавьте контекст вакансии и перегенерируйте
+            карту.
+          </p>
+        ) : null}
       </div>
 
+      {useDashboardLayout ? (
+        <TalentMapDashboard
+          synthesisBlocks={synthesisBlocks}
+          mergedCatalog={mergedCatalog}
+          onSelectLayer={(layerKey) => setDetail({ kind: "catalog_layer", layerKey })}
+          normalizeHrCopy={normalizeHrCopy}
+        />
+      ) : (
       <div className="hr-tm-workspace">
         <nav className="hr-tm-nav" aria-label="Разделы карты">
           <div className="hr-tm-nav-chips" role="tablist">
@@ -1346,6 +1376,7 @@ function TalentMapWorkspace({
           </SectionErrorBoundary>
         </div>
       </div>
+      )}
 
       <HrSidePanel
         open={detail !== null}

@@ -2725,3 +2725,347 @@
   font-size: 0.9rem;
   color: var(--hr-text);
 }
+
+/* Talent map dashboard v0.1 — HR dashboard recomposition */
+.hr-tm-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.hr-tm-download-btn[disabled] {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.hr-tm-hero-disclaimer {
+  margin: 8px 0 0;
+  font-size: 0.84rem;
+  color: var(--hr-muted);
+  line-height: 1.45;
+}
+
+.hr-tm-hero-disclaimer--warn {
+  color: var(--hr-soft);
+}
+
+.hr-tm-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.hr-tm-dash-section {
+  border: 1px solid var(--hr-line);
+  border-radius: var(--hr-radius-xl);
+  background: var(--hr-panel);
+  padding: 16px 18px 18px;
+}
+
+.hr-tm-dash-section--secondary {
+  background: var(--hr-panel-2);
+  border-style: dashed;
+}
+
+.hr-tm-dash-section--evidence {
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.hr-tm-dash-section-header {
+  margin-bottom: 12px;
+}
+
+.hr-tm-dash-section-title {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.hr-tm-dash-section-sub {
+  margin: 6px 0 0;
+  font-size: 0.86rem;
+  color: var(--hr-muted);
+  line-height: 1.45;
+}
+
+.hr-tm-signals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.hr-tm-signal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--hr-radius-md);
+  border: 1px solid var(--hr-line);
+  background: var(--hr-panel-2);
+  min-height: 140px;
+}
+
+.hr-tm-signal-card-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.hr-tm-signal-card-icon {
+  font-size: 1.1rem;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.hr-tm-signal-card-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hr-tm-signal-card-title {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.3;
+}
+
+.hr-tm-signal-kind {
+  display: inline-block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  width: fit-content;
+}
+
+.hr-tm-signal-kind--strength {
+  color: rgba(120, 220, 160, 0.95);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.hr-tm-signal-kind--condition {
+  color: rgba(160, 200, 255, 0.95);
+  background: rgba(120, 180, 255, 0.1);
+}
+
+.hr-tm-signal-kind--risk {
+  color: rgba(255, 180, 120, 0.95);
+  background: rgba(255, 140, 80, 0.1);
+}
+
+.hr-tm-signal-kind--communication,
+.hr-tm-signal-kind--team_contribution {
+  color: rgba(180, 160, 255, 0.95);
+  background: rgba(140, 120, 255, 0.1);
+}
+
+.hr-tm-signal-kind--management {
+  color: rgba(255, 220, 120, 0.95);
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.hr-tm-signal-card-summary {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--hr-soft);
+}
+
+.hr-tm-signal-card-check {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--hr-muted);
+}
+
+.hr-tm-signal-card-check-label {
+  font-weight: 600;
+}
+
+.hr-tm-signal-card-source {
+  margin: auto 0 0;
+  font-size: 0.72rem;
+  color: var(--hr-muted);
+  opacity: 0.85;
+}
+
+.hr-tm-points-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.hr-tm-points-col {
+  padding: 12px 14px;
+  border-radius: var(--hr-radius-md);
+  border: 1px solid var(--hr-line);
+  background: var(--hr-panel-2);
+}
+
+.hr-tm-points-col--strength {
+  border-color: rgba(16, 185, 129, 0.22);
+}
+
+.hr-tm-points-col--risk {
+  border-color: rgba(255, 140, 80, 0.22);
+}
+
+.hr-tm-points-col-title {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--hr-muted);
+  font-weight: 700;
+}
+
+.hr-tm-points-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hr-tm-points-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.hr-tm-points-text {
+  color: var(--hr-text);
+}
+
+.hr-tm-points-detail {
+  font-size: 0.82rem;
+  color: var(--hr-muted);
+}
+
+.hr-tm-points-empty {
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.hr-tm-conclusion-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.hr-tm-conclusion-grid-item {
+  padding: 10px 12px;
+  border-radius: var(--hr-radius-md);
+  border: 1px solid var(--hr-line);
+  background: var(--hr-panel-2);
+}
+
+.hr-tm-conclusion-grid-label {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--hr-muted);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.hr-tm-conclusion-grid-value {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--hr-text);
+}
+
+.hr-tm-detail-accordions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hr-tm-detail-accordion {
+  border: 1px solid var(--hr-line);
+  border-radius: var(--hr-radius-md);
+  background: var(--hr-panel);
+  overflow: hidden;
+}
+
+.hr-tm-detail-accordion-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--hr-text);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.hr-tm-detail-accordion-trigger:hover,
+.hr-tm-detail-accordion-trigger:focus-visible {
+  background: rgba(255, 255, 255, 0.03);
+  outline: none;
+}
+
+.hr-tm-detail-accordion-chevron {
+  color: var(--hr-muted);
+  font-size: 0.85rem;
+}
+
+.hr-tm-detail-accordion-body {
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--hr-line);
+}
+
+.hr-tm-detail-items {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.hr-tm-detail-checks {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hr-tm-detail-check-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.86rem;
+  line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 140, 80, 0.06);
+  border: 1px solid rgba(255, 140, 80, 0.15);
+}
+
+@media (max-width: 860px) {
+  .hr-tm-points-grid,
+  .hr-tm-conclusion-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hr-tm-signals-grid {
+    grid-template-columns: 1fr;
+  }
+}

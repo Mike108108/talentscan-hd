@@ -34,6 +34,20 @@ export type {
   ProductLayerStatusV02,
 } from "./productLayerAdapter";
 
+/** HD Career Reading Layers v1 contract (Stage 4.10-A — not in production generation). */
+export {
+  CAREER_READING_LAYERS_VERSION_V1,
+  CAREER_READING_LAYER_KEYS_V1,
+  CAREER_READING_LAYER_CATALOG_V1,
+  buildCareerReadingLayerInputsV1,
+} from "./careerReadingLayersV1";
+
+export type {
+  CareerReadingLayerKeyV1,
+  CareerReadingLayerReportV1,
+  CareerReadingLayerCatalogEntryV1,
+} from "./careerReadingLayersV1";
+
 const V2_SCHEMA = "hr_person_talent_map_v2";
 const REPORT_TYPE = "hr_person_talent_map";
 const CORE_LAYERS_SPIKE_REPORT_TYPE = "hr_person_talent_map_core_layers_spike";

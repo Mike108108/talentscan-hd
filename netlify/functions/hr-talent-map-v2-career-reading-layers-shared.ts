@@ -1675,6 +1675,12 @@ export function buildCareerReadingCompactInput(args: {
   };
 }
 
+export type CareerReadingLayerPromptOptions = {
+  include_methodology_context?: boolean;
+  methodology_prompt_block?: string;
+  writing_standard_prompt_block?: string;
+};
+
 export async function callOpenAiForCareerReadingLayer(args: {
   apiKey: string;
   model: string;
@@ -1684,6 +1690,7 @@ export async function callOpenAiForCareerReadingLayer(args: {
   compactRetry?: boolean;
   modelPolicy?: CoreLayersModelPolicy | null;
   inputOverride?: string;
+  promptOptions?: CareerReadingLayerPromptOptions;
 }): Promise<{
   layer: Record<string, unknown>;
   httpStatus: number;
@@ -1692,11 +1699,15 @@ export async function callOpenAiForCareerReadingLayer(args: {
   request_tuning_fallback: boolean;
   request_tuning_fallback_reason: string | null;
 }> {
+  const promptOpts = args.promptOptions ?? {};
   const prompts = buildCareerReadingLayerPromptV1({
     layer_key: args.layerKey,
     candidate_snapshot: compactInputCandidateSnapshot(args.compactInput),
     normalized_chart_data: args.compactInput.normalized_chart_data,
     layer_input: args.compactInput.layer_input,
+    include_methodology_context: promptOpts.include_methodology_context ?? false,
+    methodology_prompt_block: promptOpts.methodology_prompt_block,
+    writing_standard_prompt_block: promptOpts.writing_standard_prompt_block,
   });
 
   const instructions = prompts.system;

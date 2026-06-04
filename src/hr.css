@@ -2733,3 +2733,124 @@
   font-size: 0.9rem;
   color: var(--hr-text);
 }
+
+/* Prompt Lab · dev (Stage 4.10-C0) */
+
+.prompt-lab {
+  margin: 1rem 0 1.25rem;
+  padding: 0.75rem 1rem;
+  border: 1px dashed var(--hr-line);
+  border-radius: var(--hr-radius-md);
+  background: var(--hr-panel);
+}
+
+.prompt-lab__header {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--hr-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.prompt-lab__notice {
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.8rem;
+  color: var(--hr-muted);
+}
+
+.prompt-lab__controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.65rem 1rem;
+  align-items: end;
+}
+
+.prompt-lab__controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--hr-muted);
+}
+
+.prompt-lab__controls select {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--hr-radius-md);
+  border: 1px solid var(--hr-line);
+  background: var(--hr-panel-2);
+  color: var(--hr-text);
+}
+
+.prompt-lab__checkbox {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.5rem !important;
+}
+
+.prompt-lab__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  grid-column: 1 / -1;
+}
+
+.prompt-lab__error {
+  margin: 0.5rem 0 0;
+  color: var(--hr-coral);
+  font-size: 0.85rem;
+}
+
+.prompt-lab__result {
+  margin-top: 0.75rem;
+}
+
+.prompt-lab__meta {
+  margin: 0.25rem 0;
+  font-size: 0.78rem;
+  color: var(--hr-muted);
+  word-break: break-word;
+}
+
+.prompt-lab__pre {
+  margin: 0.5rem 0;
+  padding: 0.65rem;
+  max-height: 320px;
+  overflow: auto;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  background: var(--hr-panel-2);
+  border: 1px solid var(--hr-line);
+  border-radius: var(--hr-radius-md);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.prompt-lab__issues {
+  margin: 0.5rem 0;
+}
+
+.prompt-lab__issue {
+  margin: 0.25rem 0;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.78rem;
+  border-radius: var(--hr-radius-md);
+  background: var(--hr-panel-2);
+}
+
+.prompt-lab__issue--error {
+  border-left: 3px solid var(--hr-coral);
+}
+
+.prompt-lab__issue--warning {
+  border-left: 3px solid var(--hr-gold);
+}
+
+.prompt-lab__issue--info {
+  border-left: 3px solid var(--hr-cyan);
+}

@@ -1085,4 +1085,135 @@ export async function fetchLatestCoreLayersSpikeReport(
   return { report: newest, error: null };
 }
 
+export type CareerReadingPromptLabPreviewResponse = {
+  ok: boolean;
+  mode: "preview";
+  stage: string;
+  layer_key: string;
+  model_policy: Record<string, unknown>;
+  request: {
+    model: string;
+    reasoning_effort: string;
+    verbosity: string;
+    max_output_tokens: number;
+    instructions: string;
+    input: string;
+    json_schema_name: string;
+    schema: Record<string, unknown>;
+  };
+  compact_input: Record<string, unknown>;
+  methodology_blueprint: { version: string; prompt_block: string };
+  writing_standard: { version: string; prompt_block: string };
+  warnings: string[];
+};
+
+export type CareerReadingPromptLabTestResponse = {
+  ok: boolean;
+  mode: "test";
+  stage: string;
+  layer_key: string;
+  model_policy?: Record<string, unknown>;
+  request: CareerReadingPromptLabPreviewResponse["request"];
+  output?: { layer: Record<string, unknown> };
+  validation?: { ok: boolean; stage?: string; message?: string };
+  quality_scan?: Record<string, unknown>;
+  usage?: Record<string, unknown>;
+  estimated_cost?: Record<string, unknown>;
+  duration_ms?: number;
+  max_output_tokens_used?: number;
+  attempts?: number;
+  request_tuning?: Record<string, unknown>;
+  warnings?: string[];
+  error?: string;
+  source?: string;
+};
+
+async function postCareerReadingPromptLab<T extends Record<string, unknown>>(
+  endpoint: string,
+  params: {
+    companyId: string;
+    candidateId: string;
+    layerKey: string;
+    reasoningEffort?: "low" | "medium";
+    verbosity?: "low" | "medium" | "high";
+    maxOutputTokens?: 8000 | 12000 | 16000;
+    includeMethodologyContext?: boolean;
+  },
+): Promise<T> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Требуется вход");
+
+  const resp = await fetch(`/.netlify/functions/${endpoint}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      company_id: params.companyId,
+      candidate_id: params.candidateId,
+      layer_key: params.layerKey,
+      reasoning_effort: params.reasoningEffort ?? "low",
+      verbosity: params.verbosity ?? "medium",
+      max_output_tokens: params.maxOutputTokens ?? 8000,
+      include_methodology_context: params.includeMethodologyContext ?? false,
+      model: "gpt-5-nano",
+    }),
+  });
+
+  const rawBody = await resp.text();
+  let parsed: Record<string, unknown> = {};
+  if (rawBody) {
+    try {
+      parsed = JSON.parse(rawBody) as Record<string, unknown>;
+    } catch {
+      throw new Error(`Сервер вернул не-JSON ответ (${resp.status}).`);
+    }
+  }
+
+  if (!resp.ok) {
+    throw new Error(asString(parsed.error) || `Ошибка Prompt Lab (${resp.status})`);
+  }
+
+  return parsed as T;
+}
+
+export async function previewCareerReadingPromptLab(params: {
+  companyId: string;
+  candidateId: string;
+  layerKey: string;
+  reasoningEffort?: "low" | "medium";
+  verbosity?: "low" | "medium" | "high";
+  maxOutputTokens?: 8000 | 12000 | 16000;
+  includeMethodologyContext?: boolean;
+}): Promise<CareerReadingPromptLabPreviewResponse> {
+  const parsed = await postCareerReadingPromptLab<Record<string, unknown>>(
+    "hr-career-reading-prompt-preview",
+    params,
+  );
+  if (parsed.ok !== true) {
+    throw new Error(asString(parsed.error) || "Preview Prompt Lab failed.");
+  }
+  return parsed as unknown as CareerReadingPromptLabPreviewResponse;
+}
+
+export async function testCareerReadingPromptLab(params: {
+  companyId: string;
+  candidateId: string;
+  layerKey: string;
+  reasoningEffort?: "low" | "medium";
+  verbosity?: "low" | "medium" | "high";
+  maxOutputTokens?: 8000 | 12000 | 16000;
+  includeMethodologyContext?: boolean;
+}): Promise<CareerReadingPromptLabTestResponse> {
+  const parsed = await postCareerReadingPromptLab<Record<string, unknown>>(
+    "hr-career-reading-prompt-test",
+    params,
+  );
+  if (parsed.ok !== true) {
+    throw new Error(asString(parsed.error) || "Test Prompt Lab failed.");
+  }
+  return parsed as unknown as CareerReadingPromptLabTestResponse;
+}
+
 export { isSupabaseConfigured };

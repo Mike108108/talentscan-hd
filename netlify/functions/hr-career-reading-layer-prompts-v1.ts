@@ -174,12 +174,35 @@ ${JSON.stringify(args.normalized_chart_data ?? null)}`;
  * Builds system/user prompts and JSON schema name for one career reading layer.
  * Not wired to production — skeleton for Stage 4.10-B+.
  */
+function appendMethodologyBlocks(
+  system: string,
+  args: {
+    include_methodology_context?: boolean;
+    methodology_prompt_block?: string;
+    writing_standard_prompt_block?: string;
+  },
+): string {
+  if (!args.include_methodology_context) return system;
+  const blocks: string[] = [];
+  if (args.methodology_prompt_block?.trim()) {
+    blocks.push(args.methodology_prompt_block.trim());
+  }
+  if (args.writing_standard_prompt_block?.trim()) {
+    blocks.push(args.writing_standard_prompt_block.trim());
+  }
+  if (blocks.length === 0) return system;
+  return `${system}\n\n---\nMethodology context (Prompt Lab / QA only):\n\n${blocks.join("\n\n")}`;
+}
+
 export function buildCareerReadingLayerPromptV1(args: {
   layer_key: CareerReadingLayerKeyV1;
   candidate_snapshot: unknown;
   normalized_chart_data: unknown;
   layer_input: unknown;
   language?: "ru";
+  include_methodology_context?: boolean;
+  methodology_prompt_block?: string;
+  writing_standard_prompt_block?: string;
 }): {
   system: string;
   user: string;
@@ -188,14 +211,17 @@ export function buildCareerReadingLayerPromptV1(args: {
   const language = args.language ?? "ru";
   const catalog = CAREER_READING_LAYER_CATALOG_V1[args.layer_key];
 
-  const system = `${COMMON_SYSTEM_RULES}
+  const system = appendMethodologyBlocks(
+    `${COMMON_SYSTEM_RULES}
 
 Текущий слой: ${args.layer_key}
 HR title: ${catalog.title}
 ui_priority: ${catalog.ui_priority}
 Ожидаемые source_fields: ${catalog.source_fields.join(", ")}
 
-${LAYER_SPECIFIC_RULES[args.layer_key]}`;
+${LAYER_SPECIFIC_RULES[args.layer_key]}`,
+    args,
+  );
 
   const user = buildLayerUserPrompt({
     layer_key: args.layer_key,

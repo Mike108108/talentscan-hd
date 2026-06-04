@@ -75,6 +75,7 @@ import {
   isCareerReadingTalentMapV3,
 } from "../../lib/hr/talentMapContentV2";
 import type { OnboardingPhase } from "../../lib/hr/talentMapUiHelpers";
+import { CareerReadingPromptLabPanel } from "./CareerReadingPromptLabPanel";
 import "../../hr.css";
 
 type SectionId =
@@ -1349,6 +1350,13 @@ function TalentMapWorkspace({
           <p className="hr-tm-banner hr-tm-banner--error" role="alert">
             {exportError}
           </p>
+        ) : null}
+
+        {!isFixturePreview ? (
+          <CareerReadingPromptLabPanel
+            companyId={companyId}
+            candidateId={candidateId}
+          />
         ) : null}
 
         <h2 className="hr-tm-title">Карта талантов</h2>

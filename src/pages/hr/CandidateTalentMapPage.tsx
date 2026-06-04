@@ -65,6 +65,10 @@ import {
   type CareerReadingCatalogItem,
 } from "./careerReadingLayerPanelContent";
 import {
+  canExportCareerReadingHtmlReport,
+  downloadCareerReadingHtmlReport,
+} from "../../lib/hr/careerReadingReportExport";
+import {
   CAREER_READING_LAYER_CATALOG_V1,
   CAREER_READING_LAYER_KEYS_V1,
   hasCareerReadingLayers,
@@ -579,10 +583,33 @@ function TalentMapWorkspace({
 }: WorkspaceProps) {
   const isCoreLayersSpike = isCoreLayersSpikeReport(aiReport);
   const isCareerReading = isCareerReadingReport(aiReport, rawAiContent);
+  const canExportHtmlReport = useMemo(
+    () =>
+      canExportCareerReadingHtmlReport(rawAiContent) && aiReport.report_status === "ready",
+    [rawAiContent, aiReport.report_status],
+  );
+  const [exportError, setExportError] = useState<string | null>(null);
   const [section, setSection] = useState<SectionId>(
     isCoreLayersSpike || isCareerReading ? "layers" : "overview",
   );
   const [detail, setDetail] = useState<DetailPanelState | null>(null);
+
+  const onDownloadHtmlReport = () => {
+    setExportError(null);
+    try {
+      downloadCareerReadingHtmlReport({
+        content: rawAiContent,
+        candidateName: candidate.name,
+        generatedAt: aiReport.updated_at ?? aiReport.created_at,
+        reportStatus: aiReport.report_status,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Не удалось сформировать HTML-отчёт.";
+      console.error("[TalentMapWorkspace] career reading HTML export failed", err);
+      setExportError(message);
+    }
+  };
 
   useEffect(() => {
     if (isCoreLayersSpike || isCareerReading) {
@@ -1193,20 +1220,45 @@ function TalentMapWorkspace({
           <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
             ← К кандидату
           </Link>
-          {!isFixturePreview ? (
-            <button
-              type="button"
-              className="hr-btn hr-btn--ghost"
-              disabled={generating}
-              onClick={onRegenerate}
-            >
-              {generating
-                ? "Генерируем послойную карту…"
-                : isCoreLayersSpike
-                  ? "Перегенерировать послойную карту"
-                  : "Создать послойную карту v2"}
-            </button>
-          ) : null}
+          <div className="hr-tm-header-actions">
+            {canExportHtmlReport ? (
+              <button
+                type="button"
+                className="hr-btn hr-btn--ghost"
+                disabled={generating}
+                onClick={onDownloadHtmlReport}
+              >
+                Скачать отчёт
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="hr-btn hr-btn--ghost"
+                disabled
+                title={
+                  isCareerReading
+                    ? "Экспорт доступен для готовой 8-слойной карты (career reading v3)"
+                    : "Экспорт доступен для новой 8-слойной карты"
+                }
+              >
+                Скачать отчёт — скоро
+              </button>
+            )}
+            {!isFixturePreview ? (
+              <button
+                type="button"
+                className="hr-btn hr-btn--ghost"
+                disabled={generating}
+                onClick={onRegenerate}
+              >
+                {generating
+                  ? "Генерируем послойную карту…"
+                  : isCoreLayersSpike
+                    ? "Перегенерировать послойную карту"
+                    : "Создать послойную карту v2"}
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {isFixturePreview ? (
@@ -1218,7 +1270,7 @@ function TalentMapWorkspace({
             <p className="hr-tm-spike-banner-title">Career Reading Layers v1 · 8 HD слоёв</p>
             <p className="hr-tm-spike-banner-text">
               Основная модель карты кандидата: 8 career reading layers из normalized_chart_data.
-              Synthesis, role-fit и export в этом релизе не генерируются.
+              Synthesis и role-fit в этом релизе не генерируются; готовый отчёт можно скачать как HTML.
             </p>
             <div className="hr-tm-spike-meta-grid">
               <span>
@@ -1293,6 +1345,11 @@ function TalentMapWorkspace({
             </button>
           </p>
         )}
+        {exportError ? (
+          <p className="hr-tm-banner hr-tm-banner--error" role="alert">
+            {exportError}
+          </p>
+        ) : null}
 
         <h2 className="hr-tm-title">Карта талантов</h2>
         <p className="hr-tm-subtitle">

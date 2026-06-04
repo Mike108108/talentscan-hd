@@ -737,6 +737,14 @@
   margin-bottom: 8px;
 }
 
+.hr-tm-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
 .hr-tm-title-line {
   display: flex;
   align-items: center;

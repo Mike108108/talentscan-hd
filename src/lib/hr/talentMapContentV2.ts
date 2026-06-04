@@ -3,6 +3,7 @@ import type {
   HrTalentMapLayerReportV2,
   HrTalentMapSynthesisBlocksV2,
 } from "./types";
+import type { CareerReadingLayerReportV1 } from "./careerReadingLayersV1";
 
 /** Layer architecture v0.2 catalogs/mappings (runtime 19 → product 16 + system → synthesis 6). */
 export {
@@ -34,7 +35,7 @@ export type {
   ProductLayerStatusV02,
 } from "./productLayerAdapter";
 
-/** HD Career Reading Layers v1 contract (Stage 4.10-A — not in production generation). */
+/** HD Career Reading Layers v1 contract (Stage 4.10 — production generation). */
 export {
   CAREER_READING_LAYERS_VERSION_V1,
   CAREER_READING_LAYER_KEYS_V1,
@@ -81,6 +82,10 @@ function asString(value: unknown): string {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return isPlainObject(value) ? value : {};
 }
 
 function hasLayerReportsArray(root: Record<string, unknown>): boolean {
@@ -179,8 +184,45 @@ export function parseTalentMapV2(root: unknown): HrPersonTalentMapV2 | null {
   return parsed;
 }
 
+/** Whether content_json is v3 career reading with 8 layers ready for workspace. */
+export function isCareerReadingTalentMapV3(root: unknown): boolean {
+  if (!isPlainObject(root)) return false;
+  const schemaVersion = asString(root.schema_version);
+  const generationMode = asString(asRecord(root.generation_meta).generation_mode);
+  const layers = root.career_reading_layers;
+  if (Array.isArray(layers) && layers.length > 0) return true;
+  if (schemaVersion === "hr_person_talent_map_v3") return true;
+  if (generationMode === "career_reading_layers_v1") return true;
+  return false;
+}
+
+export function getCareerReadingLayers(root: unknown): CareerReadingLayerReportV1[] {
+  const parsed = parseContentRoot(root);
+  if (!parsed || !Array.isArray(parsed.career_reading_layers)) return [];
+  return parsed.career_reading_layers.filter(
+    (item): item is CareerReadingLayerReportV1 =>
+      isPlainObject(item) && asString(item.layer_key).length > 0,
+  );
+}
+
+export function isCareerReadingTalentMapV3Ready(root: unknown): boolean {
+  const layers = getCareerReadingLayers(root);
+  return layers.length >= 8;
+}
+
+/** Parsed v3 root if content_json matches career reading contract. */
+export function parseCareerReadingTalentMapV3(root: unknown): Record<string, unknown> | null {
+  const parsed = parseContentRoot(root);
+  if (!parsed || !isCareerReadingTalentMapV3(parsed)) return null;
+  return parsed;
+}
+
 /** Whether content_json is v2-shaped and has a layer_reports array (may be empty). */
 export function hasTalentMapV2LayerReports(root: unknown): boolean {
   const parsed = parseTalentMapV2(root);
   return parsed != null && Array.isArray(parsed.layer_reports);
+}
+
+export function hasCareerReadingLayers(root: unknown): boolean {
+  return getCareerReadingLayers(root).length > 0;
 }

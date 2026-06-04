@@ -57,6 +57,23 @@ import {
   type ReportContentCtx,
   VerificationPlanBlock,
 } from "./talentMapPanelContent";
+import {
+  buildCareerReadingLayerCatalog,
+  CareerReadingLayerDetailPanel,
+  CareerReadingLayerList,
+  getCareerReadingCatalogItemByKey,
+  type CareerReadingCatalogItem,
+} from "./careerReadingLayerPanelContent";
+import {
+  canExportCareerReadingHtmlReport,
+  downloadCareerReadingHtmlReport,
+} from "../../lib/hr/careerReadingReportExport";
+import {
+  CAREER_READING_LAYER_CATALOG_V1,
+  CAREER_READING_LAYER_KEYS_V1,
+  hasCareerReadingLayers,
+  isCareerReadingTalentMapV3,
+} from "../../lib/hr/talentMapContentV2";
 import type { OnboardingPhase } from "../../lib/hr/talentMapUiHelpers";
 import "../../hr.css";
 
@@ -89,27 +106,11 @@ const NAV_SECTIONS_V12: Array<{ id: SectionId; label: string; hint?: string }> =
 const CORE_LAYER_POLL_INTERVAL_MS = 2500;
 const CORE_LAYER_POLL_MAX_MS = 8 * 60 * 1000;
 
-const CORE_LAYER_UI_ORDER: Array<{ key: string; title: string }> = [
-  { key: "work_format", title: "Рабочий формат" },
-  { key: "task_entry", title: "Вход в задачи" },
-  { key: "decision_style", title: "Принятие решений" },
-  { key: "work_signature", title: "Рабочий почерк" },
-  { key: "inner_coherence", title: "Внутренняя связность" },
-  { key: "stable_zones", title: "Устойчивые зоны" },
-  { key: "sensitive_zones", title: "Чувствительные зоны" },
-  { key: "talent_links", title: "Связки талантов" },
-  { key: "point_talents", title: "Точечные таланты" },
-  { key: "amplified_themes", title: "Усиленные темы" },
-  { key: "conscious_axis", title: "Сознательная рабочая ось" },
-  { key: "background_axis", title: "Фоновая рабочая ось" },
-  { key: "communication_style", title: "Коммуникация и объяснение" },
-  { key: "values_and_culture", title: "Ценности и культура" },
-  { key: "growth_tension", title: "Напряжение и рост" },
-  { key: "responsibility_and_rules", title: "Ответственность и правила" },
-  { key: "work_environment_and_recovery", title: "Среда и восстановление" },
-  { key: "motivation_and_focus", title: "Мотивация и фокус" },
-  { key: "team_contribution_type", title: "Тип вклада в команду" },
-];
+const CORE_LAYER_UI_ORDER: Array<{ key: string; title: string }> =
+  CAREER_READING_LAYER_KEYS_V1.map((key) => ({
+    key,
+    title: CAREER_READING_LAYER_CATALOG_V1[key].title,
+  }));
 
 const CORE_LAYER_STATUS_LABEL: Record<string, string> = {
   pending: "ожидание",
@@ -188,7 +189,15 @@ function snapshotReport(report: HrReport | null): ReportSnapshot | null {
 }
 
 function isCoreLayersSpikeReport(report: HrReport | null | undefined): boolean {
-  return report?.report_type === HR_CORE_LAYERS_SPIKE_REPORT_TYPE;
+  if (!report) return false;
+  if (report.report_type === HR_CORE_LAYERS_SPIKE_REPORT_TYPE) return true;
+  return hasCareerReadingLayers(report.content_json);
+}
+
+function isCareerReadingReport(report: HrReport | null | undefined, rawContent?: unknown): boolean {
+  if (!report) return false;
+  const root = rawContent ?? report.content_json;
+  return isCareerReadingTalentMapV3(root) || hasCareerReadingLayers(root);
 }
 
 function isReportReadyForDisplay(report: HrReport | null | undefined): boolean {
@@ -572,17 +581,41 @@ function TalentMapWorkspace({
   genError,
   isFixturePreview = false,
 }: WorkspaceProps) {
-  const isCoreLayersSpike = aiReport.report_type === HR_CORE_LAYERS_SPIKE_REPORT_TYPE;
+  const isCoreLayersSpike = isCoreLayersSpikeReport(aiReport);
+  const isCareerReading = isCareerReadingReport(aiReport, rawAiContent);
+  const canExportHtmlReport = useMemo(
+    () =>
+      canExportCareerReadingHtmlReport(rawAiContent) && aiReport.report_status === "ready",
+    [rawAiContent, aiReport.report_status],
+  );
+  const [exportError, setExportError] = useState<string | null>(null);
   const [section, setSection] = useState<SectionId>(
-    isCoreLayersSpike ? "layers" : "overview",
+    isCoreLayersSpike || isCareerReading ? "layers" : "overview",
   );
   const [detail, setDetail] = useState<DetailPanelState | null>(null);
 
+  const onDownloadHtmlReport = () => {
+    setExportError(null);
+    try {
+      downloadCareerReadingHtmlReport({
+        content: rawAiContent,
+        candidateName: candidate.name,
+        generatedAt: aiReport.updated_at ?? aiReport.created_at,
+        reportStatus: aiReport.report_status,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Не удалось сформировать HTML-отчёт.";
+      console.error("[TalentMapWorkspace] career reading HTML export failed", err);
+      setExportError(message);
+    }
+  };
+
   useEffect(() => {
-    if (isCoreLayersSpike) {
+    if (isCoreLayersSpike || isCareerReading) {
       setSection("layers");
     }
-  }, [aiReport.id, isCoreLayersSpike]);
+  }, [aiReport.id, isCoreLayersSpike, isCareerReading]);
 
   useEffect(() => {
     if (generating) setDetail(null);
@@ -639,6 +672,11 @@ function TalentMapWorkspace({
   const mergedCatalog = useMemo(
     () => buildMergedLayerCatalog(lists.layers ?? [], lists.evidenceMap ?? [], rawAiContent),
     [lists.layers, lists.evidenceMap, rawAiContent],
+  );
+
+  const careerReadingCatalog = useMemo(
+    () => (isCareerReading ? buildCareerReadingLayerCatalog(rawAiContent) : []),
+    [isCareerReading, rawAiContent],
   );
 
   const hero = aiContent.hero;
@@ -846,7 +884,12 @@ function TalentMapWorkspace({
           </div>
         );
       case "layers":
-        return (
+        return isCareerReading ? (
+          <CareerReadingLayerList
+            catalog={careerReadingCatalog}
+            onSelectLayer={(layerKey) => setDetail({ kind: "catalog_layer", layerKey })}
+          />
+        ) : (
           <LayerCatalogList
             catalog={mergedCatalog}
             onSelectLayer={(layerKey) => setDetail({ kind: "catalog_layer", layerKey })}
@@ -1158,7 +1201,9 @@ function TalentMapWorkspace({
 
   const catalogLayerDetail =
     detail?.kind === "catalog_layer"
-      ? getCatalogLayerByKey(mergedCatalog, detail.layerKey)
+      ? isCareerReading
+        ? getCareerReadingCatalogItemByKey(careerReadingCatalog, detail.layerKey)
+        : getCatalogLayerByKey(mergedCatalog, detail.layerKey)
       : null;
 
   const sidePanelTitle =
@@ -1175,27 +1220,76 @@ function TalentMapWorkspace({
           <Link to={`/hr/company/${companyId}/candidates/${candidateId}`} className="hr-tm-back">
             ← К кандидату
           </Link>
-          {!isFixturePreview ? (
-            <button
-              type="button"
-              className="hr-btn hr-btn--ghost"
-              disabled={generating}
-              onClick={onRegenerate}
-            >
-              {generating
-                ? "Генерируем послойную карту…"
-                : isCoreLayersSpike
-                  ? "Перегенерировать послойную карту"
-                  : "Создать послойную карту v2"}
-            </button>
-          ) : null}
+          <div className="hr-tm-header-actions">
+            {canExportHtmlReport ? (
+              <button
+                type="button"
+                className="hr-btn hr-btn--ghost"
+                disabled={generating}
+                onClick={onDownloadHtmlReport}
+              >
+                Скачать отчёт
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="hr-btn hr-btn--ghost"
+                disabled
+                title={
+                  isCareerReading
+                    ? "Экспорт доступен для готовой 8-слойной карты (career reading v3)"
+                    : "Экспорт доступен для новой 8-слойной карты"
+                }
+              >
+                Скачать отчёт — скоро
+              </button>
+            )}
+            {!isFixturePreview ? (
+              <button
+                type="button"
+                className="hr-btn hr-btn--ghost"
+                disabled={generating}
+                onClick={onRegenerate}
+              >
+                {generating
+                  ? "Генерируем послойную карту…"
+                  : isCoreLayersSpike
+                    ? "Перегенерировать послойную карту"
+                    : "Создать послойную карту v2"}
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {isFixturePreview ? (
           <p className="hr-tm-dev-fixture-pill">DEV: показан content_json v2 fixture</p>
         ) : null}
 
-        {isCoreLayersSpike ? (
+        {isCareerReading ? (
+          <div className="hr-tm-spike-banner" role="status">
+            <p className="hr-tm-spike-banner-title">Career Reading Layers v1 · 8 HD слоёв</p>
+            <p className="hr-tm-spike-banner-text">
+              Основная модель карты кандидата: 8 career reading layers из normalized_chart_data.
+              Synthesis и role-fit в этом релизе не генерируются; готовый отчёт можно скачать как HTML.
+            </p>
+            <div className="hr-tm-spike-meta-grid">
+              <span>
+                mode:{" "}
+                {getText(
+                  (generationMeta.generation_mode as string | undefined) ??
+                    "career_reading_layers_v1",
+                )}
+              </span>
+              <span>
+                model: {getText(generationMeta.selected_model ?? aiReport.model) || "—"}
+              </span>
+              <span>prompt: {aiReport.prompt_version || "—"}</span>
+              <span>
+                готово: {careerReadingCatalog.length}/{CORE_LAYER_UI_ORDER.length}
+              </span>
+            </div>
+          </div>
+        ) : isCoreLayersSpike ? (
           <div className="hr-tm-spike-banner" role="status">
             <p className="hr-tm-spike-banner-title">
               {hasSynthesisBlocks
@@ -1251,6 +1345,11 @@ function TalentMapWorkspace({
             </button>
           </p>
         )}
+        {exportError ? (
+          <p className="hr-tm-banner hr-tm-banner--error" role="alert">
+            {exportError}
+          </p>
+        ) : null}
 
         <h2 className="hr-tm-title">Карта талантов</h2>
         <p className="hr-tm-subtitle">
@@ -1353,15 +1452,29 @@ function TalentMapWorkspace({
         title={sidePanelTitle}
         description={
           detail?.kind === "catalog_layer"
-            ? catalogLayerDetail
-              ? LAYER_GROUP_LABELS[catalogLayerDetail.group]
-              : undefined
+            ? isCareerReading
+              ? "Career Reading Layer"
+              : catalogLayerDetail && "group" in catalogLayerDetail
+                ? LAYER_GROUP_LABELS[catalogLayerDetail.group]
+                : undefined
             : "Детали для проверки на интервью"
         }
       >
         {detail?.kind === "catalog_layer" && catalogLayerDetail ? (
           <SectionErrorBoundary title="Слой карты">
-            <CatalogLayerDetailPanel item={catalogLayerDetail} />
+            {isCareerReading ? (
+              <CareerReadingLayerDetailPanel
+                item={catalogLayerDetail as CareerReadingCatalogItem}
+              />
+            ) : (
+              <CatalogLayerDetailPanel
+                item={
+                  catalogLayerDetail as Parameters<
+                    typeof CatalogLayerDetailPanel
+                  >[0]["item"]
+                }
+              />
+            )}
           </SectionErrorBoundary>
         ) : detail ? (
           <SectionErrorBoundary title="Детали">
@@ -2112,13 +2225,13 @@ function EmptyReportState({
       {generating ? (
         <div className="hr-card hr-tm-empty-card">
           <p className="hr-tm-empty-title">Генерируем послойную карту…</p>
-          <p className="hr-muted">Собираем 19 AI-слоёв кандидата. Обычно это занимает несколько минут.</p>
+          <p className="hr-muted">Собираем 8 Career Reading Layers. Обычно это занимает несколько минут.</p>
         </div>
       ) : (
         <div className="hr-card hr-tm-empty-card">
           <p className="hr-tm-empty-title">Разбор ещё не создан</p>
           <p className="hr-muted" style={{ lineHeight: 1.55, maxWidth: 520 }}>
-            Сгенерируйте послойную карту кандидата, чтобы увидеть 19 рабочих AI-слоёв: базовые
+            Сгенерируйте карту кандидата, чтобы увидеть 8 Career Reading Layers: рабочий формат,
             source-слои, merged product-слои и 7 продуктовых narrative-слоёв v0.2.
           </p>
           {error ? (

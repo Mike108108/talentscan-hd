@@ -2134,8 +2134,6 @@ function hasDisallowedHtml(text: string): boolean {
   return /<[a-z!/]/i.test(stripped);
 }
 
-type BaseTextField = { path: string; text: string };
-
 const FIT_HIRE_FORBIDDEN_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
   { label: "fit_score", pattern: /\bfit_score\b/i },
   { label: "candidate fit score", pattern: /\bcandidate fit score\b/i },
@@ -2223,6 +2221,21 @@ const BASE_FORBIDDEN_HD_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
   { label: "incarnation cross", pattern: /\bincarnation cross\b/giu },
   { label: "Splenic", pattern: /\bsplenic\b/giu },
   { label: "Wait for Invitation", pattern: /\bwait for invitation\b/giu },
+  { label: "Personality", pattern: /\bpersonality\b/giu },
+  { label: "Личность", pattern: /\bличност[ьи]\b/giu },
+  { label: "Design", pattern: /\bdesign\b/giu },
+  { label: "Type", pattern: /\btype\b/giu },
+  { label: "тип", pattern: /\bтип\b/giu },
+  { label: "Sun", pattern: /\bsun\b/giu },
+  { label: "Солнце", pattern: /\bсолнце\b/giu },
+  { label: "Earth", pattern: /\bearth\b/giu },
+  { label: "Земля", pattern: /\bземл[яи]\b/giu },
+  { label: "Signature", pattern: /\bsignature\b/giu },
+  { label: "подпись", pattern: /\bподпис[ьи]\b/giu },
+  { label: "Not-Self", pattern: /\bnot[-\s]?self\b/giu },
+  { label: "тема не-я", pattern: /\bтема\s+не[-\s]?я\b/giu },
+  { label: "ворота (gate)", pattern: /\bворот[аеу]\b/giu },
+  { label: "канал (channel)", pattern: /\bканал(?:ы|а|ов)?\b/giu },
   { label: "внутренние аббревиатуры", pattern: /\b(чс|бэ|бл|чи)\b/giu },
 ];
 
@@ -2236,6 +2249,8 @@ function makeSnippet(text: string, matchIndex: number, maxLen = 180): string {
   const suffix = end < text.length ? "…" : "";
   return `${prefix}${text.slice(start, end)}${suffix}`;
 }
+
+export type BaseTextField = { path: string; text: string };
 
 function collectLayerBaseTextFields(layer: Record<string, unknown>): BaseTextField[] {
   const base = asRecord(layer.base);
@@ -2348,10 +2363,7 @@ export function scanLayerMatchingSummaryFitHireLanguage(
   );
 }
 
-export function scanLayerBaseForbiddenHdTerms(
-  layer: Record<string, unknown>,
-): OffendingMatch[] {
-  const fields = collectLayerBaseTextFields(layer);
+export function scanForbiddenHdTermsInTextFields(fields: BaseTextField[]): OffendingMatch[] {
   const matches = scanPatternInBaseFields(fields, BASE_FORBIDDEN_HD_PATTERNS);
 
   for (const field of fields) {
@@ -2365,6 +2377,12 @@ export function scanLayerBaseForbiddenHdTerms(
   }
 
   return matches;
+}
+
+export function scanLayerBaseForbiddenHdTerms(
+  layer: Record<string, unknown>,
+): OffendingMatch[] {
+  return scanForbiddenHdTermsInTextFields(collectLayerBaseTextFields(layer));
 }
 
 export function extractResponsesOutputText(data: Record<string, unknown>): string {

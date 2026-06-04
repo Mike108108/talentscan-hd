@@ -17,6 +17,7 @@ import {
   isDisplayableTalentMapReport,
   isReadyTalentMapReport,
 } from "./normalizeAiReport";
+import { hasCareerReadingLayers } from "./talentMapContentV2";
 
 export const HR_CORE_LAYERS_SPIKE_REPORT_TYPE =
   "hr_person_talent_map_core_layers_spike" as const;
@@ -96,7 +97,7 @@ export type CoreLayersCancelResponse = {
   cancellation: CoreLayersCancellationMeta | null;
 };
 
-export const DEFAULT_RUNTIME_CORE_LAYER_COUNT = 19;
+export const DEFAULT_RUNTIME_CORE_LAYER_COUNT = 8;
 
 export function isCoreLayersGenerationCancelled(
   status: Pick<
@@ -120,6 +121,9 @@ export function isCoreLayersGenerationCancelled(
 
 function isReadyReportForType(report: HrReport, reportType: HrReportType): boolean {
   if (reportType === HR_CORE_LAYERS_SPIKE_REPORT_TYPE) {
+    return isDisplayableTalentMapReport(report);
+  }
+  if (reportType === "hr_person_talent_map" && hasCareerReadingLayers(report.content_json)) {
     return isDisplayableTalentMapReport(report);
   }
   return isReadyTalentMapReport(report);
@@ -1031,6 +1035,15 @@ export async function fetchBestReadyCoreLayersSpikeReport(
   companyId: string,
   candidateId: string,
 ): Promise<HrReportFetchResult> {
+  const careerResult = await fetchBestReadyCandidateReport(
+    companyId,
+    candidateId,
+    "hr_person_talent_map",
+  );
+  if (careerResult.report && hasCareerReadingLayers(careerResult.report.content_json)) {
+    return careerResult;
+  }
+
   return fetchBestReadyCandidateReport(
     companyId,
     candidateId,
@@ -1042,7 +1055,34 @@ export async function fetchLatestCoreLayersSpikeReport(
   companyId: string,
   candidateId: string,
 ): Promise<HrReportFetchResult> {
-  return fetchLatestHrReport(companyId, candidateId, HR_CORE_LAYERS_SPIKE_REPORT_TYPE);
+  const [careerLatest, spikeLatest] = await Promise.all([
+    fetchLatestHrReport(companyId, candidateId, "hr_person_talent_map"),
+    fetchLatestHrReport(companyId, candidateId, HR_CORE_LAYERS_SPIKE_REPORT_TYPE),
+  ]);
+
+  const candidates = [careerLatest.report, spikeLatest.report].filter(Boolean) as HrReport[];
+  if (candidates.length === 0) {
+    return { report: null, error: careerLatest.error ?? spikeLatest.error ?? null };
+  }
+
+  const sorted = candidates.sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+  const newest = sorted[0];
+  if (
+    newest.report_type === "hr_person_talent_map" &&
+    !hasCareerReadingLayers(newest.content_json) &&
+    sorted.length > 1
+  ) {
+    const careerOrSpike = sorted.find(
+      (row) =>
+        hasCareerReadingLayers(row.content_json) ||
+        row.report_type === HR_CORE_LAYERS_SPIKE_REPORT_TYPE,
+    );
+    return { report: careerOrSpike ?? newest, error: null };
+  }
+
+  return { report: newest, error: null };
 }
 
 export { isSupabaseConfigured };

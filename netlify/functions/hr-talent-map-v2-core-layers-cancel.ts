@@ -5,7 +5,7 @@
 
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
 import {
-  SPIKE_REPORT_TYPE,
+  REPORT_TYPE,
   asRecord,
   asString,
   createSupabaseClient,
@@ -15,7 +15,13 @@ import {
   requireUuid,
   resolveSupabaseConfig,
   SpikeConfigError,
-} from "./hr-talent-map-v2-core-layers-shared";
+} from "./hr-talent-map-v2-career-reading-layers-shared";
+
+const LEGACY_SPIKE_REPORT_TYPE = "hr_person_talent_map_core_layers_spike";
+
+function isSupportedReportType(reportType: string): boolean {
+  return reportType === REPORT_TYPE || reportType === LEGACY_SPIKE_REPORT_TYPE;
+}
 
 export const handler: Handler = async (
   event: HandlerEvent,
@@ -83,7 +89,7 @@ export const handler: Handler = async (
       return jsonResponse(404, { error: "Отчёт не найден.", source: "report" });
     }
 
-    if (report.report_type !== SPIKE_REPORT_TYPE) {
+    if (!isSupportedReportType(asString(report.report_type))) {
       return jsonResponse(404, {
         error: "Отчёт не является послойной картой кандидата v2.",
         source: "report_type",

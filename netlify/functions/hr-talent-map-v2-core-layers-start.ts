@@ -1,33 +1,33 @@
 /**
- * Sync starter for HR Talent Map v2 core layers pipeline.
+ * Sync starter for HR Talent Map v3 Career Reading Layers pipeline.
  */
 
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
 import {
-  SPIKE_PROMPT_VERSION,
-  SPIKE_REPORT_TYPE,
+  PROMPT_VERSION,
+  REPORT_TYPE,
   SpikeConfigError,
-  buildCoreLayersCompactInput,
-  buildInputHashPayload,
+  asString,
+  buildCareerReadingCompactInput,
+  buildCareerReadingInputHashPayload,
   buildMinimalDataQuality,
+  buildModelPolicySnapshot,
   computeInputHash,
   createSupabaseClient,
   extractBearerToken,
-  findExistingSpikeReport,
+  findExistingCareerReadingReport,
   getFunctionOrigin,
+  initCareerReadingLayerGenerationState,
   jsonResponse,
   loadActiveCandidateChart,
   logSpikeStage,
   parseCompanyCandidateIds,
-  buildModelPolicySnapshot,
-  initLayerGenerationState,
-  resolveCoreLayersModelPolicy,
+  resolveCareerReadingLayersModelPolicy,
   resolveSupabaseConfig,
-  saveLayerGenerationProgress,
+  saveCareerReadingLayerGenerationProgress,
   saveReportError,
   serializeGenerationError,
-  asString,
-} from "./hr-talent-map-v2-core-layers-shared";
+} from "./hr-talent-map-v2-career-reading-layers-shared";
 
 export const handler: Handler = async (
   event: HandlerEvent,
@@ -44,7 +44,7 @@ export const handler: Handler = async (
 
     let modelPolicy;
     try {
-      modelPolicy = resolveCoreLayersModelPolicy();
+      modelPolicy = resolveCareerReadingLayersModelPolicy();
     } catch (err) {
       if (err instanceof SpikeConfigError) {
         return jsonResponse(500, { error: err.message, source: "config" });
@@ -64,7 +64,8 @@ export const handler: Handler = async (
     try {
       ({ url: supabaseUrl, anonKey: supabaseAnonKey } = resolveSupabaseConfig());
     } catch (err) {
-      const message = err instanceof SpikeConfigError ? err.message : "Invalid Supabase configuration.";
+      const message =
+        err instanceof SpikeConfigError ? err.message : "Invalid Supabase configuration.";
       return jsonResponse(500, { error: message, source: "config" });
     }
 
@@ -96,7 +97,6 @@ export const handler: Handler = async (
 
     const db = createSupabaseClient(supabaseUrl, supabaseAnonKey, token);
 
-    logSpikeStage("start", "load_candidate", logCtx);
     const { data: company, error: companyErr } = await db
       .from("hr_companies")
       .select("id, owner_user_id, name, industry")
@@ -118,7 +118,6 @@ export const handler: Handler = async (
       return jsonResponse(404, { error: "Кандидат не найден.", source: "candidate" });
     }
 
-    logSpikeStage("start", "load_chart", logCtx);
     const { chart, error: chartLoadErr } = await loadActiveCandidateChart(
       db,
       companyId,
@@ -144,15 +143,15 @@ export const handler: Handler = async (
       });
     }
 
-    const compactInput = buildCoreLayersCompactInput({
-      layerKey: "work_format",
+    const compactInput = buildCareerReadingCompactInput({
+      layerKey: "work_mode_and_decisions",
       candidate: candidate as Record<string, unknown>,
       company: company as Record<string, unknown>,
       normalizedChart,
     });
 
     const inputHash = computeInputHash(
-      buildInputHashPayload({
+      buildCareerReadingInputHashPayload({
         companyId,
         candidateId,
         chartId: String(chart.id),
@@ -165,27 +164,25 @@ export const handler: Handler = async (
       }),
     );
 
-    logSpikeStage("start", "create_report_row", logCtx, { input_hash: inputHash });
-
     const reportPayload = {
       company_id: companyId,
       candidate_id: candidateId,
       vacancy_id: null,
-      report_type: SPIKE_REPORT_TYPE,
+      report_type: REPORT_TYPE,
       report_status: "generating",
-      title: "Core layers background spike",
+      title: "HR Talent Map — Career Reading Layers v1",
       summary: null,
       fit_score: null,
       content_json: {},
       input_snapshot: compactInput,
       input_hash: inputHash,
       model,
-      prompt_version: SPIKE_PROMPT_VERSION,
+      prompt_version: PROMPT_VERSION,
       generation_error: null,
       generated_at: null,
     };
 
-    const { data: existingRow } = await findExistingSpikeReport(
+    const { data: existingRow } = await findExistingCareerReadingReport(
       db,
       companyId,
       candidateId,
@@ -205,7 +202,7 @@ export const handler: Handler = async (
         .single();
       if (updateErr || !updated) {
         return jsonResponse(500, {
-          error: updateErr?.message ?? "Не удалось обновить spike-отчёт.",
+          error: updateErr?.message ?? "Не удалось обновить отчёт.",
           source: "database",
         });
       }
@@ -218,7 +215,7 @@ export const handler: Handler = async (
         .single();
 
       if (insertErr?.code === "23505") {
-        const { data: retryExisting } = await findExistingSpikeReport(
+        const { data: retryExisting } = await findExistingCareerReadingReport(
           db,
           companyId,
           candidateId,
@@ -236,20 +233,17 @@ export const handler: Handler = async (
             .single();
           if (updateErr || !updated) {
             return jsonResponse(500, {
-              error: updateErr?.message ?? "Не удалось обновить spike-отчёт.",
+              error: updateErr?.message ?? "Не удалось обновить отчёт.",
               source: "database",
             });
           }
           reportId = updated.id as string;
         } else {
-          return jsonResponse(500, {
-            error: insertErr.message,
-            source: "database",
-          });
+          return jsonResponse(500, { error: insertErr.message, source: "database" });
         }
       } else if (insertErr || !inserted) {
         return jsonResponse(500, {
-          error: insertErr?.message ?? "Не удалось создать spike-отчёт.",
+          error: insertErr?.message ?? "Не удалось создать отчёт.",
           source: "database",
         });
       } else {
@@ -260,16 +254,14 @@ export const handler: Handler = async (
     logCtx.reportId = reportId;
 
     const pipelineStartedAt = new Date().toISOString();
-    const initialLayerGeneration = initLayerGenerationState(
+    const initialLayerGeneration = initCareerReadingLayerGenerationState(
       pipelineStartedAt,
       modelPolicy,
     );
-    await saveLayerGenerationProgress(db, reportId, {
+    await saveCareerReadingLayerGenerationProgress(db, reportId, {
       layerGeneration: initialLayerGeneration,
-      layerReports: [],
+      careerReadingLayers: [],
     });
-
-    logSpikeStage("start", "trigger_background_worker", logCtx);
 
     const origin = getFunctionOrigin(event);
     const workerUrl = `${origin}/.netlify/functions/hr-talent-map-v2-core-layers-worker-background`;
@@ -316,7 +308,6 @@ export const handler: Handler = async (
         selected_model: model,
       });
       await saveReportError(db, reportId, triggerError);
-      logSpikeStage("start", "trigger_background_worker", logCtx, { error: message });
       return jsonResponse(502, {
         error: "Background worker trigger failed",
         report_id: reportId,
@@ -329,8 +320,8 @@ export const handler: Handler = async (
     return jsonResponse(200, {
       report_id: reportId,
       report_status: "generating",
-      report_type: SPIKE_REPORT_TYPE,
-      prompt_version: SPIKE_PROMPT_VERSION,
+      report_type: REPORT_TYPE,
+      prompt_version: PROMPT_VERSION,
       input_hash: inputHash,
       run_mode: modelPolicy.runMode,
       selected_model: modelPolicy.selectedModel,

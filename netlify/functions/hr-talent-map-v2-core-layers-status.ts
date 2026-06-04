@@ -1,36 +1,48 @@
 /**
- * QA status endpoint for HR Talent Map v2 core layers pipeline.
- * Stage 4.8-B: 19 sequential layers + live progress contract.
+ * QA status endpoint for HR Talent Map v3 Career Reading Layers pipeline.
  */
 
 import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
 import {
-  RUNTIME_CORE_LAYER_COUNT,
-  SPIKE_REPORT_TYPE,
+  CAREER_READING_LAYER_COUNT,
+  REPORT_TYPE,
   asRecord,
   asString,
   asStringArray,
-  buildLayersProgressArray,
+  buildCareerReadingLayersProgressArray,
   createSupabaseClient,
   extractBearerToken,
   extractLayerKeysByStatus,
-  extractReadyLayerKeys,
+  extractReadyCareerReadingLayerKeys,
   jsonResponse,
   logSpikeStage,
   requireUuid,
   resolveSupabaseConfig,
   SpikeConfigError,
-} from "./hr-talent-map-v2-core-layers-shared";
+} from "./hr-talent-map-v2-career-reading-layers-shared";
 
-function layerReportsHaveSection(
-  layerReports: Record<string, unknown>[],
+const LEGACY_SPIKE_REPORT_TYPE = "hr_person_talent_map_core_layers_spike";
+
+function isCareerReadingReportType(reportType: string): boolean {
+  return reportType === REPORT_TYPE || reportType === LEGACY_SPIKE_REPORT_TYPE;
+}
+
+function getCareerReadingLayers(contentJson: Record<string, unknown>): Record<string, unknown>[] {
+  if (Array.isArray(contentJson.career_reading_layers)) {
+    return contentJson.career_reading_layers as Record<string, unknown>[];
+  }
+  if (Array.isArray(contentJson.layer_reports)) {
+    return contentJson.layer_reports as Record<string, unknown>[];
+  }
+  return [];
+}
+
+function layersHaveSection(
+  layers: Record<string, unknown>[],
   section: "base" | "pro" | "evidence",
 ): boolean {
-  if (layerReports.length === 0) return false;
-  return layerReports.every((layer) => {
-    const sectionValue = asRecord(layer[section]);
-    return Object.keys(sectionValue).length > 0;
-  });
+  if (layers.length === 0) return false;
+  return layers.every((layer) => Object.keys(asRecord(layer[section])).length > 0);
 }
 
 export const handler: Handler = async (
@@ -54,14 +66,15 @@ export const handler: Handler = async (
     try {
       ({ url: supabaseUrl, anonKey: supabaseAnonKey } = resolveSupabaseConfig());
     } catch (err) {
-      const message = err instanceof SpikeConfigError ? err.message : "Invalid Supabase configuration.";
+      const message =
+        err instanceof SpikeConfigError ? err.message : "Invalid Supabase configuration.";
       return jsonResponse(500, { error: message, source: "config" });
     }
 
     const authClient = createSupabaseClient(supabaseUrl, supabaseAnonKey);
     const { data: authData, error: authErr } = await authClient.auth.getUser(token);
     if (authErr || !authData.user) {
-      return jsonResponse(401, { error: "Требуется вход.", source: "auth" });
+      return jsonResponse(401, { error: "Tребуется вход.", source: "auth" });
     }
 
     let reportIdRaw = "";
@@ -102,9 +115,9 @@ export const handler: Handler = async (
       return jsonResponse(404, { error: "Отчёт не найден.", source: "report" });
     }
 
-    if (report.report_type !== SPIKE_REPORT_TYPE) {
+    if (!isCareerReadingReportType(asString(report.report_type))) {
       return jsonResponse(404, {
-        error: "Отчёт не является послойной картой кандидата v2.",
+        error: "Отчёт не является послойной картой кандидата.",
         source: "report_type",
       });
     }
@@ -113,88 +126,16 @@ export const handler: Handler = async (
     const generationMeta = asRecord(contentJson.generation_meta);
     const layerGeneration = asRecord(generationMeta.layer_generation);
     const hasLayerGeneration = Object.keys(layerGeneration).length > 0;
-    const layerReports = Array.isArray(contentJson.layer_reports)
-      ? (contentJson.layer_reports as Record<string, unknown>[])
-      : [];
-
-    const runMode =
-      asString(generationMeta.run_mode) ||
-      asString(layerGeneration.run_mode) ||
-      null;
-    const selectedModel =
-      asString(generationMeta.selected_model) ||
-      asString(layerGeneration.selected_model) ||
-      asString(report.model) ||
-      null;
-    const modelPolicyRaw = asRecord(generationMeta.model_policy);
-    const layerModelPolicyRaw = asRecord(layerGeneration.model_policy);
-    const modelPolicy =
-      Object.keys(modelPolicyRaw).length > 0
-        ? modelPolicyRaw
-        : Object.keys(layerModelPolicyRaw).length > 0
-          ? layerModelPolicyRaw
-          : null;
-
-    const maxOutputTokens =
-      typeof generationMeta.max_output_tokens === "number"
-        ? generationMeta.max_output_tokens
-        : typeof layerGeneration.max_output_tokens === "number"
-          ? layerGeneration.max_output_tokens
-          : null;
-    const outputTokenPolicyRaw =
-      Object.keys(asRecord(generationMeta.output_token_policy)).length > 0
-        ? asRecord(generationMeta.output_token_policy)
-        : asRecord(layerGeneration.output_token_policy);
-    const outputTokenPolicy =
-      Object.keys(outputTokenPolicyRaw).length > 0 ? outputTokenPolicyRaw : null;
-
-    const tuningPolicyRaw = asRecord(generationMeta.tuning_policy);
-    const requestTuningRaw = asRecord(generationMeta.request_tuning);
-    const layerTuningPolicyRaw = asRecord(layerGeneration.tuning_policy);
-    const layerRequestTuningRaw = asRecord(layerGeneration.request_tuning);
-    const tuningPolicy =
-      Object.keys(tuningPolicyRaw).length > 0
-        ? tuningPolicyRaw
-        : Object.keys(layerTuningPolicyRaw).length > 0
-          ? layerTuningPolicyRaw
-          : null;
-    const requestTuning =
-      Object.keys(requestTuningRaw).length > 0
-        ? requestTuningRaw
-        : Object.keys(layerRequestTuningRaw).length > 0
-          ? layerRequestTuningRaw
-          : null;
+    const careerLayers = getCareerReadingLayers(contentJson);
 
     const layerSummary = asRecord(layerGeneration.summary);
-    const usageSummary =
-      layerSummary.usage_summary ??
-      generationMeta.usage_summary ??
-      null;
-    const costSummary =
-      usageSummary &&
-      typeof usageSummary === "object" &&
-      (usageSummary as Record<string, unknown>).cost_summary != null
-        ? ((usageSummary as Record<string, unknown>).cost_summary as Record<
-            string,
-            unknown
-          >)
-        : null;
-    const budgetWarnings = costSummary ? asStringArray(costSummary.budget_warnings) : [];
-    const tuningFallbacksTotal =
-      typeof usageSummary === "object" &&
-      usageSummary != null &&
-      typeof (usageSummary as Record<string, unknown>).tuning_fallbacks_total ===
-        "number"
-        ? ((usageSummary as Record<string, unknown>).tuning_fallbacks_total as number)
-        : 0;
+    const usageSummary = layerSummary.usage_summary ?? generationMeta.usage_summary ?? null;
 
-    const readyLayerKeys = extractReadyLayerKeys(layerReports);
+    const readyLayerKeys = extractReadyCareerReadingLayerKeys(careerLayers);
     const layersProgress = hasLayerGeneration
-      ? buildLayersProgressArray(layerGeneration)
+      ? buildCareerReadingLayersProgressArray(layerGeneration)
       : [];
-    const readyCountFromProgress = layersProgress.filter(
-      (item) => item.status === "ready",
-    ).length;
+    const readyCountFromProgress = layersProgress.filter((item) => item.status === "ready").length;
     const readyCount =
       typeof layerGeneration.ready_count === "number"
         ? layerGeneration.ready_count
@@ -206,7 +147,7 @@ export const handler: Handler = async (
         ? layerGeneration.total_count
         : layersProgress.length > 0
           ? layersProgress.length
-          : RUNTIME_CORE_LAYER_COUNT;
+          : CAREER_READING_LAYER_COUNT;
     const progressPercent =
       totalCount > 0
         ? Math.min(100, Math.max(0, Math.round((readyCount / totalCount) * 100)))
@@ -224,18 +165,12 @@ export const handler: Handler = async (
       asString(layerGeneration.current_layer_title) ||
       layersProgress.find((item) => item.layer_key === currentLayerKey)?.hr_title ||
       null;
+
     const cancellation = asRecord(generationMeta.cancellation);
     const cancelRequested =
       layerGeneration.cancel_requested === true || cancellation.requested === true;
     const cancelled =
-      cancellation.status === "cancelled" ||
-      layerGeneration.cancelled_at != null;
-    const errorLayerKeys = hasLayerGeneration
-      ? extractLayerKeysByStatus(layerGeneration, "error")
-      : [];
-    const skippedLayerKeys = hasLayerGeneration
-      ? extractLayerKeysByStatus(layerGeneration, "skipped")
-      : [];
+      cancellation.status === "cancelled" || layerGeneration.cancelled_at != null;
 
     let parsedGenerationError: unknown = null;
     if (report.generation_error) {
@@ -254,31 +189,8 @@ export const handler: Handler = async (
       report_type: report.report_type,
       prompt_version: report.prompt_version,
       model: report.model,
-      run_mode: runMode,
-      selected_model: selectedModel,
-      model_policy: modelPolicy,
-      request_tuning: requestTuning,
-      tuning_policy: tuningPolicy,
-      usage_summary: usageSummary,
-      cost_summary: costSummary,
-      budget_warnings: budgetWarnings,
-      tuning_fallbacks_total: tuningFallbacksTotal,
-      max_output_tokens: maxOutputTokens,
-      output_token_policy: outputTokenPolicy,
-      layer_generation_status: hasLayerGeneration
-        ? asString(layerGeneration.status) || null
-        : null,
-      generated_at: report.generated_at,
       generation_meta: Object.keys(generationMeta).length > 0 ? generationMeta : null,
       generation_error: parsedGenerationError,
-      company_id: report.company_id,
-      candidate_id: report.candidate_id,
-      input_hash: report.input_hash,
-      layer_reports_count: layerReports.length,
-      ready_layer_keys: readyLayerKeys,
-      error_layer_keys: errorLayerKeys,
-      skipped_layer_keys: skippedLayerKeys,
-      layer_generation: hasLayerGeneration ? layerGeneration : null,
       ready_count: readyCount,
       total_count: totalCount,
       progress_percent: progressPercent,
@@ -288,19 +200,31 @@ export const handler: Handler = async (
       cancel_requested: cancelRequested,
       cancelled,
       cancellation: Object.keys(cancellation).length > 0 ? cancellation : null,
+      career_reading_layers_count: careerLayers.length,
+      ready_layer_keys: readyLayerKeys,
+      error_layer_keys: hasLayerGeneration
+        ? extractLayerKeysByStatus(layerGeneration, "error")
+        : [],
+      skipped_layer_keys: hasLayerGeneration
+        ? extractLayerKeysByStatus(layerGeneration, "skipped")
+        : [],
+      usage_summary: usageSummary,
       qa: {
         fit_score_is_null: report.fit_score == null,
-        vacancy_id_is_null: report.vacancy_id == null,
-        role_fit_is_separate: true,
         has_layer_generation: hasLayerGeneration,
-        all_ready_layers_have_base: layerReportsHaveSection(layerReports, "base"),
-        all_ready_layers_have_pro: layerReportsHaveSection(layerReports, "pro"),
-        all_ready_layers_have_evidence: layerReportsHaveSection(layerReports, "evidence"),
+        all_ready_layers_have_base: layersHaveSection(careerLayers, "base"),
+        all_ready_layers_have_pro: layersHaveSection(careerLayers, "pro"),
+        all_ready_layers_have_evidence: layersHaveSection(careerLayers, "evidence"),
+        all_ready_layers_have_summary_for_synthesis:
+          careerLayers.length > 0 &&
+          careerLayers.every((layer) =>
+            asString(asRecord(layer.summary_for_synthesis).one_sentence),
+          ),
         all_ready_layers_have_matching_summary:
-          layerReports.length > 0 &&
-          layerReports.every((layer) => {
+          careerLayers.length > 0 &&
+          careerLayers.every((layer) => {
             const matching = asRecord(layer.matching_summary);
-            return asString(matching.summary).length > 0;
+            return asStringArray(matching.good_for).length > 0;
           }),
       },
     });

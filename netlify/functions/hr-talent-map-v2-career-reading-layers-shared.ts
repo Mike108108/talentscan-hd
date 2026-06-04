@@ -624,6 +624,163 @@ function ensureCareerReadingSummaryDefaults(
   };
 }
 
+const BASE_MANAGEMENT_TIP_FALLBACK =
+  "Задавать ясный контекст задачи, фиксировать ожидания и проверять выводы через практический кейс.";
+const BASE_WHERE_USEFUL_FALLBACK =
+  "Роли и задачи, где этот паттерн можно проверить через конкретный рабочий кейс.";
+const BASE_STRENGTH_DESCRIPTION_FALLBACK =
+  "Сильная сторона требует проверки на интервью и рабочем кейсе.";
+
+function defaultGenericBaseRiskRecord(): Record<string, unknown> {
+  return normalizeRiskRecord({
+    title: "Зона проверки",
+    description:
+      "Риск требует проверки через интервью, рабочий кейс и наблюдение в первых задачах.",
+    how_it_may_show_up: "Может проявиться только в конкретном рабочем контексте.",
+    mitigation:
+      "Проверить гипотезу через кейс, уточняющие вопросы и первые рабочие договорённости.",
+  });
+}
+
+function defaultRepeatedThemesBaseRiskRecord(): Record<string, unknown> {
+  return normalizeRiskRecord({
+    title: "Риск зацикливания на сильной теме",
+    description:
+      "Повторяющаяся рабочая тема может быть талантом, но в неподходящей среде способна превращаться в устойчивый паттерн напряжения.",
+    how_it_may_show_up:
+      "Кандидат может снова возвращаться к одной и той же теме, спору или способу оценки задачи.",
+    mitigation:
+      "Проверить через кейс: где эта тема помогает результату, а где начинает ограничивать гибкость.",
+  });
+}
+
+function defaultGenericWhatToCheckRecord(): Record<string, unknown> {
+  return normalizeCheckRecord({
+    hypothesis: "Проверить, как рабочий паттерн проявляется в реальной задаче.",
+    check_method: "Дать короткий кейс и попросить объяснить ход решения.",
+    good_signal: "Кандидат ясно объясняет логику, ограничения и следующий шаг.",
+    warning_signal: "Ответ остаётся общим, без связи с задачей и критериями результата.",
+  });
+}
+
+function riskRecordsFromTextLines(lines: string[]): Record<string, unknown>[] {
+  const items = lines.map((x) => x.trim()).filter(Boolean);
+  if (items.length === 0) return [];
+  return items.map((text) =>
+    normalizeRiskRecord({
+      title: firstSentence(text) || "Зона проверки",
+      description: text,
+      how_it_may_show_up: "Может проявиться только в конкретном рабочем контексте.",
+      mitigation:
+        "Проверить гипотезу через кейс, уточняющие вопросы и первые рабочие договорённости.",
+    }),
+  );
+}
+
+function strengthRecordsFromTextLines(
+  lines: string[],
+  layerKey: CareerReadingLayerKey,
+  base: Record<string, unknown>,
+): Record<string, unknown>[] {
+  const items = lines.map((x) => x.trim()).filter(Boolean);
+  const descriptionFallback =
+    asString(base.short_summary) || asString(base.headline) || BASE_STRENGTH_DESCRIPTION_FALLBACK;
+  if (items.length === 0) {
+    return [
+      normalizePointRecord({
+        title: "Рабочая сильная сторона",
+        description: descriptionFallback,
+        source_layer_keys: [layerKey],
+      }),
+    ];
+  }
+  return items.map((text) =>
+    normalizePointRecord({
+      title: firstSentence(text) || "Рабочая сильная сторона",
+      description: text,
+      source_layer_keys: [layerKey],
+    }),
+  );
+}
+
+function whatToCheckRecordsFromTextLines(lines: string[]): Record<string, unknown>[] {
+  const items = lines.map((x) => x.trim()).filter(Boolean);
+  if (items.length === 0) return [defaultGenericWhatToCheckRecord()];
+  return items.map((text) =>
+    normalizeCheckRecord({
+      hypothesis: text,
+      check_method: text,
+      good_signal: "Кандидат ясно объясняет логику, ограничения и следующий шаг.",
+      warning_signal: "Ответ остаётся общим, без связи с задачей и критериями результата.",
+    }),
+  );
+}
+
+function ensureCareerReadingBaseArrayDefaults(
+  layer: Record<string, unknown>,
+  layerKey: CareerReadingLayerKey,
+): void {
+  const base = asRecord(layer.base);
+  const synthesis = asRecord(layer.summary_for_synthesis);
+  const matching = asRecord(layer.matching_summary);
+
+  const strengths = Array.isArray(base.strengths) ? base.strengths : [];
+  if (strengths.length === 0) {
+    base.strengths = strengthRecordsFromTextLines(
+      [
+        ...asStringArray(synthesis.strengths),
+        asString(base.headline),
+        asString(base.short_summary),
+      ],
+      layerKey,
+      base,
+    );
+  }
+
+  const risks = Array.isArray(base.risks) ? base.risks : [];
+  if (risks.length === 0) {
+    const riskLines = [
+      ...asStringArray(synthesis.risks),
+      ...asStringArray(matching.role_fit_risk_signals),
+      ...collectBaseRiskTexts(base),
+    ];
+    const fromLines = riskRecordsFromTextLines(riskLines);
+    if (fromLines.length > 0) {
+      base.risks = fromLines;
+    } else if (layerKey === "repeated_themes") {
+      base.risks = [defaultRepeatedThemesBaseRiskRecord()];
+    } else {
+      base.risks = [defaultGenericBaseRiskRecord()];
+    }
+  }
+
+  if (asStringArray(base.management_tips).length === 0) {
+    base.management_tips = toNonEmptyStringArray(null, [
+      ...asStringArray(synthesis.management_focus),
+      ...asStringArray(matching.check_in_role_fit),
+      BASE_MANAGEMENT_TIP_FALLBACK,
+    ]);
+  }
+
+  const whatToCheck = Array.isArray(base.what_to_check) ? base.what_to_check : [];
+  if (whatToCheck.length === 0) {
+    base.what_to_check = whatToCheckRecordsFromTextLines([
+      ...asStringArray(synthesis.what_to_check),
+      ...asStringArray(matching.check_in_role_fit),
+    ]);
+  }
+
+  if (asStringArray(base.where_useful).length === 0) {
+    base.where_useful = toNonEmptyStringArray(null, [
+      ...asStringArray(matching.good_for),
+      ...asStringArray(synthesis.conditions),
+      BASE_WHERE_USEFUL_FALLBACK,
+    ]);
+  }
+
+  layer.base = base;
+}
+
 function firstSentence(text: string): string {
   const trimmed = text.trim();
   if (!trimmed) return "";
@@ -959,6 +1116,7 @@ export function normalizeCareerReadingLayerForValidation(args: {
     layer.matching_summary = {};
   }
   ensureCareerReadingSummaryDefaults(layer, args.layerKey);
+  ensureCareerReadingBaseArrayDefaults(layer, args.layerKey);
 
   layer.special_payload = normalizeSpecialPayload(
     args.layerKey,
@@ -987,6 +1145,7 @@ export function validateCareerReadingLayer(
   const catalog = CAREER_READING_LAYER_CATALOG_V1[layerKey];
   ensureCareerReadingBaseDefaults(layer, layerKey);
   ensureCareerReadingSummaryDefaults(layer, layerKey);
+  ensureCareerReadingBaseArrayDefaults(layer, layerKey);
 
   if (asString(layer.layer_key) !== layerKey) {
     return { ok: false, stage: "validate_layer", message: `layer_key must be ${layerKey}` };
@@ -1139,6 +1298,11 @@ export function isCareerReadingValidationRepairable(
   return (
     message.includes("base.headline") ||
     message.includes("base.short_summary") ||
+    message.includes("base.strengths") ||
+    message.includes("base.risks") ||
+    message.includes("base.management_tips") ||
+    message.includes("base.what_to_check") ||
+    message.includes("base.where_useful") ||
     message.includes("summary_for_synthesis") ||
     message.includes("matching_summary")
   );
@@ -1490,6 +1654,7 @@ export async function callOpenAiForCareerReadingValidationRepair(args: {
 
 REPAIR: Layer JSON failed validation (${args.validationMessage}). Return the full layer JSON again.
 Return base.headline and base.short_summary as non-empty strings.
+Return non-empty base.strengths, base.risks, base.management_tips, base.what_to_check, and base.where_useful arrays.
 Return non-empty arrays for all summary_for_synthesis fields and all matching_summary fields.`;
   return callOpenAiForCareerReadingLayer({
     apiKey: args.apiKey,

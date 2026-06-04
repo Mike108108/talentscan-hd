@@ -52,7 +52,7 @@ import {
   type OffendingMatch,
   type OpenAiUsageSnapshot,
   type RequestTuningSnapshot,
-  type SpikeConfigError,
+  SpikeConfigError,
 } from "./hr-talent-map-v2-core-layers-shared";
 
 export {

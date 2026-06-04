@@ -72,6 +72,7 @@ export {
   buildModelPolicySnapshot,
   inferGenerationErrorKind,
   serializeGenerationError,
+  mergeOpenAiUsageSnapshots,
   asRecord,
   asString,
   asStringArray,

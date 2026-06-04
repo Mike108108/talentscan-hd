@@ -1085,4 +1085,222 @@ export async function fetchLatestCoreLayersSpikeReport(
   return { report: newest, error: null };
 }
 
+export type CareerReadingPromptLabPreviewResponse = {
+  ok: boolean;
+  mode: "preview";
+  stage: string;
+  layer_key: string;
+  model_policy: Record<string, unknown>;
+  request: {
+    model: string;
+    reasoning_effort: string;
+    verbosity: string;
+    max_output_tokens: number;
+    instructions: string;
+    input: string;
+    json_schema_name: string;
+    schema: Record<string, unknown>;
+  };
+  compact_input: Record<string, unknown>;
+  methodology_blueprint: { version: string; prompt_block: string };
+  writing_standard: { version: string; prompt_block: string };
+  warnings: string[];
+};
+
+export type CareerReadingPromptLabTestResponse = {
+  ok: boolean;
+  mode: "test";
+  stage: string;
+  layer_key: string;
+  model_policy?: Record<string, unknown>;
+  request: CareerReadingPromptLabPreviewResponse["request"];
+  output?: { layer: Record<string, unknown> };
+  validation?: { ok: boolean; stage?: string; message?: string };
+  quality_scan?: Record<string, unknown>;
+  usage?: Record<string, unknown>;
+  estimated_cost?: Record<string, unknown>;
+  duration_ms?: number;
+  max_output_tokens_used?: number;
+  attempts?: number;
+  request_tuning?: Record<string, unknown>;
+  warnings?: string[];
+  error?: string;
+  source?: string;
+};
+
+export type CareerReadingPromptLabRequestParams = {
+  companyId: string;
+  candidateId: string;
+  layerKey: string;
+  reasoningEffort: "low" | "medium";
+  verbosity: "low" | "medium" | "high";
+  maxOutputTokens: 8000 | 12000 | 16000;
+  includeMethodologyContext: boolean;
+};
+
+export type CareerReadingPromptLabFailedRequest = CareerReadingPromptLabRequestParams & {
+  statusCode: number;
+};
+
+export class CareerReadingPromptLabError extends Error {
+  readonly failedRequest: CareerReadingPromptLabFailedRequest;
+
+  constructor(message: string, failedRequest: CareerReadingPromptLabFailedRequest) {
+    super(message);
+    this.name = "CareerReadingPromptLabError";
+    this.failedRequest = failedRequest;
+  }
+}
+
+function normalizePromptLabRequestParams(params: {
+  companyId: string;
+  candidateId: string;
+  layerKey: string;
+  reasoningEffort?: "low" | "medium";
+  verbosity?: "low" | "medium" | "high";
+  maxOutputTokens?: 8000 | 12000 | 16000;
+  includeMethodologyContext?: boolean;
+}): CareerReadingPromptLabRequestParams {
+  return {
+    companyId: params.companyId,
+    candidateId: params.candidateId,
+    layerKey: params.layerKey,
+    reasoningEffort: params.reasoningEffort ?? "low",
+    verbosity: params.verbosity ?? "medium",
+    maxOutputTokens: params.maxOutputTokens ?? 8000,
+    includeMethodologyContext: params.includeMethodologyContext ?? false,
+  };
+}
+
+function formatPromptLabErrorMessage(statusCode: number, parsedError?: string): string {
+  if (statusCode === 504) {
+    return `Запрос не завершился: сервер вернул 504 Gateway Timeout.
+Вероятно, OpenAI-вызов с medium reasoning / большим max_output_tokens не успел выполниться в синхронной Netlify Function.
+Попробуйте low / 8000 или medium / 8000. Для долгих medium-тестов нужен background-mode.`;
+  }
+  if (parsedError) return parsedError;
+  return `Ошибка Prompt Lab (${statusCode}).`;
+}
+
+function formatPromptLabNonJsonMessage(statusCode: number): string {
+  if (statusCode === 504) {
+    return formatPromptLabErrorMessage(504);
+  }
+  return `Запрос не завершился (${statusCode}). Сервер вернул ответ не в формате JSON — возможно, gateway timeout или сбой функции.`;
+}
+
+function throwPromptLabError(
+  message: string,
+  params: CareerReadingPromptLabRequestParams,
+  statusCode: number,
+): never {
+  throw new CareerReadingPromptLabError(message, { ...params, statusCode });
+}
+
+async function postCareerReadingPromptLab<T extends Record<string, unknown>>(
+  endpoint: string,
+  params: {
+    companyId: string;
+    candidateId: string;
+    layerKey: string;
+    reasoningEffort?: "low" | "medium";
+    verbosity?: "low" | "medium" | "high";
+    maxOutputTokens?: 8000 | 12000 | 16000;
+    includeMethodologyContext?: boolean;
+  },
+): Promise<T> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Требуется вход");
+
+  const requestParams = normalizePromptLabRequestParams(params);
+
+  const resp = await fetch(`/.netlify/functions/${endpoint}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      company_id: requestParams.companyId,
+      candidate_id: requestParams.candidateId,
+      layer_key: requestParams.layerKey,
+      reasoning_effort: requestParams.reasoningEffort,
+      verbosity: requestParams.verbosity,
+      max_output_tokens: requestParams.maxOutputTokens,
+      include_methodology_context: requestParams.includeMethodologyContext,
+      model: "gpt-5-nano",
+    }),
+  });
+
+  const rawBody = await resp.text();
+  let parsed: Record<string, unknown> = {};
+  if (rawBody) {
+    try {
+      parsed = JSON.parse(rawBody) as Record<string, unknown>;
+    } catch {
+      throwPromptLabError(
+        formatPromptLabNonJsonMessage(resp.status),
+        requestParams,
+        resp.status,
+      );
+    }
+  }
+
+  if (!resp.ok) {
+    throwPromptLabError(
+      formatPromptLabErrorMessage(resp.status, asString(parsed.error)),
+      requestParams,
+      resp.status,
+    );
+  }
+
+  return parsed as T;
+}
+
+export async function previewCareerReadingPromptLab(params: {
+  companyId: string;
+  candidateId: string;
+  layerKey: string;
+  reasoningEffort?: "low" | "medium";
+  verbosity?: "low" | "medium" | "high";
+  maxOutputTokens?: 8000 | 12000 | 16000;
+  includeMethodologyContext?: boolean;
+}): Promise<CareerReadingPromptLabPreviewResponse> {
+  const parsed = await postCareerReadingPromptLab<Record<string, unknown>>(
+    "hr-career-reading-prompt-preview",
+    params,
+  );
+  if (parsed.ok !== true) {
+    throwPromptLabError(
+      asString(parsed.error) || "Preview Prompt Lab failed.",
+      normalizePromptLabRequestParams(params),
+      200,
+    );
+  }
+  return parsed as unknown as CareerReadingPromptLabPreviewResponse;
+}
+
+export async function testCareerReadingPromptLab(params: {
+  companyId: string;
+  candidateId: string;
+  layerKey: string;
+  reasoningEffort?: "low" | "medium";
+  verbosity?: "low" | "medium" | "high";
+  maxOutputTokens?: 8000 | 12000 | 16000;
+  includeMethodologyContext?: boolean;
+}): Promise<CareerReadingPromptLabTestResponse> {
+  const parsed = await postCareerReadingPromptLab<Record<string, unknown>>(
+    "hr-career-reading-prompt-test",
+    params,
+  );
+  if (parsed.ok !== true) {
+    throwPromptLabError(
+      asString(parsed.error) || "Test Prompt Lab failed.",
+      normalizePromptLabRequestParams(params),
+      200,
+    );
+  }
+  return parsed as unknown as CareerReadingPromptLabTestResponse;
+}
+
 export { isSupabaseConfigured };

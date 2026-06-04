@@ -510,7 +510,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       };
       await persistProgress();
 
-      layer = normalizeCareerReadingLayerForValidation({ layer, layerKey });
+      layer = normalizeCareerReadingLayerForValidation({ layer, layerKey, layerInput });
       let validation = validateCareerReadingLayer(layer, layerKey, layerInput);
 
       let mergedUsage: OpenAiUsageSnapshot | undefined = openAiCallResult?.usage;
@@ -540,7 +540,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           mergedUsage = mergedUsage
             ? mergeOpenAiUsageSnapshots(mergedUsage, repairResult.usage)
             : repairResult.usage;
-          layer = normalizeCareerReadingLayerForValidation({ layer, layerKey });
+          layer = normalizeCareerReadingLayerForValidation({ layer, layerKey, layerInput });
           validation = validateCareerReadingLayer(layer, layerKey, layerInput);
         } catch {
           // keep failed validation

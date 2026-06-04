@@ -4,17 +4,26 @@ import type {
   HrTalentMapSynthesisBlocksV2,
 } from "./types";
 
-/** Layer architecture v0.2 catalogs/mappings (spec only; not wired to generation). */
+/** Layer architecture v0.2 catalogs/mappings (runtime 19 → product 16 + system → synthesis 6). */
 export {
   LAYER_ARCHITECTURE_VERSION,
   PRODUCT_LAYER_CATALOG_VERSION,
 } from "./talentMapLayerArchitecture";
 
-/** Product layer adapter v0.2 (runtime 12 → product 16 + system). */
+/** Product layer adapter v0.2 (runtime 19 → product 16 + system). */
 export {
   PRODUCT_LAYER_ADAPTER_VERSION,
   adaptRuntimeLayersToProductLayersV02,
 } from "./productLayerAdapter";
+
+/** Deterministic synthesis blocks v0.1 (product layers → 6 top blocks). */
+export {
+  SYNTHESIS_BLOCKS_VERSION_V0_1,
+  buildSynthesisBlocksFromProductLayersV01,
+  hasAllSynthesisBlocksHaveSourcesV01,
+} from "./synthesisBlocksV01";
+
+export type { BuildSynthesisBlocksFromProductLayersV01Input } from "./synthesisBlocksV01";
 
 export type {
   ProductLayerAdapterInputV02,

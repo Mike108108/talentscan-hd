@@ -363,6 +363,10 @@ export type HrTalentMapGenerationMetaV2 = {
   prompt_version?: string;
   pipeline_stage?: string;
   input_hash?: string;
+  content_contract_version?: string;
+  product_layer_adapter_version?: string;
+  synthesis_blocks_version?: string;
+  synthesis_generation_mode?: string;
 };
 
 /** Candidate-facing snapshot in v2 (maps to legacy hero). */
@@ -409,10 +413,12 @@ export type HrTalentMapLayerBaseV2 = {
   short_summary?: string;
   detailed_explanation?: string;
   how_it_appears_at_work?: string;
-  where_useful?: string;
-  risks?: string;
-  management_tips?: string;
-  what_to_check?: string;
+  where_useful?: string | string[];
+  risks?: string | string[] | Record<string, unknown>[];
+  management_tips?: string | string[];
+  what_to_check?: string | string[] | Record<string, unknown>[];
+  good_signals?: string | string[];
+  warning_signals?: string | string[];
 };
 
 /** Pro / technical layer details (side panel only). */
@@ -507,6 +513,11 @@ export type HrTalentMapLayerReportV2 = {
 
 /** Generic synthesis block payload (section-specific fields vary). */
 export type HrTalentMapSynthesisBlockV2 = {
+  block_key?: string;
+  title?: string;
+  status?: "ready" | "partial" | "not_generated";
+  source_layer_keys?: string[];
+
   text?: string;
   summary?: string;
   one_sentence?: string;
@@ -519,6 +530,24 @@ export type HrTalentMapSynthesisBlockV2 = {
   cards?: HrTalentMapHypothesisCard[];
   checks?: HrTalentMapRiskCheck[];
   playbook?: HrTalentMapManagementPlaybook;
+
+  evidence?: {
+    source_layer_keys?: string[];
+    source_runtime_layer_keys?: string[];
+    confidence?: HrTalentMapConfidence;
+    limitations?: string[];
+    warnings?: string[];
+    adapter_version?: string;
+    synthesis_version?: string;
+    generation_mode?: "deterministic_from_product_layers";
+  };
+
+  qa?: {
+    deterministic?: boolean;
+    ai_synthesis_generated?: boolean;
+    empty_source_layers?: string[];
+    missing_source_layers?: string[];
+  };
 };
 
 /** Six top-level synthesis sections assembled from atomic layer reports. */

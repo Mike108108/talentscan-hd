@@ -1,7 +1,8 @@
 /**
- * Product Layer Adapter v0.2 (Stage 4.8-A.1).
+ * Product Layer Adapter v0.2 (Stage 4.8).
  *
- * Maps current 12-layer runtime `layer_reports` to the v0.2 product layer view-model.
+ * Maps 19-step runtime `layer_reports` (12 source/core + 7 product narrative) to the v0.2
+ * product layer view-model (16 AI narrative layers + data_quality).
  * Structural merge only — no AI synthesis or invented HR copy.
  *
  * @see talentMapLayerArchitecture.ts

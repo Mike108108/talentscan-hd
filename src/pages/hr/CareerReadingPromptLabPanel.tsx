@@ -4,8 +4,10 @@ import {
   CAREER_READING_LAYER_KEYS_V1,
 } from "../../lib/hr/careerReadingLayersV1";
 import {
+  CareerReadingPromptLabError,
   previewCareerReadingPromptLab,
   testCareerReadingPromptLab,
+  type CareerReadingPromptLabFailedRequest,
   type CareerReadingPromptLabPreviewResponse,
   type CareerReadingPromptLabTestResponse,
 } from "../../lib/hr/api";
@@ -19,12 +21,55 @@ type LabResult =
   | { kind: "preview"; data: CareerReadingPromptLabPreviewResponse }
   | { kind: "test"; data: CareerReadingPromptLabTestResponse };
 
+type LoadingMode = "preview" | "test" | null;
+
 function formatJson(value: unknown): string {
   try {
     return JSON.stringify(value, null, 2);
   } catch {
     return String(value);
   }
+}
+
+function resolveFailedRequest(
+  err: unknown,
+  fallback: CareerReadingPromptLabFailedRequest,
+): CareerReadingPromptLabFailedRequest {
+  if (err instanceof CareerReadingPromptLabError) {
+    return err.failedRequest;
+  }
+  return fallback;
+}
+
+function FailedRequestMeta({ request }: { request: CareerReadingPromptLabFailedRequest }) {
+  return (
+    <dl className="prompt-lab__failed-meta">
+      <div>
+        <dt>layer_key</dt>
+        <dd>{request.layerKey}</dd>
+      </div>
+      <div>
+        <dt>reasoning_effort</dt>
+        <dd>{request.reasoningEffort}</dd>
+      </div>
+      <div>
+        <dt>max_output_tokens</dt>
+        <dd>{request.maxOutputTokens}</dd>
+      </div>
+      <div>
+        <dt>verbosity</dt>
+        <dd>{request.verbosity}</dd>
+      </div>
+      <div>
+        <dt>include_methodology_context</dt>
+        <dd>{request.includeMethodologyContext ? "true" : "false"}</dd>
+      </div>
+      <div>
+        <dt>status_code</dt>
+        <dd>{request.statusCode}</dd>
+      </div>
+    </dl>
+  );
 }
 
 export function CareerReadingPromptLabPanel({ companyId, candidateId }: Props) {
@@ -34,8 +79,11 @@ export function CareerReadingPromptLabPanel({ companyId, candidateId }: Props) {
   const [verbosity, setVerbosity] = useState<"low" | "medium" | "high">("medium");
   const [maxOutputTokens, setMaxOutputTokens] = useState<8000 | 12000 | 16000>(8000);
   const [includeMethodology, setIncludeMethodology] = useState(true);
-  const [loading, setLoading] = useState(false);
+  const [loadingMode, setLoadingMode] = useState<LoadingMode>(null);
   const [error, setError] = useState<string | null>(null);
+  const [failedRequest, setFailedRequest] = useState<CareerReadingPromptLabFailedRequest | null>(
+    null,
+  );
   const [result, setResult] = useState<LabResult | null>(null);
 
   const layerOptions = useMemo(
@@ -57,29 +105,38 @@ export function CareerReadingPromptLabPanel({ companyId, candidateId }: Props) {
     includeMethodologyContext: includeMethodology,
   });
 
-  const onPreview = async () => {
-    setLoading(true);
+  const beginRun = (mode: LoadingMode) => {
+    setLoadingMode(mode);
     setError(null);
+    setFailedRequest(null);
+    setResult(null);
+  };
+
+  const onPreview = async () => {
+    const params = sharedParams();
+    beginRun("preview");
     try {
-      const data = await previewCareerReadingPromptLab(sharedParams());
+      const data = await previewCareerReadingPromptLab(params);
       setResult({ kind: "preview", data });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+      setFailedRequest(resolveFailedRequest(err, { ...params, statusCode: 0 }));
     } finally {
-      setLoading(false);
+      setLoadingMode(null);
     }
   };
 
   const onTest = async () => {
-    setLoading(true);
-    setError(null);
+    const params = sharedParams();
+    beginRun("test");
     try {
-      const data = await testCareerReadingPromptLab(sharedParams());
+      const data = await testCareerReadingPromptLab(params);
       setResult({ kind: "test", data });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+      setFailedRequest(resolveFailedRequest(err, { ...params, statusCode: 0 }));
     } finally {
-      setLoading(false);
+      setLoadingMode(null);
     }
   };
 
@@ -91,8 +148,13 @@ export function CareerReadingPromptLabPanel({ companyId, candidateId }: Props) {
       await navigator.clipboard.writeText(text);
     } catch {
       setError("Не удалось скопировать prompt в буфер.");
+      setFailedRequest(null);
     }
   };
+
+  const showMediumWarning = reasoningEffort === "medium";
+  const showMediumHighTokenWarning =
+    reasoningEffort === "medium" && (maxOutputTokens === 12000 || maxOutputTokens === 16000);
 
   const qualityScan =
     result?.kind === "test" && result.data.quality_scan
@@ -186,28 +248,47 @@ export function CareerReadingPromptLabPanel({ companyId, candidateId }: Props) {
               include_methodology_context
             </label>
 
+            {showMediumWarning ? (
+              <p
+                className={
+                  showMediumHighTokenWarning
+                    ? "prompt-lab__warn prompt-lab__warn--strong"
+                    : "prompt-lab__warn"
+                }
+                role="status"
+              >
+                Medium reasoning может занять дольше и упереться в timeout синхронной функции.
+                Для первичного сравнения попробуйте medium / 8000. Для medium / 12000–16000
+                позже нужен background-mode.
+              </p>
+            ) : null}
+
             <div className="prompt-lab__actions">
               <button
                 type="button"
                 className="hr-btn hr-btn--ghost"
-                disabled={loading}
+                disabled={loadingMode !== null}
                 onClick={onPreview}
               >
-                {loading && result?.kind !== "test" ? "Preview…" : "Preview prompt"}
+                {loadingMode === "preview" ? "Preview…" : "Preview prompt"}
               </button>
               <button
                 type="button"
                 className="hr-btn"
-                disabled={loading}
+                disabled={loadingMode !== null}
                 onClick={onTest}
               >
-                {loading && result?.kind === "test" ? "Test…" : "Test layer"}
+                {loadingMode === "test" ? "Test layer…" : "Test layer"}
               </button>
               <button
                 type="button"
                 className="hr-btn hr-btn--ghost"
-                disabled={!result}
-                onClick={() => setResult(null)}
+                disabled={!result || loadingMode !== null}
+                onClick={() => {
+                  setResult(null);
+                  setError(null);
+                  setFailedRequest(null);
+                }}
               >
                 Clear
               </button>
@@ -219,9 +300,22 @@ export function CareerReadingPromptLabPanel({ companyId, candidateId }: Props) {
             </div>
           </div>
 
-          {error ? <p className="prompt-lab__error">{error}</p> : null}
+          {loadingMode ? (
+            <p className="prompt-lab__loading" role="status">
+              {loadingMode === "test"
+                ? "Запуск Test layer… предыдущий результат очищен."
+                : "Запуск Preview prompt… предыдущий результат очищен."}
+            </p>
+          ) : null}
 
-          {result ? (
+          {error ? (
+            <div className="prompt-lab__error-block" role="alert">
+              <p className="prompt-lab__error">{error}</p>
+              {failedRequest ? <FailedRequestMeta request={failedRequest} /> : null}
+            </div>
+          ) : null}
+
+          {result && !error ? (
             <div className="prompt-lab__result">
               <p className="prompt-lab__meta">
                 mode: {result.data.mode} · layer: {result.data.layer_key} · model:{" "}

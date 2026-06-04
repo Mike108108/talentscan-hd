@@ -1128,6 +1128,75 @@ export type CareerReadingPromptLabTestResponse = {
   source?: string;
 };
 
+export type CareerReadingPromptLabRequestParams = {
+  companyId: string;
+  candidateId: string;
+  layerKey: string;
+  reasoningEffort: "low" | "medium";
+  verbosity: "low" | "medium" | "high";
+  maxOutputTokens: 8000 | 12000 | 16000;
+  includeMethodologyContext: boolean;
+};
+
+export type CareerReadingPromptLabFailedRequest = CareerReadingPromptLabRequestParams & {
+  statusCode: number;
+};
+
+export class CareerReadingPromptLabError extends Error {
+  readonly failedRequest: CareerReadingPromptLabFailedRequest;
+
+  constructor(message: string, failedRequest: CareerReadingPromptLabFailedRequest) {
+    super(message);
+    this.name = "CareerReadingPromptLabError";
+    this.failedRequest = failedRequest;
+  }
+}
+
+function normalizePromptLabRequestParams(params: {
+  companyId: string;
+  candidateId: string;
+  layerKey: string;
+  reasoningEffort?: "low" | "medium";
+  verbosity?: "low" | "medium" | "high";
+  maxOutputTokens?: 8000 | 12000 | 16000;
+  includeMethodologyContext?: boolean;
+}): CareerReadingPromptLabRequestParams {
+  return {
+    companyId: params.companyId,
+    candidateId: params.candidateId,
+    layerKey: params.layerKey,
+    reasoningEffort: params.reasoningEffort ?? "low",
+    verbosity: params.verbosity ?? "medium",
+    maxOutputTokens: params.maxOutputTokens ?? 8000,
+    includeMethodologyContext: params.includeMethodologyContext ?? false,
+  };
+}
+
+function formatPromptLabErrorMessage(statusCode: number, parsedError?: string): string {
+  if (statusCode === 504) {
+    return `Запрос не завершился: сервер вернул 504 Gateway Timeout.
+Вероятно, OpenAI-вызов с medium reasoning / большим max_output_tokens не успел выполниться в синхронной Netlify Function.
+Попробуйте low / 8000 или medium / 8000. Для долгих medium-тестов нужен background-mode.`;
+  }
+  if (parsedError) return parsedError;
+  return `Ошибка Prompt Lab (${statusCode}).`;
+}
+
+function formatPromptLabNonJsonMessage(statusCode: number): string {
+  if (statusCode === 504) {
+    return formatPromptLabErrorMessage(504);
+  }
+  return `Запрос не завершился (${statusCode}). Сервер вернул ответ не в формате JSON — возможно, gateway timeout или сбой функции.`;
+}
+
+function throwPromptLabError(
+  message: string,
+  params: CareerReadingPromptLabRequestParams,
+  statusCode: number,
+): never {
+  throw new CareerReadingPromptLabError(message, { ...params, statusCode });
+}
+
 async function postCareerReadingPromptLab<T extends Record<string, unknown>>(
   endpoint: string,
   params: {
@@ -1143,6 +1212,8 @@ async function postCareerReadingPromptLab<T extends Record<string, unknown>>(
   const token = await getAccessToken();
   if (!token) throw new Error("Требуется вход");
 
+  const requestParams = normalizePromptLabRequestParams(params);
+
   const resp = await fetch(`/.netlify/functions/${endpoint}`, {
     method: "POST",
     headers: {
@@ -1150,13 +1221,13 @@ async function postCareerReadingPromptLab<T extends Record<string, unknown>>(
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
-      company_id: params.companyId,
-      candidate_id: params.candidateId,
-      layer_key: params.layerKey,
-      reasoning_effort: params.reasoningEffort ?? "low",
-      verbosity: params.verbosity ?? "medium",
-      max_output_tokens: params.maxOutputTokens ?? 8000,
-      include_methodology_context: params.includeMethodologyContext ?? false,
+      company_id: requestParams.companyId,
+      candidate_id: requestParams.candidateId,
+      layer_key: requestParams.layerKey,
+      reasoning_effort: requestParams.reasoningEffort,
+      verbosity: requestParams.verbosity,
+      max_output_tokens: requestParams.maxOutputTokens,
+      include_methodology_context: requestParams.includeMethodologyContext,
       model: "gpt-5-nano",
     }),
   });
@@ -1167,12 +1238,20 @@ async function postCareerReadingPromptLab<T extends Record<string, unknown>>(
     try {
       parsed = JSON.parse(rawBody) as Record<string, unknown>;
     } catch {
-      throw new Error(`Сервер вернул не-JSON ответ (${resp.status}).`);
+      throwPromptLabError(
+        formatPromptLabNonJsonMessage(resp.status),
+        requestParams,
+        resp.status,
+      );
     }
   }
 
   if (!resp.ok) {
-    throw new Error(asString(parsed.error) || `Ошибка Prompt Lab (${resp.status})`);
+    throwPromptLabError(
+      formatPromptLabErrorMessage(resp.status, asString(parsed.error)),
+      requestParams,
+      resp.status,
+    );
   }
 
   return parsed as T;
@@ -1192,7 +1271,11 @@ export async function previewCareerReadingPromptLab(params: {
     params,
   );
   if (parsed.ok !== true) {
-    throw new Error(asString(parsed.error) || "Preview Prompt Lab failed.");
+    throwPromptLabError(
+      asString(parsed.error) || "Preview Prompt Lab failed.",
+      normalizePromptLabRequestParams(params),
+      200,
+    );
   }
   return parsed as unknown as CareerReadingPromptLabPreviewResponse;
 }
@@ -1211,7 +1294,11 @@ export async function testCareerReadingPromptLab(params: {
     params,
   );
   if (parsed.ok !== true) {
-    throw new Error(asString(parsed.error) || "Test Prompt Lab failed.");
+    throwPromptLabError(
+      asString(parsed.error) || "Test Prompt Lab failed.",
+      normalizePromptLabRequestParams(params),
+      200,
+    );
   }
   return parsed as unknown as CareerReadingPromptLabTestResponse;
 }

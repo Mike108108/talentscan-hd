@@ -145,19 +145,23 @@ export type CareerReadingLayerValidationResult =
 const OUTPUT_TEXT_TAIL_MAX = 500;
 const RETRY_COMPACT_HINT = `Return valid JSON only. No markdown. Keep arrays concise. HR language in base only.`;
 
-function strictObjectSchema(
-  properties: Record<string, unknown>,
-  required: string[] = Object.keys(properties),
-) {
+function strictObjectSchema(properties: Record<string, unknown>) {
   return {
     type: "object",
     properties,
-    required,
+    required: Object.keys(properties),
     additionalProperties: false,
   };
 }
 
-const strictEmptyObjectSchema = strictObjectSchema({}, []);
+function strictEmptyObjectSchema() {
+  return {
+    type: "object",
+    properties: {},
+    required: [] as string[],
+    additionalProperties: false,
+  };
+}
 
 function assertStrictObjectsHaveAdditionalPropertiesFalse(
   schema: unknown,
@@ -180,6 +184,37 @@ function assertStrictObjectsHaveAdditionalPropertiesFalse(
   }
 }
 
+function assertStrictObjectsHaveAllPropertiesRequired(schema: unknown, path = "schema"): void {
+  if (!schema || typeof schema !== "object") return;
+  const record = schema as Record<string, unknown>;
+
+  if (record.type === "object") {
+    const properties = record.properties;
+    const required = record.required;
+
+    if (properties && typeof properties === "object" && !Array.isArray(properties)) {
+      const propertyKeys = Object.keys(properties as Record<string, unknown>).sort();
+      const requiredKeys = Array.isArray(required) ? [...required].map(String).sort() : [];
+
+      const missing = propertyKeys.filter((key) => !requiredKeys.includes(key));
+
+      if (missing.length > 0) {
+        throw new Error(`${path} object schema missing required keys: ${missing.join(", ")}`);
+      }
+    }
+  }
+
+  for (const [key, value] of Object.entries(record)) {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) =>
+        assertStrictObjectsHaveAllPropertiesRequired(item, `${path}.${key}[${index}]`),
+      );
+    } else if (value && typeof value === "object") {
+      assertStrictObjectsHaveAllPropertiesRequired(value, `${path}.${key}`);
+    }
+  }
+}
+
 function buildRequestTuningSnapshot(
   modelPolicy: CoreLayersModelPolicy,
   overrides?: Partial<RequestTuningSnapshot>,
@@ -199,261 +234,177 @@ const statusEnum = {
   type: "string",
   enum: ["ready", "partial", "not_applicable", "missing_data"],
 };
+const nullableString = { type: ["string", "null"] };
+const stringArraySchema = { type: "array", items: { type: "string" } };
 
-const checkSchema = {
-  type: "object",
-  properties: {
-    hypothesis: { type: "string" },
-    check_method: { type: "string" },
-    good_signal: { type: "string" },
-    warning_signal: { type: "string" },
-  },
-  required: ["hypothesis", "check_method", "good_signal", "warning_signal"],
-  additionalProperties: false,
-};
+const checkSchema = strictObjectSchema({
+  hypothesis: { type: "string" },
+  check_method: { type: "string" },
+  good_signal: { type: "string" },
+  warning_signal: { type: "string" },
+});
 
-const pointSchema = {
-  type: "object",
-  properties: {
-    title: { type: "string" },
-    description: { type: "string" },
-    source_layer_keys: { type: "array", items: { type: "string" } },
-  },
-  required: ["title", "description"],
-  additionalProperties: false,
-};
+const pointSchema = strictObjectSchema({
+  title: { type: "string" },
+  description: { type: "string" },
+  source_layer_keys: stringArraySchema,
+});
 
-const riskSchema = {
-  type: "object",
-  properties: {
-    title: { type: "string" },
-    description: { type: "string" },
-    how_it_may_show_up: { type: "string" },
-    mitigation: { type: "string" },
-  },
-  required: ["title", "description"],
-  additionalProperties: false,
-};
+const riskSchema = strictObjectSchema({
+  title: { type: "string" },
+  description: { type: "string" },
+  how_it_may_show_up: nullableString,
+  mitigation: nullableString,
+});
 
-const evidenceSchema = {
-  type: "object",
-  properties: {
-    source_fields: { type: "array", items: { type: "string" } },
-    source_chart_elements: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          kind: { type: "string" },
-          key: { type: "string" },
-          value: { type: "string" },
-          side: { type: ["string", "null"] },
-          planet: { type: ["string", "null"] },
-          line: { type: ["string", "null"] },
-        },
-        required: ["kind", "key", "value", "side", "planet", "line"],
-        additionalProperties: false,
-      },
-    },
-    confidence: confidenceEnum,
-    warnings: { type: "array", items: { type: "string" } },
-  },
-  required: ["source_fields", "source_chart_elements", "confidence", "warnings"],
-  additionalProperties: false,
-};
+const chartElementSchema = strictObjectSchema({
+  kind: { type: "string" },
+  key: { type: "string" },
+  value: { type: "string" },
+  side: nullableString,
+  planet: nullableString,
+  line: nullableString,
+});
 
-const channelTalentSchema = {
-  type: "object",
-  properties: {
-    channel_key: { type: "string" },
-    classical_name: { type: "string" },
-    gates: { type: "array", items: { type: "string" } },
-    centers: { type: "array", items: { type: "string" } },
-    circuit: { type: "string" },
-    title: { type: "string" },
-    summary: { type: "string" },
-    where_useful: { type: "array", items: { type: "string" } },
-    how_it_appears_at_work: { type: "string" },
-    risk: { type: "string" },
-    management_tip: { type: "string" },
-    what_to_check: { type: "array", items: checkSchema },
-    evidence: evidenceSchema,
-  },
-  required: [
-    "channel_key",
-    "title",
-    "summary",
-    "where_useful",
-    "how_it_appears_at_work",
-    "risk",
-    "management_tip",
-    "what_to_check",
-    "evidence",
-  ],
-  additionalProperties: false,
-};
+const evidenceSchema = strictObjectSchema({
+  source_fields: stringArraySchema,
+  source_chart_elements: { type: "array", items: chartElementSchema },
+  confidence: confidenceEnum,
+  warnings: stringArraySchema,
+});
 
-const centerZoneSchema = {
-  type: "object",
-  properties: {
-    center_key: { type: "string" },
-    classical_name: { type: "string" },
-    defined: { type: "boolean" },
-    title: { type: "string" },
-    work_meaning: { type: "string" },
-    potential_strength: { type: "string" },
-    risk_under_pressure: { type: "string" },
-    management_tip: { type: "string" },
-    what_to_check: { type: "array", items: checkSchema },
-  },
-  required: ["center_key", "classical_name", "defined", "title", "work_meaning"],
-  additionalProperties: false,
-};
+const classicalSourceSchema = strictObjectSchema({
+  source_key: { type: "string" },
+  source_label: { type: "string" },
+  raw_path: { type: "string" },
+  value_summary: { type: "string" },
+  confidence: confidenceEnum,
+});
 
-const repeatedGateThemeSchema = {
-  type: "object",
-  properties: {
-    gate: { type: "string" },
-    sources: { type: "array", items: { type: "string" } },
-    title: { type: "string" },
-    summary: { type: "string" },
-    talent_potential: { type: "string" },
-    risk_pattern: { type: "string" },
-    what_to_check: { type: "array", items: checkSchema },
-  },
-  required: ["gate", "sources", "title", "summary"],
-  additionalProperties: false,
-};
+const sectionSchema = strictObjectSchema({
+  title: { type: "string" },
+  body: nullableString,
+  items: stringArraySchema,
+});
+
+const channelTalentSchema = strictObjectSchema({
+  channel_key: { type: "string" },
+  classical_name: nullableString,
+  gates: stringArraySchema,
+  centers: stringArraySchema,
+  circuit: nullableString,
+  title: { type: "string" },
+  summary: { type: "string" },
+  where_useful: stringArraySchema,
+  how_it_appears_at_work: { type: "string" },
+  risk: { type: "string" },
+  management_tip: { type: "string" },
+  what_to_check: { type: "array", items: checkSchema },
+  evidence: evidenceSchema,
+});
+
+const centerZoneSchema = strictObjectSchema({
+  center_key: { type: "string" },
+  classical_name: { type: "string" },
+  defined: { type: "boolean" },
+  title: { type: "string" },
+  work_meaning: { type: "string" },
+  potential_strength: nullableString,
+  risk_under_pressure: nullableString,
+  management_tip: nullableString,
+  what_to_check: { type: "array", items: checkSchema },
+});
+
+const repeatedGateThemeSchema = strictObjectSchema({
+  gate: { type: "string" },
+  sources: stringArraySchema,
+  title: { type: "string" },
+  summary: { type: "string" },
+  talent_potential: nullableString,
+  risk_pattern: nullableString,
+  what_to_check: { type: "array", items: checkSchema },
+});
 
 function buildSpecialPayloadSchema(layerKey: CareerReadingLayerKey) {
   if (layerKey === "talent_channels") {
     return strictObjectSchema({
       channel_talents: { type: "array", items: channelTalentSchema },
       channels_count: { type: "integer" },
-    }, ["channel_talents"]);
+    });
   }
   if (layerKey === "centers_stability_and_sensitivity") {
     return strictObjectSchema({
       center_zones: { type: "array", items: centerZoneSchema },
-    }, ["center_zones"]);
+    });
   }
   if (layerKey === "repeated_themes") {
     return strictObjectSchema({
       repeated_gate_themes: { type: "array", items: repeatedGateThemeSchema },
-    }, ["repeated_gate_themes"]);
+    });
   }
-  return strictEmptyObjectSchema;
+  return strictEmptyObjectSchema();
 }
 
 export function buildCareerReadingLayerSchema(layerKey: CareerReadingLayerKey) {
   const catalog = CAREER_READING_LAYER_CATALOG_V1[layerKey];
-  return strictObjectSchema(
-    {
-      layer_key: { type: "string", enum: [layerKey] },
-      title: { type: "string", enum: [catalog.title] },
-      status: statusEnum,
-      ui_priority: { type: "integer", enum: [catalog.ui_priority] },
-      source_facts: strictEmptyObjectSchema,
-      base: strictObjectSchema(
-        {
-          headline: { type: "string" },
-          short_summary: { type: "string" },
-          detailed_explanation: { type: "string" },
-          how_it_appears_at_work: { type: "string" },
-          where_useful: { type: "array", items: { type: "string" } },
-          strengths: { type: "array", items: pointSchema },
-          risks: { type: "array", items: riskSchema },
-          management_tips: { type: "array", items: { type: "string" } },
-          what_to_check: { type: "array", items: checkSchema },
-          sections: {
-            type: "array",
-            items: strictObjectSchema({
-              title: { type: "string" },
-              body: { type: "string" },
-              items: { type: "array", items: { type: "string" } },
-            }),
-          },
-        },
-        [
-          "headline",
-          "short_summary",
-          "how_it_appears_at_work",
-          "where_useful",
-          "risks",
-          "management_tips",
-          "what_to_check",
-        ],
-      ),
-      pro: strictObjectSchema(
-        {
-          technical_title: { type: "string" },
-          classical_sources: {
-            type: "array",
-            items: strictObjectSchema({
-              source_key: { type: "string" },
-              source_label: { type: "string" },
-              raw_path: { type: "string" },
-              value_summary: { type: "string" },
-              confidence: confidenceEnum,
-            }),
-          },
-          source_values: strictEmptyObjectSchema,
-          connection_logic: { type: "string" },
-          confidence: confidenceEnum,
-          limitations: { type: "array", items: { type: "string" } },
-          human_check: { type: "string" },
-        },
-        ["classical_sources", "source_values", "connection_logic", "confidence"],
-      ),
-      evidence: evidenceSchema,
-      summary_for_synthesis: strictObjectSchema({
-        one_sentence: { type: "string" },
-        strengths: { type: "array", items: { type: "string" } },
-        risks: { type: "array", items: { type: "string" } },
-        conditions: { type: "array", items: { type: "string" } },
-        management_focus: { type: "array", items: { type: "string" } },
-        what_to_check: { type: "array", items: { type: "string" } },
-      }),
-      matching_summary: strictObjectSchema({
-        good_for: { type: "array", items: { type: "string" } },
-        bad_for: { type: "array", items: { type: "string" } },
-        role_fit_positive_signals: { type: "array", items: { type: "string" } },
-        role_fit_risk_signals: { type: "array", items: { type: "string" } },
-        check_in_role_fit: { type: "array", items: { type: "string" } },
-      }),
-      special_payload: buildSpecialPayloadSchema(layerKey),
-      qa: strictObjectSchema(
-        {
-          base_has_forbidden_hd_terms: { type: "boolean" },
-          pro_has_classical_sources: { type: "boolean" },
-          has_summary_for_synthesis: { type: "boolean" },
-          has_matching_summary: { type: "boolean" },
-          human_review_recommended: { type: "boolean" },
-        },
-        ["pro_has_classical_sources", "has_summary_for_synthesis", "has_matching_summary"],
-      ),
-    },
-    [
-      "layer_key",
-      "title",
-      "status",
-      "ui_priority",
-      "source_facts",
-      "base",
-      "pro",
-      "evidence",
-      "summary_for_synthesis",
-      "matching_summary",
-      "qa",
-    ],
-  );
+  return strictObjectSchema({
+    layer_key: { type: "string", enum: [layerKey] },
+    title: { type: "string", enum: [catalog.title] },
+    status: statusEnum,
+    ui_priority: { type: "integer", enum: [catalog.ui_priority] },
+    source_facts: strictEmptyObjectSchema(),
+    base: strictObjectSchema({
+      headline: { type: "string" },
+      short_summary: { type: "string" },
+      detailed_explanation: { type: "string" },
+      how_it_appears_at_work: { type: "string" },
+      where_useful: stringArraySchema,
+      strengths: { type: "array", items: pointSchema },
+      risks: { type: "array", items: riskSchema },
+      management_tips: stringArraySchema,
+      what_to_check: { type: "array", items: checkSchema },
+      sections: { type: "array", items: sectionSchema },
+    }),
+    pro: strictObjectSchema({
+      technical_title: nullableString,
+      classical_sources: { type: "array", items: classicalSourceSchema },
+      source_values: strictEmptyObjectSchema(),
+      connection_logic: { type: "string" },
+      confidence: confidenceEnum,
+      limitations: stringArraySchema,
+      human_check: nullableString,
+    }),
+    evidence: evidenceSchema,
+    summary_for_synthesis: strictObjectSchema({
+      one_sentence: { type: "string" },
+      strengths: stringArraySchema,
+      risks: stringArraySchema,
+      conditions: stringArraySchema,
+      management_focus: stringArraySchema,
+      what_to_check: stringArraySchema,
+    }),
+    matching_summary: strictObjectSchema({
+      good_for: stringArraySchema,
+      bad_for: stringArraySchema,
+      role_fit_positive_signals: stringArraySchema,
+      role_fit_risk_signals: stringArraySchema,
+      check_in_role_fit: stringArraySchema,
+    }),
+    special_payload: buildSpecialPayloadSchema(layerKey),
+    qa: strictObjectSchema({
+      base_has_forbidden_hd_terms: { type: "boolean" },
+      pro_has_classical_sources: { type: "boolean" },
+      has_summary_for_synthesis: { type: "boolean" },
+      has_matching_summary: { type: "boolean" },
+      human_review_recommended: { type: "boolean" },
+    }),
+  });
 }
 
 for (const layerKey of CAREER_READING_LAYERS_ORDER) {
-  assertStrictObjectsHaveAdditionalPropertiesFalse(
-    buildCareerReadingLayerSchema(layerKey),
-    layerKey,
-  );
+  const schema = buildCareerReadingLayerSchema(layerKey);
+  assertStrictObjectsHaveAdditionalPropertiesFalse(schema, layerKey);
+  assertStrictObjectsHaveAllPropertiesRequired(schema, layerKey);
 }
 
 function nonEmptyArray(value: unknown, path: string): CareerReadingLayerValidationResult | null {
@@ -492,6 +443,189 @@ function collectCareerReadingBaseText(layer: Record<string, unknown>): Array<{ p
   return fields;
 }
 
+const CAREER_READING_CONFIDENCE_VALUES = ["high", "medium", "low"] as const;
+
+function normalizeNullableString(value: unknown): string | null {
+  if (value == null) return null;
+  const text = asString(value);
+  return text || null;
+}
+
+function normalizeConfidence(value: unknown): (typeof CAREER_READING_CONFIDENCE_VALUES)[number] {
+  const text = asString(value);
+  if ((CAREER_READING_CONFIDENCE_VALUES as readonly string[]).includes(text)) {
+    return text as (typeof CAREER_READING_CONFIDENCE_VALUES)[number];
+  }
+  return "medium";
+}
+
+function normalizeCheckRecord(value: unknown): Record<string, unknown> {
+  const rec = asRecord(value);
+  return {
+    hypothesis: asString(rec.hypothesis) || "",
+    check_method: asString(rec.check_method) || "",
+    good_signal: asString(rec.good_signal) || "",
+    warning_signal: asString(rec.warning_signal) || "",
+  };
+}
+
+function normalizePointRecord(value: unknown): Record<string, unknown> {
+  const rec = asRecord(value);
+  return {
+    title: asString(rec.title) || "",
+    description: asString(rec.description) || "",
+    source_layer_keys: asStringArray(rec.source_layer_keys),
+  };
+}
+
+function normalizeRiskRecord(value: unknown): Record<string, unknown> {
+  const rec = asRecord(value);
+  return {
+    title: asString(rec.title) || "",
+    description: asString(rec.description) || "",
+    how_it_may_show_up: normalizeNullableString(rec.how_it_may_show_up),
+    mitigation: normalizeNullableString(rec.mitigation),
+  };
+}
+
+function normalizeSectionRecord(value: unknown): Record<string, unknown> {
+  const rec = asRecord(value);
+  return {
+    title: asString(rec.title) || "",
+    body: normalizeNullableString(rec.body),
+    items: asStringArray(rec.items),
+  };
+}
+
+function normalizeChartElementRecord(value: unknown): Record<string, unknown> {
+  const rec = asRecord(value);
+  return {
+    kind: asString(rec.kind) || "other",
+    key: asString(rec.key) || "",
+    value: asString(rec.value) || "",
+    side: normalizeNullableString(rec.side),
+    planet: normalizeNullableString(rec.planet),
+    line: normalizeNullableString(rec.line),
+  };
+}
+
+function normalizeClassicalSourceRecord(value: unknown): Record<string, unknown> {
+  const rec = asRecord(value);
+  return {
+    source_key: asString(rec.source_key) || "",
+    source_label: asString(rec.source_label) || "",
+    raw_path: asString(rec.raw_path) || "",
+    value_summary: asString(rec.value_summary) || "",
+    confidence: normalizeConfidence(rec.confidence),
+  };
+}
+
+function normalizeEvidenceRecord(
+  value: unknown,
+  defaultSourceFields: string[],
+): Record<string, unknown> {
+  const rec = asRecord(value);
+  const sourceFields = asStringArray(rec.source_fields);
+  return {
+    source_fields: sourceFields.length > 0 ? sourceFields : [...defaultSourceFields],
+    source_chart_elements: (Array.isArray(rec.source_chart_elements)
+      ? rec.source_chart_elements
+      : []
+    ).map(normalizeChartElementRecord),
+    confidence: normalizeConfidence(rec.confidence),
+    warnings: asStringArray(rec.warnings),
+  };
+}
+
+function normalizeChannelTalentRecord(value: unknown): Record<string, unknown> {
+  const rec = asRecord(value);
+  const evidence = asRecord(rec.evidence);
+  return {
+    channel_key: asString(rec.channel_key) || "",
+    classical_name: normalizeNullableString(rec.classical_name),
+    gates: asStringArray(rec.gates),
+    centers: asStringArray(rec.centers),
+    circuit: normalizeNullableString(rec.circuit),
+    title: asString(rec.title) || "",
+    summary: asString(rec.summary) || "",
+    where_useful: asStringArray(rec.where_useful),
+    how_it_appears_at_work: asString(rec.how_it_appears_at_work) || "",
+    risk: asString(rec.risk) || "",
+    management_tip: asString(rec.management_tip) || "",
+    what_to_check: (Array.isArray(rec.what_to_check) ? rec.what_to_check : []).map(
+      normalizeCheckRecord,
+    ),
+    evidence: normalizeEvidenceRecord(evidence, []),
+  };
+}
+
+function normalizeCenterZoneRecord(value: unknown): Record<string, unknown> {
+  const rec = asRecord(value);
+  return {
+    center_key: asString(rec.center_key) || "",
+    classical_name: asString(rec.classical_name) || "",
+    defined: rec.defined === true,
+    title: asString(rec.title) || "",
+    work_meaning: asString(rec.work_meaning) || "",
+    potential_strength: normalizeNullableString(rec.potential_strength),
+    risk_under_pressure: normalizeNullableString(rec.risk_under_pressure),
+    management_tip: normalizeNullableString(rec.management_tip),
+    what_to_check: (Array.isArray(rec.what_to_check) ? rec.what_to_check : []).map(
+      normalizeCheckRecord,
+    ),
+  };
+}
+
+function normalizeRepeatedGateThemeRecord(value: unknown): Record<string, unknown> {
+  const rec = asRecord(value);
+  return {
+    gate: asString(rec.gate) || "",
+    sources: asStringArray(rec.sources),
+    title: asString(rec.title) || "",
+    summary: asString(rec.summary) || "",
+    talent_potential: normalizeNullableString(rec.talent_potential),
+    risk_pattern: normalizeNullableString(rec.risk_pattern),
+    what_to_check: (Array.isArray(rec.what_to_check) ? rec.what_to_check : []).map(
+      normalizeCheckRecord,
+    ),
+  };
+}
+
+function normalizeSpecialPayload(
+  layerKey: CareerReadingLayerKey,
+  value: unknown,
+): Record<string, unknown> {
+  const special = asRecord(value);
+  if (layerKey === "talent_channels") {
+    const channelTalents = (Array.isArray(special.channel_talents)
+      ? special.channel_talents
+      : []
+    ).map(normalizeChannelTalentRecord);
+    return {
+      channel_talents: channelTalents,
+      channels_count:
+        typeof special.channels_count === "number"
+          ? special.channels_count
+          : channelTalents.length,
+    };
+  }
+  if (layerKey === "centers_stability_and_sensitivity") {
+    return {
+      center_zones: (Array.isArray(special.center_zones) ? special.center_zones : []).map(
+        normalizeCenterZoneRecord,
+      ),
+    };
+  }
+  if (layerKey === "repeated_themes") {
+    return {
+      repeated_gate_themes: (
+        Array.isArray(special.repeated_gate_themes) ? special.repeated_gate_themes : []
+      ).map(normalizeRepeatedGateThemeRecord),
+    };
+  }
+  return {};
+}
+
 export function normalizeCareerReadingLayerForValidation(args: {
   layer: Record<string, unknown>;
   layerKey: CareerReadingLayerKey;
@@ -504,19 +638,77 @@ export function normalizeCareerReadingLayerForValidation(args: {
   if (typeof layer.ui_priority !== "number") layer.ui_priority = catalog.ui_priority;
   if (!asString(layer.status)) layer.status = "ready";
 
+  const sourceFacts = asRecord(layer.source_facts);
+  layer.source_facts = { ...sourceFacts };
+
+  const base = asRecord(layer.base);
+  layer.base = {
+    headline: asString(base.headline) || "",
+    short_summary: asString(base.short_summary) || "",
+    detailed_explanation: asString(base.detailed_explanation) || "",
+    how_it_appears_at_work: asString(base.how_it_appears_at_work) || "",
+    where_useful: asStringArray(base.where_useful),
+    strengths: (Array.isArray(base.strengths) ? base.strengths : []).map(normalizePointRecord),
+    risks: (Array.isArray(base.risks) ? base.risks : []).map(normalizeRiskRecord),
+    management_tips: asStringArray(base.management_tips),
+    what_to_check: (Array.isArray(base.what_to_check) ? base.what_to_check : []).map(
+      normalizeCheckRecord,
+    ),
+    sections: (Array.isArray(base.sections) ? base.sections : []).map(normalizeSectionRecord),
+  };
+
+  const pro = asRecord(layer.pro);
+  layer.pro = {
+    technical_title: normalizeNullableString(pro.technical_title),
+    classical_sources: (Array.isArray(pro.classical_sources) ? pro.classical_sources : []).map(
+      normalizeClassicalSourceRecord,
+    ),
+    source_values: { ...asRecord(pro.source_values) },
+    connection_logic: asString(pro.connection_logic) || "",
+    confidence: normalizeConfidence(pro.confidence),
+    limitations: asStringArray(pro.limitations),
+    human_check: normalizeNullableString(pro.human_check),
+  };
+
   if (args.layerInput != null) {
     const inputFacts = asRecord(args.layerInput);
     layer.source_facts = { ...inputFacts };
-    const pro = asRecord(layer.pro);
-    pro.source_values = { ...inputFacts };
-    layer.pro = pro;
+    const normalizedPro = asRecord(layer.pro);
+    normalizedPro.source_values = { ...inputFacts };
+    layer.pro = normalizedPro;
   }
 
-  const evidence = asRecord(layer.evidence);
-  if (asStringArray(evidence.source_fields).length === 0) {
-    evidence.source_fields = [...catalog.source_fields];
-    layer.evidence = evidence;
-  }
+  layer.evidence = normalizeEvidenceRecord(layer.evidence, catalog.source_fields);
+
+  const synthesis = asRecord(layer.summary_for_synthesis);
+  layer.summary_for_synthesis = {
+    one_sentence: asString(synthesis.one_sentence) || "",
+    strengths: asStringArray(synthesis.strengths),
+    risks: asStringArray(synthesis.risks),
+    conditions: asStringArray(synthesis.conditions),
+    management_focus: asStringArray(synthesis.management_focus),
+    what_to_check: asStringArray(synthesis.what_to_check),
+  };
+
+  const matching = asRecord(layer.matching_summary);
+  layer.matching_summary = {
+    good_for: asStringArray(matching.good_for),
+    bad_for: asStringArray(matching.bad_for),
+    role_fit_positive_signals: asStringArray(matching.role_fit_positive_signals),
+    role_fit_risk_signals: asStringArray(matching.role_fit_risk_signals),
+    check_in_role_fit: asStringArray(matching.check_in_role_fit),
+  };
+
+  layer.special_payload = normalizeSpecialPayload(args.layerKey, layer.special_payload);
+
+  const qa = asRecord(layer.qa);
+  layer.qa = {
+    base_has_forbidden_hd_terms: qa.base_has_forbidden_hd_terms === true,
+    pro_has_classical_sources: qa.pro_has_classical_sources === true,
+    has_summary_for_synthesis: qa.has_summary_for_synthesis === true,
+    has_matching_summary: qa.has_matching_summary === true,
+    human_review_recommended: qa.human_review_recommended === true,
+  };
 
   return layer;
 }

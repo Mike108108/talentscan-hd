@@ -68,7 +68,6 @@ export {
   resolveOpenAiApiKey,
   resolveSupabaseConfig,
   buildMinimalDataQuality,
-  buildCareerReadingInputHashPayload,
   computeInputHash,
   buildModelPolicySnapshot,
   inferGenerationErrorKind,

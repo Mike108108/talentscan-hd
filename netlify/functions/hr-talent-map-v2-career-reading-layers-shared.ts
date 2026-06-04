@@ -103,7 +103,7 @@ export const CONTENT_CONTRACT_VERSION = "3.0.0" as const;
 const CAREER_READING_SMOKE_MODEL = "gpt-5-nano";
 const CAREER_READING_LAYER_MODEL = "gpt-5-nano";
 const CAREER_READING_REASONING_MODEL = "gpt-5-nano";
-const CAREER_READING_REASONING_EFFORT = "medium";
+const CAREER_READING_REASONING_EFFORT = "low";
 const CAREER_READING_VERBOSITY = "medium";
 const CAREER_READING_PROMPT_CACHE_KEY =
   "hr_person_talent_map_v3_career_reading_layers_v1";
@@ -112,7 +112,7 @@ const CAREER_READING_PROMPT_CACHE_RETENTION = "24h" as const;
 export const CAREER_READING_DEFAULT_MAX_OUTPUT_TOKENS = 8000;
 export const CAREER_READING_FALLBACK_MAX_OUTPUT_TOKENS = 12000;
 
-/** Career reading layers v1: medium tuning + output budget (Stage 4.10-B.5 / B.6). */
+/** Career reading layers v1: low reasoning + medium verbosity + output budget (Stage 4.10-B.7). */
 export function resolveCareerReadingLayersModelPolicy(): CoreLayersModelPolicy {
   const outputTokenPolicy = {
     smoke: CAREER_READING_DEFAULT_MAX_OUTPUT_TOKENS,
@@ -1545,12 +1545,30 @@ class CareerReadingOpenAiError extends Error {
   }
 }
 
+export type CareerReadingOpenAiRetryExhaustedMeta = {
+  attempts: number;
+  max_output_tokens_used: number;
+  request_tuning_fallback: boolean;
+  request_tuning_fallback_reason: string | null;
+  request_tuning: RequestTuningSnapshot;
+};
+
 export class CareerReadingOpenAiRetryExhaustedError extends Error {
-  readonly attempts = 2;
+  readonly attempts: number;
+  readonly max_output_tokens_used: number;
+  readonly request_tuning_fallback: boolean;
+  readonly request_tuning_fallback_reason: string | null;
+  readonly request_tuning: RequestTuningSnapshot;
   readonly lastOpenAiError: CareerReadingOpenAiError;
-  constructor(last: CareerReadingOpenAiError) {
+
+  constructor(last: CareerReadingOpenAiError, meta: CareerReadingOpenAiRetryExhaustedMeta) {
     super(last.message);
     this.lastOpenAiError = last;
+    this.attempts = meta.attempts;
+    this.max_output_tokens_used = meta.max_output_tokens_used;
+    this.request_tuning_fallback = meta.request_tuning_fallback;
+    this.request_tuning_fallback_reason = meta.request_tuning_fallback_reason;
+    this.request_tuning = meta.request_tuning;
   }
 }
 
@@ -1788,6 +1806,46 @@ function compactInputCandidateSnapshot(compactInput: Record<string, unknown>): u
   return compactInput.candidate_snapshot ?? asRecord(compactInput.candidate);
 }
 
+function buildCareerReadingTokenFallbackTuning(
+  args: Parameters<typeof callOpenAiForCareerReadingLayer>[0],
+  tokenBudgetFallback: boolean,
+): RequestTuningSnapshot {
+  const tuning = args.modelPolicy
+    ? buildRequestTuningSnapshot(args.modelPolicy)
+    : {
+        reasoning_effort: null,
+        verbosity: null,
+        prompt_cache_key: null,
+        prompt_cache_retention: null,
+        fallbacks: [] as string[],
+      };
+  if (!tokenBudgetFallback) return tuning;
+  return {
+    ...tuning,
+    fallback_used: true,
+    fallbacks: [...(Array.isArray(tuning.fallbacks) ? tuning.fallbacks : []), "max_output_tokens_12000"],
+  };
+}
+
+function throwCareerReadingRetryExhausted(
+  last: CareerReadingOpenAiError,
+  args: Parameters<typeof callOpenAiForCareerReadingLayer>[0],
+  meta: {
+    attempts: number;
+    maxOutputTokens: number;
+    tokenBudgetFallback: boolean;
+  },
+): never {
+  const tokenBudgetFallback = meta.tokenBudgetFallback;
+  throw new CareerReadingOpenAiRetryExhaustedError(last, {
+    attempts: meta.attempts,
+    max_output_tokens_used: meta.maxOutputTokens,
+    request_tuning_fallback: tokenBudgetFallback,
+    request_tuning_fallback_reason: tokenBudgetFallback ? "max_output_tokens" : null,
+    request_tuning: buildCareerReadingTokenFallbackTuning(args, tokenBudgetFallback),
+  });
+}
+
 export async function callOpenAiForCareerReadingLayerWithRetry(
   args: Parameters<typeof callOpenAiForCareerReadingLayer>[0],
 ): Promise<
@@ -1796,26 +1854,21 @@ export async function callOpenAiForCareerReadingLayerWithRetry(
     max_output_tokens_used: number;
   }
 > {
+  const fallbackTokens = getCareerReadingMaxOutputTokensFallback();
   let last: CareerReadingOpenAiError | null = null;
   let maxOutputTokens = args.maxOutputTokens;
   let compactRetry = false;
   let tokenBudgetFallback = false;
+  const maxAttempts = 2;
 
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const result = await callOpenAiForCareerReadingLayer({
         ...args,
         maxOutputTokens,
         compactRetry,
       });
-      const tuning = { ...result.request_tuning };
-      if (tokenBudgetFallback) {
-        tuning.fallback_used = true;
-        tuning.fallbacks = [
-          ...(Array.isArray(tuning.fallbacks) ? tuning.fallbacks : []),
-          "max_output_tokens_12000",
-        ];
-      }
+      const tuning = buildCareerReadingTokenFallbackTuning(args, tokenBudgetFallback);
       return {
         ...result,
         request_tuning: tuning,
@@ -1827,24 +1880,42 @@ export async function callOpenAiForCareerReadingLayerWithRetry(
         max_output_tokens_used: maxOutputTokens,
       };
     } catch (err) {
-      if (err instanceof CareerReadingOpenAiError && err.retryable && attempt < 2) {
-        last = err;
-        if (isIncompleteDueToMaxOutputTokens(err)) {
-          maxOutputTokens = getCareerReadingMaxOutputTokensFallback();
-          tokenBudgetFallback = true;
-          compactRetry = true;
-          continue;
-        }
+      if (!(err instanceof CareerReadingOpenAiError && err.retryable)) {
+        throw err;
+      }
+      last = err;
+
+      if (
+        isIncompleteDueToMaxOutputTokens(err) &&
+        maxOutputTokens < fallbackTokens &&
+        attempt < maxAttempts
+      ) {
+        maxOutputTokens = fallbackTokens;
+        tokenBudgetFallback = true;
         compactRetry = true;
         continue;
       }
-      if (err instanceof CareerReadingOpenAiError && err.retryable) {
-        throw new CareerReadingOpenAiRetryExhaustedError(err);
+
+      if (attempt < maxAttempts) {
+        compactRetry = true;
+        continue;
       }
-      throw err;
+
+      throwCareerReadingRetryExhausted(last, args, {
+        attempts: attempt,
+        maxOutputTokens,
+        tokenBudgetFallback,
+      });
     }
   }
-  if (last) throw new CareerReadingOpenAiRetryExhaustedError(last);
+
+  if (last) {
+    throwCareerReadingRetryExhausted(last, args, {
+      attempts: maxAttempts,
+      maxOutputTokens,
+      tokenBudgetFallback,
+    });
+  }
   throw new Error("openai_retry_exhausted");
 }
 

@@ -469,15 +469,23 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       } catch (err) {
         const openAiErr = extractOpenAiError(err);
         const message = openAiErr?.message ?? (err instanceof Error ? err.message : "OpenAI error");
+        const retryExhausted =
+          err instanceof CareerReadingOpenAiRetryExhaustedError ? err : null;
         const attempts =
-          err instanceof CareerReadingOpenAiRetryExhaustedError ? err.attempts : openAiErr ? 1 : undefined;
+          retryExhausted?.attempts ?? (openAiErr ? 1 : undefined);
+        const failedMaxOutputTokens =
+          retryExhausted?.max_output_tokens_used ?? layerMaxOutputTokens;
 
         layerGeneration.layers[layerKey] = {
           ...layerGeneration.layers[layerKey],
           status: "error",
           finished_at: new Date().toISOString(),
           duration_ms: Date.now() - layerStartedAt,
+          max_output_tokens: failedMaxOutputTokens,
           attempts,
+          request_tuning: retryExhausted?.request_tuning,
+          request_tuning_fallback: retryExhausted?.request_tuning_fallback,
+          request_tuning_fallback_reason: retryExhausted?.request_tuning_fallback_reason ?? null,
           error: {
             kind: inferGenerationErrorKind({
               stage: "openai_responses",

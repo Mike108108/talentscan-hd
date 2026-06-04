@@ -2,7 +2,7 @@
  * HD Career Reading Layers v1 contract (Stage 4.10-A).
  *
  * Eight canonical HR career-reading layers from normalized_chart_data.
- * Contract + input mapping only — not wired to production generation.
+ * Contract + input mapping + production generation (Stage 4.10-B).
  *
  * @see README_CAREER_READING_LAYERS_V1.md
  */

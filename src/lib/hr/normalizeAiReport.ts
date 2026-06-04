@@ -213,10 +213,27 @@ const DISPLAYABLE_TALENT_MAP_REPORT_TYPES = new Set([
   "hr_person_talent_map_core_layers_spike",
 ]);
 
+function hasCareerReadingLayersInContent(raw: unknown): boolean {
+  const root = parseReportContentJson(raw);
+  if (!root) return false;
+  const layers = root.career_reading_layers;
+  return Array.isArray(layers) && layers.length > 0;
+}
+
 function spikeHasLayerReports(report: HrReport): boolean {
-  if (report.report_type !== "hr_person_talent_map_core_layers_spike") return true;
+  const type = String(report.report_type ?? "").trim();
   const root = parseReportContentJson(report.content_json);
   if (!root) return false;
+
+  if (hasCareerReadingLayersInContent(report.content_json)) return true;
+
+  if (type !== "hr_person_talent_map_core_layers_spike") {
+    if (type === "hr_person_talent_map") {
+      const layerReports = root.layer_reports;
+      return Array.isArray(layerReports) && layerReports.length > 0;
+    }
+    return true;
+  }
   const layerReports = root.layer_reports;
   return Array.isArray(layerReports) && layerReports.length > 0;
 }

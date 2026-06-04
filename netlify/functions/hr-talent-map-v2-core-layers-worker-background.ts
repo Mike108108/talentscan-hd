@@ -1,51 +1,60 @@
 /**
- * Background worker for HR Talent Map v2 core layers pipeline (19 layers, sequential).
+ * Background worker for HR Talent Map v3 Career Reading Layers (8 layers, sequential).
  */
 
 import type { BackgroundHandler, HandlerEvent } from "@netlify/functions";
 import {
-  CORE_LAYERS_ORDER,
-  SPIKE_PROMPT_VERSION,
-  SPIKE_REPORT_TYPE,
+  CAREER_READING_LAYERS_ORDER,
+  PROMPT_VERSION,
+  REPORT_TYPE,
   SpikeConfigError,
   asRecord,
   asString,
-  buildCoreLayersCompactInput,
-  buildCoreLayersContentJson,
-  buildPartialCoreLayersContentJson,
-  callOpenAiResponsesForLayerForbiddenTermsRepair,
-  callOpenAiResponsesForLayerWithRetry,
+  buildCareerReadingCompactInput,
+  buildCareerReadingContentJson,
+  buildPartialCareerReadingContentJson,
+  callOpenAiForCareerReadingForbiddenTermsRepair,
+  callOpenAiForCareerReadingLayerWithRetry,
+  CareerReadingOpenAiRetryExhaustedError,
   createSupabaseClient,
-  OpenAiLayerResponseError,
-  OpenAiLayerRetryExhaustedError,
   extractBearerToken,
-  initLayerGenerationState,
-  isGenerationCancelRequested,
-  saveLayerGenerationProgress,
-  serializeGenerationCancelledError,
-  syncLayerGenerationProgress,
+  initCareerReadingLayerGenerationState,
   isForbiddenBaseTermsValidation,
+  isGenerationCancelRequested,
   loadActiveCandidateChart,
   logSpikeStage,
   mergeOpenAiUsageSnapshots,
-  normalizeLayerReportForValidation,
+  normalizeCareerReadingLayerForValidation,
   requireUuid,
   inferGenerationErrorKind,
   resolveCoreLayersModelPolicy,
   resolveOpenAiApiKey,
   resolveSupabaseConfig,
+  saveCareerReadingLayerGenerationProgress,
   saveReportError,
+  serializeGenerationCancelledError,
   serializeGenerationError,
-  summarizeLayerGeneration,
-  validateCoreLayer,
-  type CoreLayerKey,
+  summarizeCareerReadingLayerGeneration,
+  syncCareerReadingLayerGenerationProgress,
+  validateCareerReadingLayer,
+  type CareerReadingLayerGenerationState,
+  type CareerReadingLayerKey,
   type CoreLayersModelPolicy,
   type GenerationCancellationMeta,
-  type LayerGenerationState,
   type LayerRunStatus,
   type OffendingMatch,
   type OpenAiUsageSnapshot,
-} from "./hr-talent-map-v2-core-layers-shared";
+} from "./hr-talent-map-v2-career-reading-layers-shared";
+
+type CareerReadingOpenAiErrorLike = {
+  message: string;
+  httpStatus?: number;
+  responseStatus?: string | null;
+  incompleteDetails?: unknown;
+  outputTextLength?: number;
+  outputTextTail?: string | null;
+  parseError?: string | null;
+};
 
 export const handler: BackgroundHandler = async (event: HandlerEvent) => {
   const startedAt = Date.now();
@@ -61,24 +70,24 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
   let db: ReturnType<typeof createSupabaseClient> | null = null;
   let reportId: string | null = null;
 
-  let layerReports: Record<string, unknown>[] = [];
+  let careerReadingLayers: Record<string, unknown>[] = [];
   let modelPolicy: CoreLayersModelPolicy | null = null;
-  let layerGeneration: LayerGenerationState | null = null;
+  let layerGeneration: CareerReadingLayerGenerationState | null = null;
 
   const persistProgress = async (cancellation?: GenerationCancellationMeta) => {
     if (!db || !reportId || !layerGeneration) return;
     if (await isGenerationCancelRequested(db, reportId)) {
       layerGeneration.cancel_requested = true;
     }
-    syncLayerGenerationProgress(layerGeneration);
-    await saveLayerGenerationProgress(db, reportId, {
+    syncCareerReadingLayerGenerationProgress(layerGeneration);
+    await saveCareerReadingLayerGenerationProgress(db, reportId, {
       layerGeneration,
-      layerReports,
+      careerReadingLayers,
       cancellation,
     });
   };
 
-  const finishCancelled = async (afterLayerKey?: CoreLayerKey) => {
+  const finishCancelled = async (afterLayerKey?: CareerReadingLayerKey) => {
     if (!db || !reportId || !layerGeneration || !modelPolicy) return;
 
     const finishedAt = new Date().toISOString();
@@ -87,7 +96,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
     if (afterLayerKey) {
       markRemainingLayersSkipped(afterLayerKey, layerGeneration.layers);
     } else {
-      for (const key of CORE_LAYERS_ORDER) {
+      for (const key of CAREER_READING_LAYERS_ORDER) {
         if (layerGeneration.layers[key].status === "pending") {
           layerGeneration.layers[key] = { status: "skipped" };
         }
@@ -100,7 +109,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
     layerGeneration.cancelled_at = finishedAt;
     layerGeneration.current_layer_key = null;
     layerGeneration.current_layer_title = null;
-    layerGeneration.summary = summarizeLayerGeneration(
+    layerGeneration.summary = summarizeCareerReadingLayerGeneration(
       layerGeneration.layers,
       modelPolicy.selectedModel,
     );
@@ -113,11 +122,11 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       cancelled_at: finishedAt,
     };
 
-    syncLayerGenerationProgress(layerGeneration);
+    syncCareerReadingLayerGenerationProgress(layerGeneration);
 
-    const partialContentJson = buildPartialCoreLayersContentJson({
+    const partialContentJson = buildPartialCareerReadingContentJson({
       layerGeneration,
-      layerReports,
+      careerReadingLayers,
       cancellation,
     });
 
@@ -159,7 +168,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       layerGeneration.status = "error";
       layerGeneration.finished_at = finishedAt;
       layerGeneration.duration_ms = durationMs;
-      layerGeneration.summary = summarizeLayerGeneration(
+      layerGeneration.summary = summarizeCareerReadingLayerGeneration(
         layerGeneration.layers,
         modelPolicy?.selectedModel,
       );
@@ -170,21 +179,14 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       message,
       failed_layer_key: failedLayerKey,
       duration_ms: durationMs,
-      offending_match_count: extra?.offending_matches?.length ?? 0,
       ...extra,
     });
 
-    if (
-      db &&
-      reportId &&
-      layerGeneration &&
-      logCtx.companyId &&
-      logCtx.candidateId
-    ) {
-      syncLayerGenerationProgress(layerGeneration);
-      await saveLayerGenerationProgress(db, reportId, {
+    if (db && reportId && layerGeneration) {
+      syncCareerReadingLayerGenerationProgress(layerGeneration);
+      await saveCareerReadingLayerGenerationProgress(db, reportId, {
         layerGeneration,
-        layerReports,
+        careerReadingLayers,
       });
     }
 
@@ -222,8 +224,8 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         logCtx.model &&
         modelPolicy
       ) {
-        partialContentJson = buildCoreLayersContentJson({
-          layerReports,
+        partialContentJson = buildCareerReadingContentJson({
+          careerReadingLayers,
           candidate: candidate as Record<string, unknown>,
           company: company as Record<string, unknown>,
           chart: chart as Record<string, unknown>,
@@ -231,10 +233,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           model: logCtx.model,
           modelPolicy,
           generatedAt: finishedAt,
-          pipelineStartedAt,
-          pipelineDurationMs: durationMs,
           layerGeneration: layerGeneration as unknown as Record<string, unknown>,
-          overallStatus: "error",
         });
       }
 
@@ -322,7 +321,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
     try {
       modelPolicy = resolveCoreLayersModelPolicy();
       logCtx.model = modelPolicy.selectedModel;
-      layerGeneration = initLayerGenerationState(pipelineStartedAt, modelPolicy);
+      layerGeneration = initCareerReadingLayerGenerationState(pipelineStartedAt, modelPolicy);
     } catch (err) {
       await fail(
         "config",
@@ -334,7 +333,6 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
 
     const model = modelPolicy.selectedModel;
 
-    logSpikeStage("worker", "load_report", logCtx);
     const { data: report, error: reportErr } = await db
       .from("hr_reports")
       .select("*")
@@ -349,13 +347,12 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
     if (
       report.company_id !== logCtx.companyId ||
       report.candidate_id !== logCtx.candidateId ||
-      report.report_type !== SPIKE_REPORT_TYPE
+      report.report_type !== REPORT_TYPE
     ) {
       await fail("ownership", "Report does not match company/candidate/type", undefined);
       return;
     }
 
-    logSpikeStage("worker", "load_candidate", logCtx);
     const { data: company, error: companyErr } = await db
       .from("hr_companies")
       .select("id, owner_user_id, name, industry")
@@ -379,7 +376,6 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       return;
     }
 
-    logSpikeStage("worker", "load_chart", logCtx);
     const { chart, error: chartLoadErr } = await loadActiveCandidateChart(
       db,
       logCtx.companyId,
@@ -414,7 +410,7 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       return;
     }
 
-    for (const layerKey of CORE_LAYERS_ORDER) {
+    for (const layerKey of CAREER_READING_LAYERS_ORDER) {
       if (!layerGeneration || !db || !reportId) break;
 
       if (await isGenerationCancelRequested(db, reportId)) {
@@ -431,30 +427,29 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         status: "generating",
         started_at: layerStartedIso,
         model,
-        prompt_version: SPIKE_PROMPT_VERSION,
+        prompt_version: PROMPT_VERSION,
         max_output_tokens: modelPolicy.maxOutputTokens,
       };
+      syncCareerReadingLayerGenerationProgress(layerGeneration);
       await persistProgress();
 
-      logSpikeStage("worker", "openai_responses_start", logCtx, { model, layer_key: layerKey });
-
-      const compactInput = buildCoreLayersCompactInput({
+      const compactInput = buildCareerReadingCompactInput({
         layerKey,
         candidate: candidate as Record<string, unknown>,
         company: company as Record<string, unknown>,
         normalizedChart,
-        priorLayerReports: layerReports,
       });
+      const layerInput = compactInput.layer_input;
 
       let layer: Record<string, unknown>;
       let httpStatus = 0;
       let openAiAttempts = 0;
       let openAiCallResult: Awaited<
-        ReturnType<typeof callOpenAiResponsesForLayerWithRetry>
+        ReturnType<typeof callOpenAiForCareerReadingLayerWithRetry>
       > | null = null;
 
       try {
-        openAiCallResult = await callOpenAiResponsesForLayerWithRetry({
+        openAiCallResult = await callOpenAiForCareerReadingLayerWithRetry({
           apiKey,
           model,
           layerKey,
@@ -466,31 +461,10 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         httpStatus = openAiCallResult.httpStatus;
         openAiAttempts = openAiCallResult.attempts;
       } catch (err) {
-        const openAiErr =
-          err instanceof OpenAiLayerRetryExhaustedError
-            ? err.lastOpenAiError
-            : err instanceof OpenAiLayerResponseError
-              ? err
-              : null;
-
-        const message =
-          openAiErr?.message ??
-          (err instanceof Error ? err.message : "OpenAI Responses API error");
-        const stage = "openai_responses";
+        const openAiErr = extractOpenAiError(err);
+        const message = openAiErr?.message ?? (err instanceof Error ? err.message : "OpenAI error");
         const attempts =
-          err instanceof OpenAiLayerRetryExhaustedError
-            ? err.attempts
-            : openAiErr
-              ? 1
-              : undefined;
-
-        const errorKind = inferGenerationErrorKind({
-          stage,
-          message,
-          parse_error: openAiErr?.parseError ?? null,
-          response_status: openAiErr?.responseStatus ?? null,
-          output_text_length: openAiErr?.outputTextLength,
-        });
+          err instanceof CareerReadingOpenAiRetryExhaustedError ? err.attempts : openAiErr ? 1 : undefined;
 
         layerGeneration.layers[layerKey] = {
           ...layerGeneration.layers[layerKey],
@@ -499,24 +473,25 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           duration_ms: Date.now() - layerStartedAt,
           attempts,
           error: {
-            kind: errorKind,
+            kind: inferGenerationErrorKind({
+              stage: "openai_responses",
+              message,
+              parse_error: openAiErr?.parseError ?? null,
+              response_status: openAiErr?.responseStatus ?? null,
+              output_text_length: openAiErr?.outputTextLength,
+            }),
             message,
             attempts: attempts ?? null,
           },
         };
-
-        layerGeneration.summary = summarizeLayerGeneration(
+        layerGeneration.summary = summarizeCareerReadingLayerGeneration(
           layerGeneration.layers,
-          modelPolicy?.selectedModel,
+          modelPolicy.selectedModel,
         );
-
         markRemainingLayersSkipped(layerKey, layerGeneration.layers);
         await persistProgress();
-
-        const resolvedHttpStatus = openAiErr?.httpStatus ?? (httpStatus || undefined);
-
-        await fail(stage, message, layerKey, {
-          status: resolvedHttpStatus,
+        await fail("openai_responses", message, layerKey, {
+          status: openAiErr?.httpStatus ?? (httpStatus || undefined),
           attempts,
           last_error: message,
           response_status: openAiErr?.responseStatus ?? null,
@@ -529,63 +504,27 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       }
 
       const layerDurationMs = Date.now() - layerStartedAt;
-      logSpikeStage("worker", "openai_responses_done", logCtx, {
-        model,
-        layer_key: layerKey,
-        duration_ms: layerDurationMs,
-        http_status: httpStatus,
-      });
-
       layerGeneration.layers[layerKey] = {
         ...layerGeneration.layers[layerKey],
         status: "validating",
       };
       await persistProgress();
 
-      logSpikeStage("worker", "validate_layer", logCtx, { layer_key: layerKey });
-
-      const normalizedBeforeValidation = normalizeLayerReportForValidation({
-        layer,
-        layerKey,
-        chart: asRecord(compactInput.chart),
-      });
-      layer = normalizedBeforeValidation.layer;
-      if (normalizedBeforeValidation.autofill_applied) {
-        logSpikeStage("worker", "layer_report_autofill", logCtx, {
-          layer_key: layerKey,
-          autofilled_fields: normalizedBeforeValidation.autofilled_fields,
-        });
-      }
-
-      let validation = validateCoreLayer(layer, layerKey);
+      layer = normalizeCareerReadingLayerForValidation({ layer, layerKey });
+      let validation = validateCareerReadingLayer(layer, layerKey, layerInput);
 
       let mergedUsage: OpenAiUsageSnapshot | undefined = openAiCallResult?.usage;
       let repairAttempts = 0;
-      let forbiddenTermsRepairAttempted = false;
-      let forbiddenTermsRepairSuccess = false;
-      let forbiddenTermsRepairReason: string | null = null;
-      let forbiddenTermsRepairTerms: string[] = [];
 
       if (!validation.ok && isForbiddenBaseTermsValidation(validation)) {
-        forbiddenTermsRepairAttempted = true;
-        forbiddenTermsRepairTerms = Array.from(
-          new Set((validation.offending_matches ?? []).map((match) => match.term)),
-        );
-        forbiddenTermsRepairReason = validation.message;
-
         layerGeneration.layers[layerKey] = {
           ...layerGeneration.layers[layerKey],
           status: "repairing",
         };
         await persistProgress();
 
-        logSpikeStage("worker", "forbidden_terms_repair_start", logCtx, {
-          layer_key: layerKey,
-          offending_terms: forbiddenTermsRepairTerms,
-        });
-
         try {
-          const repairResult = await callOpenAiResponsesForLayerForbiddenTermsRepair({
+          const repairResult = await callOpenAiForCareerReadingForbiddenTermsRepair({
             apiKey,
             model,
             layerKey,
@@ -594,58 +533,21 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
             modelPolicy,
             offendingMatches: validation.offending_matches ?? [],
           });
-
           repairAttempts = 1;
           openAiAttempts += 1;
           layer = repairResult.layer;
           httpStatus = repairResult.httpStatus;
-
-          if (mergedUsage) {
-            mergedUsage = mergeOpenAiUsageSnapshots(mergedUsage, repairResult.usage);
-          } else {
-            mergedUsage = repairResult.usage;
-          }
-
-          validation = validateCoreLayer(
-            normalizeLayerReportForValidation({
-              layer,
-              layerKey,
-              chart: asRecord(compactInput.chart),
-            }).layer,
-            layerKey,
-          );
-          forbiddenTermsRepairSuccess = validation.ok;
-
-          logSpikeStage("worker", "forbidden_terms_repair_done", logCtx, {
-            layer_key: layerKey,
-            success: forbiddenTermsRepairSuccess,
-            repair_attempts: repairAttempts,
-          });
-        } catch (err) {
-          const repairMessage =
-            err instanceof OpenAiLayerResponseError
-              ? err.message
-              : err instanceof Error
-                ? err.message
-                : "forbidden_terms_repair_openai_error";
-
-          forbiddenTermsRepairReason = repairMessage;
-          forbiddenTermsRepairSuccess = false;
-
-          logSpikeStage("worker", "forbidden_terms_repair_error", logCtx, {
-            layer_key: layerKey,
-            message: repairMessage,
-          });
+          mergedUsage = mergedUsage
+            ? mergeOpenAiUsageSnapshots(mergedUsage, repairResult.usage)
+            : repairResult.usage;
+          layer = normalizeCareerReadingLayerForValidation({ layer, layerKey });
+          validation = validateCareerReadingLayer(layer, layerKey, layerInput);
+        } catch {
+          // keep failed validation
         }
       }
 
       if (!validation.ok) {
-        const errorKind = inferGenerationErrorKind({
-          stage: validation.stage,
-          message: validation.message,
-          validation_stage: validation.stage,
-        });
-
         layerGeneration.layers[layerKey] = {
           ...layerGeneration.layers[layerKey],
           status: "error",
@@ -653,25 +555,22 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
           duration_ms: layerDurationMs,
           attempts: openAiAttempts,
           repair_attempts: repairAttempts,
-          forbidden_terms_repair_attempted: forbiddenTermsRepairAttempted,
-          forbidden_terms_repair_success: forbiddenTermsRepairSuccess,
-          forbidden_terms_repair_reason: forbiddenTermsRepairReason,
-          forbidden_terms_repair_terms: forbiddenTermsRepairTerms,
           error: {
-            kind: errorKind,
+            kind: inferGenerationErrorKind({
+              stage: validation.stage,
+              message: validation.message,
+              validation_stage: validation.stage,
+            }),
             message: validation.message,
             attempts: openAiAttempts,
           },
         };
-
-        layerGeneration.summary = summarizeLayerGeneration(
+        layerGeneration.summary = summarizeCareerReadingLayerGeneration(
           layerGeneration.layers,
-          modelPolicy?.selectedModel,
+          modelPolicy.selectedModel,
         );
-
         markRemainingLayersSkipped(layerKey, layerGeneration.layers);
         await persistProgress();
-
         await fail(validation.stage, validation.message, layerKey, {
           validation_result: validation.details ?? null,
           offending_matches: validation.offending_matches,
@@ -689,27 +588,22 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         completed_at: layerFinishedIso,
         duration_ms: layerDurationMs,
         model,
-        prompt_version: SPIKE_PROMPT_VERSION,
+        prompt_version: PROMPT_VERSION,
         max_output_tokens: modelPolicy.maxOutputTokens,
         attempts: openAiAttempts,
         repair_attempts: repairAttempts,
-        forbidden_terms_repair_attempted: forbiddenTermsRepairAttempted,
-        forbidden_terms_repair_success: forbiddenTermsRepairSuccess,
-        forbidden_terms_repair_reason: forbiddenTermsRepairReason,
-        forbidden_terms_repair_terms: forbiddenTermsRepairTerms,
         usage: mergedUsage,
         request_tuning: openAiCallResult?.request_tuning,
         request_tuning_fallback: openAiCallResult?.request_tuning_fallback,
         request_tuning_fallback_reason:
           openAiCallResult?.request_tuning_fallback_reason ?? null,
       };
-
-      layerGeneration.summary = summarizeLayerGeneration(
+      layerGeneration.summary = summarizeCareerReadingLayerGeneration(
         layerGeneration.layers,
-        modelPolicy?.selectedModel,
+        modelPolicy.selectedModel,
       );
 
-      layerReports.push(layer);
+      careerReadingLayers.push(layer);
       await persistProgress();
 
       if (db && reportId && (await isGenerationCancelRequested(db, reportId))) {
@@ -727,13 +621,13 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
     layerGeneration.status = "ready";
     layerGeneration.finished_at = generatedAt;
     layerGeneration.duration_ms = pipelineDurationMs;
-    layerGeneration.summary = summarizeLayerGeneration(
+    layerGeneration.summary = summarizeCareerReadingLayerGeneration(
       layerGeneration.layers,
       modelPolicy.selectedModel,
     );
 
-    const contentJson = buildCoreLayersContentJson({
-      layerReports,
+    const contentJson = buildCareerReadingContentJson({
+      careerReadingLayers,
       candidate: candidate as Record<string, unknown>,
       company: company as Record<string, unknown>,
       chart: chart as Record<string, unknown>,
@@ -741,18 +635,14 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
       model,
       modelPolicy,
       generatedAt,
-      pipelineStartedAt,
-      pipelineDurationMs,
       layerGeneration: layerGeneration as unknown as Record<string, unknown>,
-      overallStatus: "ready",
     });
 
-    const firstSummary = asString(asRecord(layerReports[0]?.base).short_summary);
+    const firstHeadline = asString(asRecord(careerReadingLayers[0]?.base).headline);
 
     logSpikeStage("worker", "save_ready", logCtx, {
       duration_ms: pipelineDurationMs,
-      validation_result: "ok",
-      layer_count: layerReports.length,
+      layer_count: careerReadingLayers.length,
     });
 
     const { error: saveErr } = await db
@@ -764,8 +654,8 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
         fit_score: null,
         generated_at: generatedAt,
         model,
-        prompt_version: SPIKE_PROMPT_VERSION,
-        summary: firstSummary || null,
+        prompt_version: PROMPT_VERSION,
+        summary: firstHeadline || null,
         updated_at: generatedAt,
       })
       .eq("id", reportId);
@@ -775,25 +665,29 @@ export const handler: BackgroundHandler = async (event: HandlerEvent) => {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal worker error";
-    console.error("[hr-talent-map-v2-core-layers-worker] unhandled", {
-      message,
-      company_id: logCtx.companyId,
-      candidate_id: logCtx.candidateId,
-      report_id: logCtx.reportId,
-      layer_key: logCtx.layerKey,
-    });
+    console.error("[hr-talent-map-v2-core-layers-worker] unhandled", { message, ...logCtx });
     if (db && reportId) {
       await fail("internal", message, logCtx.layerKey, undefined);
     }
   }
 };
 
+function extractOpenAiError(err: unknown): CareerReadingOpenAiErrorLike | null {
+  if (err instanceof CareerReadingOpenAiRetryExhaustedError) {
+    return err.lastOpenAiError;
+  }
+  if (err && typeof err === "object" && "failedLayerKey" in err) {
+    return err as CareerReadingOpenAiErrorLike;
+  }
+  return null;
+}
+
 function markRemainingLayersSkipped(
-  failedLayerKey: CoreLayerKey,
-  layers: Record<CoreLayerKey, LayerRunStatus>,
+  failedLayerKey: CareerReadingLayerKey,
+  layers: Record<CareerReadingLayerKey, LayerRunStatus>,
 ) {
   let markSkipped = false;
-  for (const key of CORE_LAYERS_ORDER) {
+  for (const key of CAREER_READING_LAYERS_ORDER) {
     if (key === failedLayerKey) {
       markSkipped = true;
       continue;
